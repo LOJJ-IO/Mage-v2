@@ -1,0 +1,207 @@
+@import url('https://api.fontshare.com/v2/css?f[]=clash-display@200,300,400,500,600,700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary: #000000;
+  --color-secondary: #276EF1;
+  --color-background: #FFFFFF;
+  --color-surface: #F6F6F6;
+  --color-text: #000000;
+  --color-text-secondary: #757575;
+  --color-border: #E2E2E2;
+  --color-success: #05944F;
+  --color-error: #E11900;
+  --color-warning: #FFC043;
+  
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-full: 100px;
+  
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  font-family: 'Clash Display', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
+/* Mobile-first container */
+.mage-container {
+  @apply w-full max-w-md mx-auto min-h-screen relative;
+  touch-action: pan-y;
+}
+
+/* Uber-style button */
+.mage-button {
+  @apply flex items-center justify-center gap-2;
+  @apply px-6 py-4 rounded-uber-full;
+  @apply font-medium text-base;
+  @apply transition-all duration-200 ease-uber;
+  @apply active:scale-[0.98];
+}
+
+.mage-button-primary {
+  @apply bg-mage-black text-mage-white;
+  @apply hover:bg-mage-gray-800;
+}
+
+.mage-button-secondary {
+  @apply bg-mage-gray-100 text-mage-black;
+  @apply hover:bg-mage-gray-200;
+}
+
+.mage-button-ghost {
+  @apply bg-transparent text-mage-black;
+  @apply hover:bg-mage-gray-100;
+}
+
+/* Input styling */
+.mage-input {
+  @apply w-full px-4 py-3;
+  @apply bg-mage-gray-100 rounded-uber-lg;
+  @apply border-2 border-transparent;
+  @apply text-base font-medium;
+  @apply transition-all duration-200;
+  @apply placeholder:text-mage-gray-400;
+  @apply focus:outline-none focus:border-mage-black focus:bg-white;
+}
+
+/* Card styling */
+.mage-card {
+  @apply bg-white rounded-uber-xl;
+  @apply shadow-uber p-6;
+}
+
+/* Toast styling */
+.mage-toast {
+  @apply fixed top-4 left-1/2 -translate-x-1/2 z-50;
+  @apply px-4 py-3 rounded-uber-full;
+  @apply shadow-uber-lg;
+  @apply flex items-center gap-3;
+  @apply animate-toast-slide;
+}
+
+.mage-toast-info {
+  @apply bg-mage-black text-white;
+}
+
+.mage-toast-success {
+  @apply bg-mage-green text-white;
+}
+
+.mage-toast-error {
+  @apply bg-mage-red text-white;
+}
+
+.mage-toast-warning {
+  @apply bg-mage-yellow text-mage-black;
+}
+
+/* Recording pulse animation */
+.recording-indicator {
+  @apply relative;
+}
+
+.recording-indicator::before {
+  content: '';
+  @apply absolute inset-0 rounded-full bg-mage-red;
+  @apply animate-recording-pulse;
+  z-index: -1;
+}
+
+/* Swipe gesture hints */
+.swipe-hint {
+  @apply absolute top-1/2 -translate-y-1/2;
+  @apply w-1 h-16 rounded-full bg-mage-gray-300;
+  @apply opacity-0 transition-opacity duration-200;
+}
+
+.swipe-hint-left {
+  @apply left-2;
+}
+
+.swipe-hint-right {
+  @apply right-2;
+}
+
+/* Blue notification dot */
+.notification-dot {
+  @apply absolute -top-1 -right-1;
+  @apply w-3 h-3 rounded-full bg-mage-blue;
+  @apply border-2 border-white;
+}
+
+/* Message bubbles */
+.message-bubble {
+  @apply max-w-[85%] px-4 py-3 rounded-uber-xl;
+  @apply text-base leading-relaxed;
+}
+
+.message-bubble-user {
+  @apply bg-mage-black text-white ml-auto;
+  border-bottom-right-radius: 4px;
+}
+
+.message-bubble-bot {
+  @apply bg-mage-gray-100 text-mage-black;
+  border-bottom-left-radius: 4px;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 2px;
+}
+
+/* Safe area padding for mobile */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+/* Prevent text selection during gestures */
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Hardware acceleration for smooth animations */
+.gpu-accelerated {
+  transform: translateZ(0);
+  will-change: transform;
+}
