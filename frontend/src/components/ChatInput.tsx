@@ -228,11 +228,11 @@ export function ChatInput({
             </div>
           )}
 
-          <div className="flex items-end gap-2">
+          <div className="flex items-center gap-2">
             {/* Upload button */}
             <button
               onClick={onUpload}
-              className="flex-shrink-0 p-3 rounded-full hover:bg-mage-gray-100 transition-colors"
+              className="flex-shrink-0 w-12 h-12 rounded-full hover:bg-mage-gray-100 transition-colors flex items-center justify-center"
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                 <path
@@ -246,7 +246,7 @@ export function ChatInput({
             </button>
 
             {/* Text input */}
-            <div className="flex-1 relative">
+            <div className="flex-1 relative h-12 mt-0 mb-0">
               <textarea
                 ref={inputRef}
                 value={inputText}
@@ -256,7 +256,7 @@ export function ChatInput({
                 placeholder="Message..."
                 rows={1}
                 className="
-                  w-full px-4 py-3 pr-12
+                  w-full h-12 mt-0 mb-0 px-4 py-3 pr-12
                   bg-mage-gray-100 rounded-uber-xl
                   text-base font-medium resize-none
                   placeholder:text-mage-gray-400
@@ -264,7 +264,7 @@ export function ChatInput({
                   transition-all
                 "
                 style={{
-                  minHeight: '48px',
+                  height: '48px',
                   maxHeight: '120px',
                 }}
                 onKeyDown={(e) => {
@@ -283,7 +283,7 @@ export function ChatInput({
                 animate={{ scale: 1, opacity: 1 }}
                 onClick={handleSend}
                 className="
-                  flex-shrink-0 w-12 h-12
+                  flex-shrink-0 w-12 h-12 mt-0 mb-0
                   bg-mage-black text-white rounded-full
                   flex items-center justify-center
                   active:scale-95 transition-transform

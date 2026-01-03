@@ -142,28 +142,60 @@ class LLMService:
         
         messages = self._build_messages(user_message, context, conversation_history, images)
         
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=self._get_headers(),
-                    json={
-                        "model": self.model,
-                        "messages": messages,
-                        "max_tokens": settings.llm_max_tokens,
-                        "temperature": settings.llm_temperature,
-                    }
-                )
-                response.raise_for_status()
-                data = response.json()
-                return data["choices"][0]["message"]["content"]
+        # Retry logic for rate limiting
+        max_retries = 3
+        retry_delay = 1.0
+        
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers=self._get_headers(),
+                        json={
+                            "model": self.model,
+                            "messages": messages,
+                            "max_tokens": settings.llm_max_tokens,
+                            "temperature": settings.llm_temperature,
+                        }
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    return data["choices"][0]["message"]["content"]
+                    
+            except httpx.HTTPStatusError as e:
+                error_detail = ""
+                try:
+                    error_detail = e.response.json()
+                except:
+                    error_detail = e.response.text
                 
-        except httpx.HTTPStatusError as e:
-            print(f"HTTP error: {e}")
-            return "I'm having trouble connecting right now. Please try again."
-        except Exception as e:
-            print(f"Error generating response: {e}")
-            return "Something went wrong. Please try again or contact the front desk directly."
+                # Handle rate limiting (429) with retry
+                if e.response.status_code == 429 and attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
+                    print(f"Rate limited (429). Retrying in {wait_time:.1f}s (attempt {attempt + 1}/{max_retries})...")
+                    await asyncio.sleep(wait_time)
+                    continue
+                
+                print(f"HTTP error {e.response.status_code}: {error_detail}")
+                print(f"Request URL: {self.base_url}/chat/completions")
+                print(f"Model: {self.model}")
+                
+                if e.response.status_code == 429:
+                    return "I'm currently experiencing high demand. Please wait a moment and try again."
+                return f"I'm having trouble connecting right now (HTTP {e.response.status_code}). Please try again."
+                
+            except httpx.RequestError as e:
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)
+                    print(f"Request error. Retrying in {wait_time:.1f}s (attempt {attempt + 1}/{max_retries})...")
+                    await asyncio.sleep(wait_time)
+                    continue
+                print(f"Request error: {e}")
+                return "I'm having trouble connecting to the AI service. Please check your connection and try again."
+                
+        # If we exhausted all retries
+        return "I'm having trouble connecting right now. Please try again in a moment."
     
     async def generate_stream(
         self,
@@ -217,8 +249,26 @@ class LLMService:
                             except:
                                 continue
                                 
+        except httpx.HTTPStatusError as e:
+            error_detail = ""
+            try:
+                error_detail = e.response.json()
+            except:
+                error_detail = e.response.text
+            print(f"HTTP error {e.response.status_code} in stream: {error_detail}")
+            print(f"Request URL: {self.base_url}/chat/completions")
+            print(f"Model: {self.model}")
+            if e.response.status_code == 429:
+                yield "I'm currently experiencing high demand. Please wait a moment and try again."
+            else:
+                yield f"I'm having trouble connecting right now (HTTP {e.response.status_code}). Please try again."
+        except httpx.RequestError as e:
+            print(f"Request error in stream: {e}")
+            yield "I'm having trouble connecting to the AI service. Please check your connection and try again."
         except Exception as e:
-            print(f"Error in stream: {e}")
+            print(f"Error in stream: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             yield "Something went wrong. Please try again."
     
     def _get_mock_response(self, user_message: str, context: ConversationContext) -> str:

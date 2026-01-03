@@ -106,7 +106,7 @@ export const TRANSITIONS: Transition[] = [
 
   // Front desk connection
   { from: 'S-G-008', trigger: 'CONTACT_FRONT_DESK', to: 'S-G-009' },
-  { from: 'S-G-009', trigger: 'CANCEL_CONNECTION', to: 'S-G-008' },
+  { from: 'S-G-009', trigger: 'CANCEL_CONNECTION', to: 'S-G-003', context: 'BOT' },
 
   // Agent routing (after 8s countdown)
   { from: 'S-G-009', condition: 'human_agent_available=true', to: 'S-G-003', context: 'FRONT_DESK_AGENT' },

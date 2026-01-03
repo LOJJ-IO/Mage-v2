@@ -17,11 +17,11 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     
     # Supabase settings (mock for now)
-    supabase_url: str = os.getenv("SUPABASE_URL", "")
-    supabase_key: str = os.getenv("SUPABASE_KEY", "")
+    supabase_url: str = ""
+    supabase_key: str = ""
     
     # OpenRouter settings for Gemini
-    openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
+    openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     
     # LLM settings
@@ -38,7 +38,11 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"
 
 
-@lru_cache()
+_settings_instance: Settings | None = None
+
 def get_settings() -> Settings:
-    """Get cached settings instance."""
-    return Settings()
+    """Get settings instance (singleton pattern)."""
+    global _settings_instance
+    if _settings_instance is None:
+        _settings_instance = Settings()
+    return _settings_instance
