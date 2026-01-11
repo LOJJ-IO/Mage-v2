@@ -1,5 +1,6 @@
 import os
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from functools import lru_cache
 
 
@@ -16,7 +17,19 @@ class Settings(BaseSettings):
     # CORS settings
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     
-    # Supabase settings (mock for now)
+    # Database settings
+    database_type: str = os.getenv("DATABASE_TYPE", "mock")
+    
+    @field_validator("database_type")
+    @classmethod
+    def validate_database_type(cls, v: str) -> str:
+        """Validate database_type is either 'mock' or 'supabase'."""
+        valid_types = {"mock", "supabase"}
+        if v.lower() not in valid_types:
+            raise ValueError(f"database_type must be one of {valid_types}, got '{v}'")
+        return v.lower()
+    
+    # Supabase settings
     supabase_url: str = os.getenv("SUPABASE_URL", "")
     supabase_key: str = os.getenv("SUPABASE_KEY", "")
     

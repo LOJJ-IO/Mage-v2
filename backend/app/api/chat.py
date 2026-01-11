@@ -10,7 +10,7 @@ from app.models.schemas import (
     MessageRole,
 )
 from app.services.llm_service import llm_service
-from app.services.database import mock_db
+from app.services.database import get_database
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -19,13 +19,14 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 async def send_message(request: ChatMessageRequest):
     """Send a message and get a response."""
     
+    db = get_database()
     # Get conversation history if guest_id provided
     conversation_history = []
     if request.guest_id:
-        conversation_history = mock_db.get_conversation(request.guest_id)
+        conversation_history = db.get_conversation(request.guest_id)
         
         # Add user message to history
-        mock_db.add_message_to_conversation(
+        db.add_message_to_conversation(
             request.guest_id,
             "user",
             request.content
@@ -41,7 +42,7 @@ async def send_message(request: ChatMessageRequest):
     
     # Add assistant response to history
     if request.guest_id:
-        mock_db.add_message_to_conversation(
+        db.add_message_to_conversation(
             request.guest_id,
             "assistant",
             response_content
@@ -59,13 +60,14 @@ async def send_message(request: ChatMessageRequest):
 async def stream_message(request: ChatMessageRequest):
     """Stream a message response."""
     
+    db = get_database()
     # Get conversation history if guest_id provided
     conversation_history = []
     if request.guest_id:
-        conversation_history = mock_db.get_conversation(request.guest_id)
+        conversation_history = db.get_conversation(request.guest_id)
         
         # Add user message to history
-        mock_db.add_message_to_conversation(
+        db.add_message_to_conversation(
             request.guest_id,
             "user",
             request.content
@@ -84,7 +86,7 @@ async def stream_message(request: ChatMessageRequest):
         
         # Add full response to history
         if request.guest_id:
-            mock_db.add_message_to_conversation(
+            db.add_message_to_conversation(
                 request.guest_id,
                 "assistant",
                 full_response
