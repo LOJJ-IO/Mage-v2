@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Dict, Optional, List, Protocol
+from pydantic import ValidationError
 from app.models.schemas import GuestProfile, Ticket, TicketStatus, ConversationContext
 from app.core.config import get_settings
 from functools import lru_cache
@@ -474,19 +475,23 @@ def get_database() -> DatabaseProtocol:
     Get database instance based on configuration.
     Returns MockDatabase or SupabaseDatabase based on database_type setting.
     """
-    settings = get_settings()
-    database_type = settings.database_type.lower()
-    
-    if database_type == "supabase":
-        try:
-            logger.info("Initializing Supabase database")
-            return SupabaseDatabase()
-        except Exception as e:
-            logger.warning(f"Failed to initialize Supabase database: {e}. Falling back to MockDatabase.")
+    try:
+        settings = get_settings()
+        database_type = settings.database_type.lower()
+        
+        if database_type == "supabase":
+            try:
+                logger.info("Initializing Supabase database")
+                return SupabaseDatabase()
+            except Exception as e:
+                logger.warning(f"Failed to initialize Supabase database: {e}. Falling back to MockDatabase.")
+                return MockDatabase()
+        elif database_type == "mock":
+            logger.info("Using MockDatabase")
             return MockDatabase()
-    elif database_type == "mock":
-        logger.info("Using MockDatabase")
-        return MockDatabase()
-    else:
-        logger.warning(f"Unknown database_type '{database_type}'. Using MockDatabase.")
+        else:
+            logger.warning(f"Unknown database_type '{database_type}'. Using MockDatabase.")
+            return MockDatabase()
+    except ValidationError as e:
+        logger.warning(f"Settings validation failed: {e}. Falling back to MockDatabase.")
         return MockDatabase()
