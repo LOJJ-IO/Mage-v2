@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     supabase_key: str = os.getenv("SUPABASE_KEY", "")
     
     # OpenRouter settings for Gemini
-    openrouter_api_key: str = ""
+    openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     
     # LLM settings
@@ -54,11 +54,7 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"
 
 
-_settings_instance: Settings | None = None
-
+@lru_cache()
 def get_settings() -> Settings:
-    """Get settings instance (singleton pattern)."""
-    global _settings_instance
-    if _settings_instance is None:
-        _settings_instance = Settings()
-    return _settings_instance
+    """Get cached settings instance."""
+    return Settings()
