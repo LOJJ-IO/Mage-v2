@@ -246,7 +246,7 @@ export function ChatInput({
             </button>
 
             {/* Text input */}
-            <div className="flex-1 relative">
+            <div className="flex-1 relative h-12">
               <textarea
                 ref={inputRef}
                 value={inputText}
