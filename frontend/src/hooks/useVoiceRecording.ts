@@ -42,6 +42,8 @@ export function useVoiceRecording(config: UseVoiceRecordingConfig = {}): UseVoic
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const stopRecordingRef = useRef<(() => void) | null>(null);
+  const mimeTypeRef = useRef<string>('audio/webm');
 
   // Check permission status
   const checkPermission = useCallback(async (): Promise<MicPermission> => {
@@ -72,6 +74,41 @@ export function useVoiceRecording(config: UseVoiceRecordingConfig = {}): UseVoic
     }
   }, [onPermissionChange]);
 
+  // Detect supported MediaRecorder MIME type
+  const getSupportedMimeType = useCallback((): string => {
+    const types = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4',
+      'audio/ogg;codecs=opus',
+      'audio/ogg',
+    ];
+
+    for (const type of types) {
+      if (MediaRecorder.isTypeSupported(type)) {
+        return type;
+      }
+    }
+
+    // Fallback to default (browser will choose)
+    return '';
+  }, []);
+
+  // Stop recording (internal function)
+  const stopRecordingInternal = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+
+    if (durationIntervalRef.current) {
+      clearInterval(durationIntervalRef.current);
+      durationIntervalRef.current = null;
+    }
+
+    setIsRecording(false);
+    setIsPaused(false);
+  }, []);
+
   // Start recording
   const startRecording = useCallback(async () => {
     try {
@@ -95,10 +132,13 @@ export function useVoiceRecording(config: UseVoiceRecordingConfig = {}): UseVoic
       streamRef.current = stream;
       chunksRef.current = [];
 
-      // Create media recorder
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus',
-      });
+      // Detect supported MIME type
+      const mimeType = getSupportedMimeType();
+      mimeTypeRef.current = mimeType || 'audio/webm';
+
+      // Create media recorder with detected or default format
+      const options = mimeType ? { mimeType } : {};
+      const mediaRecorder = new MediaRecorder(stream, options);
 
       mediaRecorderRef.current = mediaRecorder;
 
@@ -109,7 +149,7 @@ export function useVoiceRecording(config: UseVoiceRecordingConfig = {}): UseVoic
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current });
         setAudioBlob(blob);
         onRecordingStop?.(blob);
         
@@ -129,12 +169,15 @@ export function useVoiceRecording(config: UseVoiceRecordingConfig = {}): UseVoic
       setDuration(0);
       onRecordingStart?.();
 
+      // Store stop function in ref for use in interval callback
+      stopRecordingRef.current = stopRecordingInternal;
+
       // Start duration counter
       durationIntervalRef.current = setInterval(() => {
         setDuration((prev) => {
           const newDuration = prev + 1;
           if (newDuration >= maxDuration) {
-            stopRecording();
+            stopRecordingRef.current?.();
           }
           return newDuration;
         });
@@ -143,22 +186,12 @@ export function useVoiceRecording(config: UseVoiceRecordingConfig = {}): UseVoic
     } catch (error) {
       onRecordingError?.(error as Error);
     }
-  }, [permission, requestPermission, maxDuration, onRecordingStart, onRecordingStop, onRecordingError]);
+  }, [permission, requestPermission, maxDuration, onRecordingStart, onRecordingStop, onRecordingError, getSupportedMimeType, stopRecordingInternal]);
 
-  // Stop recording
+  // Stop recording (public API)
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-
-    if (durationIntervalRef.current) {
-      clearInterval(durationIntervalRef.current);
-      durationIntervalRef.current = null;
-    }
-
-    setIsRecording(false);
-    setIsPaused(false);
-  }, []);
+    stopRecordingInternal();
+  }, [stopRecordingInternal]);
 
   // Pause recording
   const pauseRecording = useCallback(() => {
@@ -179,17 +212,20 @@ export function useVoiceRecording(config: UseVoiceRecordingConfig = {}): UseVoic
       mediaRecorderRef.current.resume();
       setIsPaused(false);
 
+      // Store stop function in ref for use in interval callback
+      stopRecordingRef.current = stopRecordingInternal;
+
       durationIntervalRef.current = setInterval(() => {
         setDuration((prev) => {
           const newDuration = prev + 1;
           if (newDuration >= maxDuration) {
-            stopRecording();
+            stopRecordingRef.current?.();
           }
           return newDuration;
         });
       }, 1000);
     }
-  }, [maxDuration, stopRecording]);
+  }, [maxDuration, stopRecordingInternal]);
 
   // Cleanup on unmount
   useEffect(() => {

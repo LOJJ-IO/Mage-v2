@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 60
     rate_limit_window: int = 60  # seconds
     
+    # Whisper settings
+    whisper_model_size: str = os.getenv("WHISPER_MODEL_SIZE", "small")
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
