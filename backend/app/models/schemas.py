@@ -8,7 +8,6 @@ class ConversationContext(str, Enum):
     """Conversation context types."""
     BOT = "BOT"
     FRONT_DESK_AGENT = "FRONT_DESK_AGENT"
-    AI_AGENT = "AI_AGENT"
 
 
 class MessageRole(str, Enum):

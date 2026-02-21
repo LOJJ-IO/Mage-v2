@@ -108,10 +108,9 @@ export const TRANSITIONS: Transition[] = [
   { from: 'S-G-008', trigger: 'CONTACT_FRONT_DESK', to: 'S-G-009' },
   { from: 'S-G-009', trigger: 'CANCEL_CONNECTION', to: 'S-G-003', context: 'BOT' },
 
-  // Agent routing (after 8s countdown)
+  // Agent routing (after 8s countdown): human available → front desk; else → deferred
   { from: 'S-G-009', condition: 'human_agent_available=true', to: 'S-G-003', context: 'FRONT_DESK_AGENT' },
-  { from: 'S-G-009', condition: 'human_agent_available=false && ai_agent_available=true && is_paid_user=true', to: 'S-G-003', context: 'AI_AGENT' },
-  { from: 'S-G-009', condition: 'ai_agent_available=false || is_paid_user=false', to: 'S-G-011', context: 'BOT' },
+  { from: 'S-G-009', condition: 'human_agent_available=false', to: 'S-G-011', context: 'BOT' },
 
   // Deferred state
   { from: 'S-G-011', trigger: 'CONTINUE', to: 'S-G-003' },

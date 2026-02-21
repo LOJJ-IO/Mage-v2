@@ -8,6 +8,7 @@ from app.models.schemas import (
     ChatMessageRequest,
     Message,
     MessageRole,
+    ConversationContext,
 )
 from app.services.llm_service import llm_service
 from app.services.database import get_database
@@ -32,13 +33,17 @@ async def send_message(request: ChatMessageRequest):
             request.content
         )
     
-    # Generate response from LLM
-    response_content = await llm_service.generate_response(
-        user_message=request.content,
-        context=request.conversation_context,
-        conversation_history=conversation_history,
-        images=request.images
-    )
+    # FRONT_DESK_AGENT: human-only chat, no LLM or intent pipeline
+    if request.conversation_context == ConversationContext.FRONT_DESK_AGENT:
+        response_content = "Your message has been sent to the front desk. They will respond shortly."
+    else:
+        response_content = await llm_service.generate_response(
+            user_message=request.content,
+            context=request.conversation_context,
+            conversation_history=conversation_history,
+            images=request.images,
+            guest_id=request.guest_id,
+        )
     
     # Add assistant response to history
     if request.guest_id:
@@ -75,14 +80,19 @@ async def stream_message(request: ChatMessageRequest):
     
     async def generate():
         full_response = ""
-        async for chunk in llm_service.generate_stream(
-            user_message=request.content,
-            context=request.conversation_context,
-            conversation_history=conversation_history,
-            images=request.images
-        ):
-            full_response += chunk
-            yield f"data: {json.dumps({'content': chunk})}\n\n"
+        if request.conversation_context == ConversationContext.FRONT_DESK_AGENT:
+            full_response = "Your message has been sent to the front desk. They will respond shortly."
+            yield f"data: {json.dumps({'content': full_response})}\n\n"
+        else:
+            async for chunk in llm_service.generate_stream(
+                user_message=request.content,
+                context=request.conversation_context,
+                conversation_history=conversation_history,
+                images=request.images,
+                guest_id=request.guest_id,
+            ):
+                full_response += chunk
+                yield f"data: {json.dumps({'content': chunk})}\n\n"
         
         # Add full response to history
         if request.guest_id:

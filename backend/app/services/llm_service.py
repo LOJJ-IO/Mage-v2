@@ -1,10 +1,13 @@
 import asyncio
+import re
 import time
 import httpx
-from typing import AsyncGenerator, Optional, List, Dict, Any
+from pathlib import Path
+from typing import AsyncGenerator, Optional, List, Dict, Any, Literal, Tuple
 from collections import deque
 from app.core.config import get_settings
 from app.models.schemas import ConversationContext
+from app.services.database import get_database
 
 settings = get_settings()
 
@@ -50,30 +53,63 @@ rate_limiter = RateLimiter(
 )
 
 
-# System prompts for different contexts
+# System prompts for different contexts (BOT only; FRONT_DESK_AGENT does not use LLM)
 SYSTEM_PROMPTS = {
     ConversationContext.BOT: """You are Mage, a friendly and helpful AI assistant for hotel guests. 
 You help guests with questions about their stay, hotel amenities, local recommendations, and general inquiries.
 Be warm, professional, and concise. If you cannot help with something, offer to connect them with the front desk.
 Keep responses brief and mobile-friendly (2-3 sentences typically).""",
 
-    ConversationContext.AI_AGENT: """You are an AI-powered front desk agent for the hotel.
-You have more authority than the basic bot - you can help with:
-- Room service requests
-- Booking modifications
-- Billing inquiries
-- Maintenance requests
-- Special accommodations
-
-Be professional but warm. If something requires human verification or is beyond your capability, 
-let the guest know you'll escalate to a human agent.
-Keep responses concise and action-oriented.""",
-
     ConversationContext.FRONT_DESK_AGENT: """You are simulating a human front desk agent for testing purposes.
 Respond as a professional, friendly hotel employee would.
 Be helpful, empathetic, and solution-oriented.
 Use natural language and occasional small talk appropriate for hospitality."""
 }
+
+# Used only by small model when it classifies message as not relevant (Python intent never returns this)
+NON_ANSWER = "I'm here to help with your stay—amenities, room, dining, and local tips. For anything else, the front desk is happy to help!"
+# Appended to every Python generic answer (required)
+SATISFACTION_SUFFIX = "\n\nDo you require any further assistance? (Yes / No)"
+# When user replies No to the above: end the turn (no small model); conversation resumes on next prompt
+CLOSING_AFTER_NO = "No problem. Feel free to ask if you need anything else."
+
+# Cached hotel knowledge (path -> content) so we don't read the file every request
+_hotel_knowledge_cache: Dict[str, str] = {}
+
+
+def _load_hotel_knowledge() -> str:
+    """Load hotel knowledge from the file at settings.hotel_knowledge_path. Returns '' if path empty or file missing."""
+    path = (settings.hotel_knowledge_path or "").strip()
+    if not path:
+        return ""
+    if path in _hotel_knowledge_cache:
+        return _hotel_knowledge_cache[path]
+    try:
+        p = Path(path)
+        if not p.is_absolute():
+            p = Path(__file__).resolve().parent.parent.parent / path
+        content = p.read_text(encoding="utf-8").strip()
+        _hotel_knowledge_cache[path] = content
+        return content
+    except Exception:
+        return ""
+
+
+def _get_small_model_system(hotel_context: str = "") -> str:
+    """Build the small model system prompt with hotel name and optional hotel knowledge."""
+    hotel_name = settings.hotel_name or "the hotel"
+    base = f"""You are the hotel assistant for {hotel_name}. Only answer questions about the guest's stay, the hotel, or hotel services. For anything else, respond NOT_RELEVANT.
+
+Output format (strict):
+- First line must be exactly one of: NOT_RELEVANT, HANDOFF, or ANSWER.
+- If NOT_RELEVANT: first line is NOT_RELEVANT, nothing else.
+- If HANDOFF (relevant but too complex): first line is HANDOFF, nothing else.
+- If ANSWER: first line is ANSWER, then your brief helpful reply. If the guest needs a service (maintenance, room service, housekeeping, etc.), add a second line: ACTION: MAINTENANCE or ACTION: ROOM_SERVICE or ACTION: HOUSEKEEPING (optionally add a colon and short issue summary, e.g. ACTION: MAINTENANCE: AC not working).
+"""
+    if hotel_context:
+        base += f"\nHotel knowledge:\n{hotel_context}\n"
+    base += "\nPut NOT_RELEVANT or HANDOFF on the first line by itself when applicable. For ANSWER, put ANSWER on the first line, then your reply, then optionally an ACTION line."
+    return base
 
 
 class LLMService:
@@ -123,138 +159,285 @@ class LLMService:
         
         return messages
     
-    async def generate_response(
+    def _build_small_model_messages(
         self,
         user_message: str,
-        context: ConversationContext = ConversationContext.BOT,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        images: Optional[List[str]] = None
-    ) -> str:
-        """Generate a response from the LLM."""
-        
-        # Check rate limit
-        if not await rate_limiter.wait_and_acquire():
-            return "I'm currently experiencing high demand. Please try again in a moment."
-        
-        # If no API key, return mock response
-        if not self.api_key:
-            return self._get_mock_response(user_message, context)
-        
-        messages = self._build_messages(user_message, context, conversation_history, images)
-        
+        images: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Build message array for the small model (relevance + answer/handoff)."""
+        hotel_context = _load_hotel_knowledge()
+        system_content = _get_small_model_system(hotel_context)
+        messages = [{"role": "system", "content": system_content}]
+        if conversation_history:
+            messages.extend(conversation_history[-10:])
+        if images:
+            content = [{"type": "text", "text": user_message}]
+            for img in images[:4]:
+                content.append({"type": "image_url", "image_url": {"url": img}})
+            messages.append({"role": "user", "content": content})
+        else:
+            messages.append({"role": "user", "content": user_message})
+        return messages
+    
+    def _parse_action_from_content(self, content: str) -> Tuple[str, Optional[Tuple[str, str]]]:
+        """Strip ACTION: line and leading ANSWER line from content; return (clean_text, (action_type, issue_summary) or None)."""
+        action: Optional[Tuple[str, str]] = None
+        lines = content.split("\n")
+        kept = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.upper().startswith("ACTION:"):
+                rest = stripped[7:].strip()
+                if ":" in rest:
+                    action_type, _, issue = rest.partition(":")
+                    action = (action_type.strip().upper(), issue.strip())
+                else:
+                    action = (rest.upper() if rest else "MAINTENANCE", "")
+            else:
+                kept.append(line)
+        clean = "\n".join(kept).strip()
+        if clean.upper().startswith("ANSWER"):
+            first_newline = clean.find("\n")
+            if first_newline != -1:
+                clean = clean[first_newline + 1 :].strip()
+            else:
+                clean = ""
+        return (clean, action)
+
+    async def _call_small_model(
+        self,
+        user_message: str,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        images: Optional[List[str]] = None,
+    ) -> Tuple[str, Literal["non_answer", "handoff", "answer"], Optional[Tuple[str, str]]]:
+        """Call small model via OpenRouter. Returns (response_text, outcome, optional_action)."""
+        messages = self._build_small_model_messages(user_message, conversation_history, images)
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers=self._get_headers(),
                     json={
-                        "model": self.model,
+                        "model": settings.llm_model_small,
                         "messages": messages,
                         "max_tokens": settings.llm_max_tokens,
-                        "temperature": settings.llm_temperature,
-                    }
+                        "temperature": 0.3,
+                    },
                 )
                 response.raise_for_status()
                 data = response.json()
-                return data["choices"][0]["message"]["content"]
-                
-        except httpx.HTTPStatusError as e:
-            print(f"HTTP error: {e}")
-            return "I'm having trouble connecting right now. Please try again."
+                content = (data["choices"][0]["message"]["content"] or "").strip()
+                first_line = content.split("\n")[0].strip().upper() if content else ""
+                if "NOT_RELEVANT" in first_line or content.upper().startswith("NOT_RELEVANT"):
+                    return (NON_ANSWER, "non_answer", None)
+                if "HANDOFF" in first_line or content.upper().startswith("HANDOFF"):
+                    return ("", "handoff", None)
+                clean_text, action = self._parse_action_from_content(content)
+                if not clean_text and action:
+                    clean_text = "I've logged your request. Our team will follow up shortly."
+                return (clean_text or content, "answer", action)
         except Exception as e:
-            print(f"Error generating response: {e}")
+            print(f"Small model error: {e}")
+            return ("I'm having trouble connecting right now. Please try again.", "answer", None)
+    
+    async def _call_large_model(
+        self,
+        user_message: str,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        images: Optional[List[str]] = None,
+    ) -> str:
+        """Call large model via OpenRouter for complex relevant questions."""
+        messages = self._build_messages(
+            user_message, ConversationContext.BOT, conversation_history, images
+        )
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=self._get_headers(),
+                    json={
+                        "model": settings.llm_model_large,
+                        "messages": messages,
+                        "max_tokens": settings.llm_max_tokens,
+                        "temperature": settings.llm_temperature,
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
+                return data["choices"][0]["message"]["content"] or "I'm sorry, I couldn't generate a response."
+        except Exception as e:
+            print(f"Large model error: {e}")
             return "Something went wrong. Please try again or contact the front desk directly."
+    
+    async def generate_response(
+        self,
+        user_message: str,
+        context: ConversationContext = ConversationContext.BOT,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        images: Optional[List[str]] = None,
+        guest_id: Optional[str] = None,
+    ) -> str:
+        """Generate a response: Python intent first, then small model, then large if handoff."""
+        
+        if not await rate_limiter.wait_and_acquire():
+            return "I'm currently experiencing high demand. Please try again in a moment."
+        
+        if context == ConversationContext.FRONT_DESK_AGENT:
+            return "Your message has been sent to the front desk. They will respond shortly."
+        
+        # 1. Python intent (generic answer, closing-after-no, or None)
+        generic = self._get_intent_response(user_message, conversation_history)
+        if generic is not None:
+            if generic == CLOSING_AFTER_NO:
+                return generic
+            return generic + SATISFACTION_SUFFIX
+        
+        # 2. No API key: fallback
+        if not self.api_key:
+            return "I'm here to help! Could you tell me more about what you need? I can assist with hotel amenities, local recommendations, or connect you with our front desk."
+        
+        # 3. Small model
+        small_text, outcome, action = await self._call_small_model(user_message, conversation_history, images)
+        if outcome == "non_answer":
+            return small_text
+        if outcome == "handoff":
+            return await self._call_large_model(user_message, conversation_history, images)
+        if outcome == "answer" and action and guest_id:
+            action_type, issue_summary = action
+            issue = issue_summary or f"{action_type} request: {user_message[:200]}"
+            try:
+                get_database().create_ticket(guest_id, issue)
+            except Exception as e:
+                print(f"Ticket creation error: {e}")
+        return small_text
     
     async def generate_stream(
         self,
         user_message: str,
         context: ConversationContext = ConversationContext.BOT,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        images: Optional[List[str]] = None
+        images: Optional[List[str]] = None,
+        guest_id: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
-        """Generate a streaming response from the LLM."""
+        """Generate a streaming response: Python intent first, then small/large model."""
         
-        # Check rate limit
         if not await rate_limiter.wait_and_acquire():
             yield "I'm currently experiencing high demand. Please try again in a moment."
             return
         
-        # If no API key, yield mock response
-        if not self.api_key:
-            mock = self._get_mock_response(user_message, context)
-            for word in mock.split():
+        if context == ConversationContext.FRONT_DESK_AGENT:
+            msg = "Your message has been sent to the front desk. They will respond shortly."
+            for word in msg.split():
+                yield word + " "
+            return
+        
+        generic = self._get_intent_response(user_message, conversation_history)
+        if generic is not None:
+            full = generic if generic == CLOSING_AFTER_NO else generic + SATISFACTION_SUFFIX
+            for word in full.split():
                 yield word + " "
                 await asyncio.sleep(0.05)
             return
         
-        messages = self._build_messages(user_message, context, conversation_history, images)
+        if not self.api_key:
+            fallback = "I'm here to help! Could you tell me more about what you need? I can assist with hotel amenities, local recommendations, or connect you with our front desk."
+            for word in fallback.split():
+                yield word + " "
+                await asyncio.sleep(0.05)
+            return
         
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                async with client.stream(
-                    "POST",
-                    f"{self.base_url}/chat/completions",
-                    headers=self._get_headers(),
-                    json={
-                        "model": self.model,
-                        "messages": messages,
-                        "max_tokens": settings.llm_max_tokens,
-                        "temperature": settings.llm_temperature,
-                        "stream": True,
-                    }
-                ) as response:
-                    response.raise_for_status()
-                    async for line in response.aiter_lines():
-                        if line.startswith("data: "):
-                            data = line[6:]
-                            if data == "[DONE]":
-                                break
-                            try:
-                                import json
-                                chunk = json.loads(data)
-                                if chunk["choices"][0]["delta"].get("content"):
-                                    yield chunk["choices"][0]["delta"]["content"]
-                            except:
-                                continue
-                                
-        except Exception as e:
-            print(f"Error in stream: {e}")
-            yield "Something went wrong. Please try again."
+        small_text, outcome, action = await self._call_small_model(user_message, conversation_history, images)
+        if outcome == "answer" and action and guest_id:
+            action_type, issue_summary = action
+            issue = issue_summary or f"{action_type} request: {user_message[:200]}"
+            try:
+                get_database().create_ticket(guest_id, issue)
+            except Exception as e:
+                print(f"Ticket creation error: {e}")
+        if outcome == "non_answer":
+            for word in small_text.split():
+                yield word + " "
+                await asyncio.sleep(0.05)
+            return
+        if outcome == "handoff":
+            large_text = await self._call_large_model(user_message, conversation_history, images)
+            for word in large_text.split():
+                yield word + " "
+                await asyncio.sleep(0.05)
+            return
+        for word in small_text.split():
+            yield word + " "
+            await asyncio.sleep(0.05)
+    
+    def _get_intent_response(
+        self, user_message: str, conversation_history: Optional[List[Dict[str, str]]] = None
+    ) -> Optional[str]:
+        """Python intent layer: returns generic answer if a block matches, else None (pass to small model).
+        Does not return non-answer; relevance is decided only by the small model.
+        """
+        message_lower = user_message.lower().strip()
+        words = set(re.findall(r"\b\w+\b", message_lower))
+        # Follow-up "No": last assistant asked satisfaction and user said no → end turn (closing message)
+        if conversation_history:
+            hist = conversation_history[-10:]
+            for m in reversed(hist):
+                if m.get("role") == "assistant":
+                    content = (m.get("content") or "").strip()
+                    asked_satisfaction = (
+                        "Was that helpful?" in content
+                        or "Do you require any further assistance?" in content
+                        or content.endswith("(Yes / No)")
+                    )
+                    if asked_satisfaction:
+                        if words & {"no", "nope", "n", "nah", "negative"}:
+                            return CLOSING_AFTER_NO
+                        if message_lower in ("no", "nope", "n", "not really", "not exactly", "nah"):
+                            return CLOSING_AFTER_NO
+                        if "not" in words and words & {"really", "exactly"}:
+                            return CLOSING_AFTER_NO
+                    break
+        # Phrases first (substring is ok for these)
+        if "room service" in message_lower or ("order" in words and "room" in words):
+            return "For room service, please dial 0 on your room phone, or I can connect you with the front desk to place an order."
+        if "check out" in message_lower or "checkout" in message_lower:
+            return "Checkout is at 11 AM. Would you like a late checkout? I can check availability for you."
+        if "wake up" in message_lower or "wakeup" in message_lower:
+            return "You can request a wake-up call by dialing 0 from your room phone. The front desk will set it up for you."
+        # Word-boundary intents
+        if words & {"wifi", "internet", "password", "wi-fi", "wifi"}:
+            return "The WiFi network is 'HotelGuest' and the password is on the card in your room. Let me know if you have any trouble connecting!"
+        if words & {"breakfast", "restaurant", "food", "eat", "eating", "dining"}:
+            return "Our restaurant is open from 6:30 AM to 10:30 PM. Breakfast is served until 10:30 AM in the main dining room on the ground floor."
+        if words & {"leaving", "leave", "depart"}:
+            return "Checkout is at 11 AM. Would you like a late checkout? I can check availability for you."
+        if words & {"pool", "gym", "fitness", "spa", "swim"}:
+            return "The pool and fitness center are on the 3rd floor, open 6 AM - 10 PM. Towels are provided at the entrance."
+        if words & {"help", "hi", "hello", "hey", "greetings"}:
+            return "Hello! I'm Mage, your hotel assistant. I can help with room service, amenities, local recommendations, or any questions about your stay. What can I do for you?"
+        if words & {"problem", "issue", "broken", "maintenance"} or ("not" in words and "working" in words):
+            return "I'm sorry to hear that. Can you describe the issue? I'll make sure the right team is notified to help you."
+        if words & {"parking", "park", "car", "valet"}:
+            return "Self-parking is available in the garage on level B1. Valet is available at the main entrance. Would you like the current rates?"
+        if words & {"laundry", "dry", "cleaning", "press"}:
+            return "Laundry and dry-cleaning are available. Place items in the bag in your closet and call the front desk for pickup. Same-day service is available for most items."
+        if words & {"bill", "invoice", "charge", "payment", "pay"}:
+            return "For your bill or to dispute a charge, please visit the front desk or dial 0 from your room. They can print a copy or go through line items with you."
+        if words & {"pet", "pets", "dog", "cat"}:
+            return "Pets are welcome with a small daily fee. Please let the front desk know so they can note your reservation. Pet amenities are available on request."
+        if words & {"lost", "left", "forgot", "missing"}:
+            return "For lost items, please contact the front desk or housekeeping. They keep a lost-and-found log and will follow up if something is found."
+        # No match → small model
+        return None
     
     def _get_mock_response(self, user_message: str, context: ConversationContext) -> str:
-        """Get a mock response for development/testing."""
-        message_lower = user_message.lower()
-        
-        if any(word in message_lower for word in ["wifi", "internet", "password"]):
-            return "The WiFi network is 'HotelGuest' and the password is on the card in your room. Let me know if you have any trouble connecting!"
-        
-        elif any(word in message_lower for word in ["breakfast", "restaurant", "food", "eat"]):
-            return "Our restaurant is open from 6:30 AM to 10:30 PM. Breakfast is served until 10:30 AM in the main dining room on the ground floor."
-        
-        elif any(word in message_lower for word in ["checkout", "check out", "leaving"]):
-            return "Checkout is at 11 AM. Would you like a late checkout? I can check availability for you."
-        
-        elif any(word in message_lower for word in ["pool", "gym", "fitness", "spa"]):
-            return "The pool and fitness center are on the 3rd floor, open 6 AM - 10 PM. Towels are provided at the entrance."
-        
-        elif any(word in message_lower for word in ["help", "hi", "hello", "hey"]):
-            return "Hello! I'm Mage, your hotel assistant. I can help with room service, amenities, local recommendations, or any questions about your stay. What can I do for you?"
-        
-        elif any(word in message_lower for word in ["room service", "order"]):
-            if context == ConversationContext.AI_AGENT:
-                return "I'd be happy to help with room service! Our menu includes breakfast items, sandwiches, salads, and dinner entrees. What would you like to order?"
-            return "For room service, please dial 0 on your room phone, or I can connect you with the front desk to place an order."
-        
-        elif any(word in message_lower for word in ["problem", "issue", "broken", "not working"]):
-            return "I'm sorry to hear that. Can you describe the issue? I'll make sure the right team is notified to help you."
-        
-        else:
-            responses = {
-                ConversationContext.BOT: "I'm here to help! Could you tell me more about what you need? I can assist with hotel amenities, local recommendations, or connect you with our front desk.",
-                ConversationContext.AI_AGENT: "I'd be happy to help with that. Could you provide more details so I can assist you better?",
-                ConversationContext.FRONT_DESK_AGENT: "Thank you for reaching out! How can I assist you today?"
-            }
-            return responses.get(context, responses[ConversationContext.BOT])
+        """Legacy: mock response when no API key. Uses intent layer; if no match, single fallback."""
+        generic = self._get_intent_response(user_message, None)
+        if generic is not None:
+            if generic == CLOSING_AFTER_NO:
+                return generic
+            return generic + SATISFACTION_SUFFIX
+        return "I'm here to help! Could you tell me more about what you need? I can assist with hotel amenities, local recommendations, or connect you with our front desk."
 
 
 # Global LLM service instance

@@ -128,14 +128,24 @@ export function ChatScreen() {
     switch (context.conversationContext) {
       case 'FRONT_DESK_AGENT':
         return 'Connected to Front Desk';
-      case 'AI_AGENT':
-        return 'AI Assistant';
       default:
         return null;
     }
   };
 
   const contextIndicator = getContextIndicator();
+
+  // Show Yes/No buttons when last assistant message asks for satisfaction (required by backend)
+  const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+  const askedSatisfaction =
+    lastMessage?.content?.includes('Was that helpful?') ||
+    lastMessage?.content?.includes('Do you require any further assistance?') ||
+    lastMessage?.content?.includes('(Yes / No)');
+  const showSatisfactionButtons =
+    !isAiTyping &&
+    !streamingMessage &&
+    lastMessage?.role === 'assistant' &&
+    askedSatisfaction;
 
   return (
     <div
@@ -277,6 +287,30 @@ export function ChatScreen() {
 
         <div ref={messagesEndRef} />
       </main>
+
+      {/* Yes/No quick replies when assistant asked if the answer helped */}
+      {showSatisfactionButtons && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="px-4 py-2 flex gap-2 justify-center border-t border-mage-gray-100 bg-white"
+        >
+          <button
+            type="button"
+            onClick={() => handleSendMessage('Yes')}
+            className="px-5 py-2.5 rounded-uber-full font-medium bg-mage-black text-white hover:opacity-90 active:scale-[0.98] transition-all"
+          >
+            Yes
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSendMessage('No')}
+            className="px-5 py-2.5 rounded-uber-full font-medium bg-mage-gray-100 text-mage-black hover:bg-mage-gray-200 active:scale-[0.98] transition-all"
+          >
+            No
+          </button>
+        </motion.div>
+      )}
 
       {/* Input area */}
       <ChatInput

@@ -57,7 +57,7 @@ export type Trigger =
   | 'CONNECTION_TIMEOUT';
 
 // Conversation context types
-export type ConversationContext = 'BOT' | 'FRONT_DESK_AGENT' | 'AI_AGENT';
+export type ConversationContext = 'BOT' | 'FRONT_DESK_AGENT';
 
 // Mic permission states
 export type MicPermission = 'granted' | 'denied' | 'prompt';

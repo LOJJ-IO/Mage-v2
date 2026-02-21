@@ -33,12 +33,14 @@ class Settings(BaseSettings):
     supabase_url: str = os.getenv("SUPABASE_URL", "")
     supabase_key: str = os.getenv("SUPABASE_KEY", "")
     
-    # OpenRouter settings for Gemini
+    # OpenRouter settings (any compatible model; see https://openrouter.ai/docs#models)
     openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     
-    # LLM settings
-    llm_model: str = "google/gemini-2.0-flash-exp:free"
+    # LLM settings (BOT context only; FRONT_DESK_AGENT does not use LLM). Override via env.
+    llm_model: str = os.getenv("LLM_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
+    llm_model_small: str = os.getenv("LLM_MODEL_SMALL", "meta-llama/llama-3.1-8b-instruct:free")
+    llm_model_large: str = os.getenv("LLM_MODEL_LARGE", "mistralai/mistral-7b-instruct:free")
     llm_max_tokens: int = 2048
     llm_temperature: float = 0.7
     
@@ -48,6 +50,10 @@ class Settings(BaseSettings):
     
     # Whisper settings
     whisper_model_size: str = os.getenv("WHISPER_MODEL_SIZE", "small")
+    
+    # Hotel context for small model (Option 3: hotel-specific prompt + knowledge)
+    hotel_name: str = os.getenv("HOTEL_NAME", "Mage Hotel")
+    hotel_knowledge_path: str = os.getenv("HOTEL_KNOWLEDGE_PATH", "")
     
     class Config:
         env_file = ".env"

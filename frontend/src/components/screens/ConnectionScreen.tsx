@@ -32,9 +32,8 @@ export function ConnectionScreen() {
       // Create ticket
       await createTicketMutation.mutateAsync('Front desk connection request');
 
-      // Determine routing based on agent availability
+      // Determine routing: human available → front desk; else → deferred (state machine sets BOT)
       if (context.humanAgentAvailable) {
-        // Connect to human agent
         setContext({ conversationContext: 'FRONT_DESK_AGENT' });
         addMessage({
           role: 'system',
@@ -45,20 +44,7 @@ export function ConnectionScreen() {
           content: 'Hello! This is the front desk. How can I assist you today?',
         });
         transition('CONNECTION_TIMEOUT');
-      } else if (context.aiAgentAvailable && context.isPaidUser) {
-        // Connect to AI agent
-        setContext({ conversationContext: 'AI_AGENT' });
-        addMessage({
-          role: 'system',
-          content: 'Connected to AI Assistant',
-        });
-        addMessage({
-          role: 'assistant',
-          content: "Hi! I'm your AI front desk assistant. I can help with most requests and will escalate to a human agent if needed. How can I help you?",
-        });
-        transition('CONNECTION_TIMEOUT');
       } else {
-        // No agents available - go to deferred
         transition('CONNECTION_TIMEOUT');
       }
     } catch (error) {
