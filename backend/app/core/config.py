@@ -37,11 +37,13 @@ class Settings(BaseSettings):
     openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     
-    # LLM settings (BOT context only). Override via env. Default uses a widely available free model.
-    llm_model: str = os.getenv("LLM_MODEL", "google/gemini-2.0-flash-exp:free")
-    llm_model_small: str = os.getenv("LLM_MODEL_SMALL", "google/gemini-2.0-flash-exp:free")
-    llm_model_large: str = os.getenv("LLM_MODEL_LARGE", "google/gemini-2.0-flash-exp:free")
-    # Comma-separated list of free model IDs to try when the primary model returns 404/unavailable
+    # LLM settings (BOT context only). Use openrouter/auto to let OpenRouter pick the model (see https://openrouter.ai/docs/guides/routing/routers/auto-router).
+    llm_model: str = os.getenv("LLM_MODEL", "openrouter/auto")
+    llm_model_small: str = os.getenv("LLM_MODEL_SMALL", "openrouter/auto")
+    llm_model_large: str = os.getenv("LLM_MODEL_LARGE", "openrouter/auto")
+    # Optional: restrict Auto Router to these patterns (e.g. google/* for free Geminis). Comma-separated; empty = no restriction.
+    llm_auto_allowed_models: str = os.getenv("LLM_AUTO_ALLOWED_MODELS", "")
+    # Comma-separated list of model IDs to try when the primary model returns 404/unavailable
     llm_model_fallbacks: str = os.getenv(
         "LLM_MODEL_FALLBACKS",
         "google/gemini-2.0-flash-exp:free,google/gemini-flash-1.5:free,google/gemini-flash-1.5-8b:free,qwen/qwen-2.5-7b-instruct:free",

@@ -142,6 +142,25 @@ class LLMService:
             "HTTP-Referer": "https://mage-hotel.app",
             "X-Title": "Mage Hotel Assistant"
         }
+
+    def _build_request_body(
+        self,
+        model: str,
+        messages: List[Dict[str, Any]],
+        temperature: float,
+    ) -> Dict[str, Any]:
+        """Build JSON body for chat/completions; add plugins for openrouter/auto when LLM_AUTO_ALLOWED_MODELS is set."""
+        body: Dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": settings.llm_max_tokens,
+            "temperature": temperature,
+        }
+        if model == "openrouter/auto" and (settings.llm_auto_allowed_models or "").strip():
+            patterns = [p.strip() for p in settings.llm_auto_allowed_models.split(",") if p.strip()]
+            if patterns:
+                body["plugins"] = [{"id": "auto-router", "allowed_models": patterns}]
+        return body
     
     def _build_messages(
         self,
@@ -235,12 +254,7 @@ class LLMService:
                     response = await client.post(
                         f"{self.base_url}/chat/completions",
                         headers=self._get_headers(),
-                        json={
-                            "model": model,
-                            "messages": messages,
-                            "max_tokens": settings.llm_max_tokens,
-                            "temperature": 0.3,
-                        },
+                        json=self._build_request_body(model, messages, 0.3),
                     )
                     response.raise_for_status()
                     data = response.json()
@@ -296,12 +310,7 @@ class LLMService:
                     response = await client.post(
                         f"{self.base_url}/chat/completions",
                         headers=self._get_headers(),
-                        json={
-                            "model": model,
-                            "messages": messages,
-                            "max_tokens": settings.llm_max_tokens,
-                            "temperature": settings.llm_temperature,
-                        },
+                        json=self._build_request_body(model, messages, settings.llm_temperature),
                     )
                     response.raise_for_status()
                     data = response.json()
