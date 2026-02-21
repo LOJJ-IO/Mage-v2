@@ -37,10 +37,15 @@ class Settings(BaseSettings):
     openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     
-    # LLM settings (BOT context only; FRONT_DESK_AGENT does not use LLM). Override via env.
-    llm_model: str = os.getenv("LLM_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
-    llm_model_small: str = os.getenv("LLM_MODEL_SMALL", "meta-llama/llama-3.1-8b-instruct:free")
-    llm_model_large: str = os.getenv("LLM_MODEL_LARGE", "mistralai/mistral-7b-instruct:free")
+    # LLM settings (BOT context only). Override via env. Default uses a widely available free model.
+    llm_model: str = os.getenv("LLM_MODEL", "google/gemini-2.0-flash-exp:free")
+    llm_model_small: str = os.getenv("LLM_MODEL_SMALL", "google/gemini-2.0-flash-exp:free")
+    llm_model_large: str = os.getenv("LLM_MODEL_LARGE", "google/gemini-2.0-flash-exp:free")
+    # Comma-separated list of free model IDs to try when the primary model returns 404/unavailable
+    llm_model_fallbacks: str = os.getenv(
+        "LLM_MODEL_FALLBACKS",
+        "google/gemini-2.0-flash-exp:free,google/gemini-flash-1.5:free,google/gemini-flash-1.5-8b:free,qwen/qwen-2.5-7b-instruct:free",
+    )
     llm_max_tokens: int = 2048
     llm_temperature: float = 0.7
     

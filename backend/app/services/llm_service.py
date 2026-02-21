@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 import time
 import httpx
@@ -10,6 +11,7 @@ from app.models.schemas import ConversationContext
 from app.services.database import get_database
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 class RateLimiter:
@@ -93,6 +95,18 @@ def _load_hotel_knowledge() -> str:
         return content
     except Exception:
         return ""
+
+
+def _models_to_try(primary: str) -> List[str]:
+    """Build list of model IDs to try: primary first, then fallbacks (no duplicates)."""
+    fallbacks = [m.strip() for m in (settings.llm_model_fallbacks or "").split(",") if m.strip()]
+    seen = {primary}
+    out = [primary]
+    for m in fallbacks:
+        if m not in seen:
+            seen.add(m)
+            out.append(m)
+    return out
 
 
 def _get_small_model_system(hotel_context: str = "") -> str:
@@ -211,35 +225,58 @@ class LLMService:
         conversation_history: Optional[List[Dict[str, str]]] = None,
         images: Optional[List[str]] = None,
     ) -> Tuple[str, Literal["non_answer", "handoff", "answer"], Optional[Tuple[str, str]]]:
-        """Call small model via OpenRouter. Returns (response_text, outcome, optional_action)."""
+        """Call small model via OpenRouter; on 404/unavailable try fallback models. Returns (response_text, outcome, optional_action)."""
         messages = self._build_small_model_messages(user_message, conversation_history, images)
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=self._get_headers(),
-                    json={
-                        "model": settings.llm_model_small,
-                        "messages": messages,
-                        "max_tokens": settings.llm_max_tokens,
-                        "temperature": 0.3,
-                    },
+        models = _models_to_try(settings.llm_model_small)
+        last_http_error: Optional[httpx.HTTPStatusError] = None
+        for model in models:
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers=self._get_headers(),
+                        json={
+                            "model": model,
+                            "messages": messages,
+                            "max_tokens": settings.llm_max_tokens,
+                            "temperature": 0.3,
+                        },
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    content = (data["choices"][0]["message"]["content"] or "").strip()
+                    first_line = content.split("\n")[0].strip().upper() if content else ""
+                    if "NOT_RELEVANT" in first_line or content.upper().startswith("NOT_RELEVANT"):
+                        return (NON_ANSWER, "non_answer", None)
+                    if "HANDOFF" in first_line or content.upper().startswith("HANDOFF"):
+                        return ("", "handoff", None)
+                    clean_text, action = self._parse_action_from_content(content)
+                    if not clean_text and action:
+                        clean_text = "I've logged your request. Our team will follow up shortly."
+                    return (clean_text or content, "answer", action)
+            except httpx.HTTPStatusError as e:
+                last_http_error = e
+                body = (e.response.text or "")[:300]
+                logger.warning(
+                    "Small model %s failed: %s %s | %s; trying next.",
+                    model,
+                    e.response.status_code,
+                    e.response.reason_phrase or "",
+                    body,
                 )
-                response.raise_for_status()
-                data = response.json()
-                content = (data["choices"][0]["message"]["content"] or "").strip()
-                first_line = content.split("\n")[0].strip().upper() if content else ""
-                if "NOT_RELEVANT" in first_line or content.upper().startswith("NOT_RELEVANT"):
-                    return (NON_ANSWER, "non_answer", None)
-                if "HANDOFF" in first_line or content.upper().startswith("HANDOFF"):
-                    return ("", "handoff", None)
-                clean_text, action = self._parse_action_from_content(content)
-                if not clean_text and action:
-                    clean_text = "I've logged your request. Our team will follow up shortly."
-                return (clean_text or content, "answer", action)
-        except Exception as e:
-            print(f"Small model error: {e}")
-            return ("I'm having trouble connecting right now. Please try again.", "answer", None)
+                continue
+            except Exception as e:
+                logger.exception("Small model error: %s", e)
+                return ("I'm having trouble connecting right now. Please try again.", "answer", None)
+        if last_http_error:
+            body = (last_http_error.response.text or "")[:500]
+            logger.error(
+                "Small model all failed. Last: %s %s | %s",
+                last_http_error.response.status_code,
+                last_http_error.response.reason_phrase or "",
+                body,
+            )
+        return ("I'm having trouble connecting right now. Please try again.", "answer", None)
     
     async def _call_large_model(
         self,
@@ -247,28 +284,51 @@ class LLMService:
         conversation_history: Optional[List[Dict[str, str]]] = None,
         images: Optional[List[str]] = None,
     ) -> str:
-        """Call large model via OpenRouter for complex relevant questions."""
+        """Call large model via OpenRouter for complex relevant questions; on 404/unavailable try fallback models."""
         messages = self._build_messages(
             user_message, ConversationContext.BOT, conversation_history, images
         )
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=self._get_headers(),
-                    json={
-                        "model": settings.llm_model_large,
-                        "messages": messages,
-                        "max_tokens": settings.llm_max_tokens,
-                        "temperature": settings.llm_temperature,
-                    },
+        models = _models_to_try(settings.llm_model_large)
+        last_http_error: Optional[httpx.HTTPStatusError] = None
+        for model in models:
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers=self._get_headers(),
+                        json={
+                            "model": model,
+                            "messages": messages,
+                            "max_tokens": settings.llm_max_tokens,
+                            "temperature": settings.llm_temperature,
+                        },
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    return data["choices"][0]["message"]["content"] or "I'm sorry, I couldn't generate a response."
+            except httpx.HTTPStatusError as e:
+                last_http_error = e
+                body = (e.response.text or "")[:300]
+                logger.warning(
+                    "Large model %s failed: %s %s | %s; trying next.",
+                    model,
+                    e.response.status_code,
+                    e.response.reason_phrase or "",
+                    body,
                 )
-                response.raise_for_status()
-                data = response.json()
-                return data["choices"][0]["message"]["content"] or "I'm sorry, I couldn't generate a response."
-        except Exception as e:
-            print(f"Large model error: {e}")
-            return "Something went wrong. Please try again or contact the front desk directly."
+                continue
+            except Exception as e:
+                logger.exception("Large model error: %s", e)
+                return "Something went wrong. Please try again or contact the front desk directly."
+        if last_http_error:
+            body = (last_http_error.response.text or "")[:500]
+            logger.error(
+                "Large model all failed. Last: %s %s | %s",
+                last_http_error.response.status_code,
+                last_http_error.response.reason_phrase or "",
+                body,
+            )
+        return "Something went wrong. Please try again or contact the front desk directly."
     
     async def generate_response(
         self,
@@ -309,7 +369,7 @@ class LLMService:
             try:
                 get_database().create_ticket(guest_id, issue)
             except Exception as e:
-                print(f"Ticket creation error: {e}")
+                logger.exception("Ticket creation error: %s", e)
         return small_text
     
     async def generate_stream(
@@ -354,7 +414,7 @@ class LLMService:
             try:
                 get_database().create_ticket(guest_id, issue)
             except Exception as e:
-                print(f"Ticket creation error: {e}")
+                logger.exception("Ticket creation error: %s", e)
         if outcome == "non_answer":
             for word in small_text.split():
                 yield word + " "

@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
@@ -7,6 +8,13 @@ from app.models.schemas import HealthResponse
 from app.api import chat, tickets, guests, agents, transcription
 
 settings = get_settings()
+
+# Ensure app loggers (e.g. llm_service, database) show in the terminal
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 # Create FastAPI app
 app = FastAPI(
