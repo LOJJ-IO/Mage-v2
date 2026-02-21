@@ -62,7 +62,7 @@ The app follows a precisely defined state machine with 11 states:
 ### Frontend Setup
 
 ```bash
-cd mage-frontend
+cd frontend
 
 # Install dependencies
 npm install
@@ -79,7 +79,7 @@ The frontend will be available at `http://localhost:3000`
 ### Backend Setup
 
 ```bash
-cd mage-backend
+cd backend
 
 # Create virtual environment (optional)
 python -m venv venv
