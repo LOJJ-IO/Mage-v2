@@ -5,10 +5,16 @@ import { motion } from 'framer-motion';
 import { useMageStore } from '@/store/mageStore';
 
 export function LoadingScreen() {
-  const { transition, setContext } = useMageStore();
+  const { transition, setContext, context } = useMageStore();
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
+    // Returning user: skip loading and go straight to chat
+    if (context.hasSeenWelcome) {
+      useMageStore.setState({ currentState: 'S-G-003' });
+      return;
+    }
+
     // Simulate loading progress
     const interval = setInterval(() => {
       setProgress((prev) => {
@@ -30,7 +36,7 @@ export function LoadingScreen() {
       clearInterval(interval);
       clearTimeout(timeout);
     };
-  }, [transition, setContext]);
+  }, [transition, setContext, context.hasSeenWelcome]);
 
   return (
     <div className="min-h-screen bg-mage-black flex flex-col items-center justify-center p-8">

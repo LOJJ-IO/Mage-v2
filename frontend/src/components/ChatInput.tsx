@@ -177,8 +177,8 @@ export function ChatInput({
   const hasContent = inputText.trim() || attachedImages.length > 0;
 
   return (
-    <div className="relative safe-area-bottom">
-      {/* Recording UI */}
+    <div className="relative">
+      {/* Recording UI - fixed at bottom */}
       <AnimatePresence>
         {(isRecordingState || isLockedRecording) && (
           <RecordingOverlay
@@ -193,12 +193,12 @@ export function ChatInput({
         )}
       </AnimatePresence>
 
-      {/* Normal input UI */}
+      {/* Normal input UI - fixed at bottom, constrained to mobile width */}
       {!isRecordingState && !isLockedRecording && (
-        <div className="px-4 py-3 bg-white border-t border-mage-gray-200">
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 w-full max-w-md z-30 px-4 pt-4 pb-4 bg-white border-t border-mage-gray-200 safe-area-bottom overflow-visible">
           {/* Attached images preview */}
           {attachedImages.length > 0 && (
-            <div className="flex gap-2 mb-3 overflow-x-auto pb-2">
+            <div className="flex gap-2 mb-3 overflow-x-auto pb-2 pt-3 pr-3">
               {attachedImages.map((img) => (
                 <div key={img.id} className="relative flex-shrink-0">
                   <div className="w-16 h-16 rounded-uber overflow-hidden">
@@ -212,7 +212,7 @@ export function ChatInput({
                   </div>
                   <button
                     onClick={() => removeAttachedImage(img.id)}
-                    className="absolute -top-2 -right-2 w-5 h-5 bg-mage-black text-white rounded-full flex items-center justify-center"
+                    className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/70 hover:bg-black text-white rounded-full flex items-center justify-center z-10 shrink-0"
                   >
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                       <path
@@ -253,7 +253,7 @@ export function ChatInput({
                 onChange={(e) => setInputText(e.target.value)}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
-                placeholder="Message..."
+                placeholder=" Message..."
                 rows={1}
                 className="
                   w-full px-4 py-3 pr-12
@@ -365,7 +365,7 @@ function RecordingOverlay({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 20 }}
-      className="fixed inset-x-0 bottom-0 bg-white border-t border-mage-gray-200 safe-area-bottom"
+      className="fixed bottom-5 left-1/2 -translate-x-1/2 w-full max-w-md z-40 bg-white border-t border-mage-gray-200 safe-area-bottom"
       {...swipeHandlers}
     >
       <div className="px-4 py-6">

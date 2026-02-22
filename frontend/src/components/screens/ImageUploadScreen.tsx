@@ -5,12 +5,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useMageStore } from '@/store/mageStore';
 import Image from 'next/image';
 
+const MAX_ATTACHMENTS = 5;
+
 export function ImageUploadScreen() {
   const {
     transition,
     addAttachedImage,
     attachedImages,
     removeAttachedImage,
+    addToast,
   } = useMageStore();
 
   const [selectedImages, setSelectedImages] = useState<
@@ -18,21 +21,45 @@ export function ImageUploadScreen() {
   >([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Handle file selection
+  // Handle file selection (capped at MAX_ATTACHMENTS total)
   const handleFileSelect = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const files = event.target.files;
       if (!files) return;
 
-      const newImages = Array.from(files).map((file) => ({
+      const currentTotal = attachedImages.length + selectedImages.length;
+      const remaining = Math.max(0, MAX_ATTACHMENTS - currentTotal);
+      if (remaining === 0) {
+        addToast({
+          type: 'info',
+          message: `Maximum ${MAX_ATTACHMENTS} photos allowed.`,
+          duration: 3000,
+        });
+        event.target.value = '';
+        return;
+      }
+
+      const fileList = Array.from(files);
+      const toAdd = fileList.slice(0, remaining);
+      const over = fileList.length - toAdd.length;
+
+      const newImages = toAdd.map((file) => ({
         id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         file,
         preview: URL.createObjectURL(file),
       }));
 
       setSelectedImages((prev) => [...prev, ...newImages]);
+      if (over > 0) {
+        addToast({
+          type: 'info',
+          message: `Maximum ${MAX_ATTACHMENTS} photos. ${over} not added.`,
+          duration: 3000,
+        });
+      }
+      event.target.value = '';
     },
-    []
+    [attachedImages.length, selectedImages.length, addToast]
   );
 
   // Handle image removal
@@ -71,12 +98,22 @@ export function ImageUploadScreen() {
     transition('CONFIRM_IMAGES'); // Return to previous state
   }, [selectedImages, transition]);
 
-  // Trigger file picker
+  // Trigger file picker (or show toast if at cap)
   const openFilePicker = () => {
+    const total = attachedImages.length + selectedImages.length;
+    if (total >= MAX_ATTACHMENTS) {
+      addToast({
+        type: 'info',
+        message: `Maximum ${MAX_ATTACHMENTS} photos allowed.`,
+        duration: 3000,
+      });
+      return;
+    }
     fileInputRef.current?.click();
   };
 
   const totalImages = attachedImages.length + selectedImages.length;
+  const atCap = totalImages >= MAX_ATTACHMENTS;
 
   return (
     <motion.div
@@ -84,10 +121,11 @@ export function ImageUploadScreen() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: '100%' }}
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-      className="fixed inset-0 z-50 bg-white flex flex-col"
+      className="fixed inset-0 z-50 bg-white flex flex-col items-center"
     >
-      {/* Header */}
-      <header className="px-4 py-3 border-b border-mage-gray-200 flex items-center justify-between safe-area-top">
+      <div className="w-full max-w-md flex flex-col flex-1 min-h-0">
+        {/* Header */}
+        <header className="px-4 py-3 border-b border-mage-gray-200 flex items-center justify-between safe-area-top flex-shrink-0">
         <button
           onClick={handleCancel}
           className="p-2 -ml-2 rounded-full hover:bg-mage-gray-100 transition-colors"
@@ -117,10 +155,10 @@ export function ImageUploadScreen() {
         >
           Done ({totalImages})
         </button>
-      </header>
+        </header>
 
-      {/* Content */}
-      <main className="flex-1 overflow-y-auto p-4">
+        {/* Content */}
+        <main className="flex-1 min-h-0 overflow-y-auto p-4">
         {/* Selected images grid */}
         <div className="grid grid-cols-3 gap-2 mb-4">
           <AnimatePresence mode="popLayout">
@@ -128,20 +166,28 @@ export function ImageUploadScreen() {
             {attachedImages.map((image) => (
               <motion.div
                 key={image.id}
+                layout
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.8, opacity: 0 }}
-                className="relative aspect-square rounded-uber-lg overflow-hidden"
+                transition={{
+                  layout: { type: 'spring', stiffness: 260, damping: 28 },
+                  opacity: { duration: 0.2 },
+                  scale: { type: 'spring', stiffness: 400, damping: 25 },
+                }}
+                className="relative aspect-square rounded-uber-lg"
               >
-                <Image
-                  src={image.preview}
-                  alt="Attached"
-                  fill
-                  className="object-cover"
-                />
+                <div className="absolute inset-0 overflow-hidden rounded-uber-lg">
+                  <Image
+                    src={image.preview}
+                    alt="Attached"
+                    fill
+                    className="object-cover"
+                  />
+                </div>
                 <button
                   onClick={() => removeAttachedImage(image.id)}
-                  className="absolute top-2 right-2 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center"
+                  className="absolute top-2 right-2 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center z-10"
                 >
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                     <path
@@ -162,20 +208,28 @@ export function ImageUploadScreen() {
             {selectedImages.map((image) => (
               <motion.div
                 key={image.id}
+                layout
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.8, opacity: 0 }}
-                className="relative aspect-square rounded-uber-lg overflow-hidden"
+                transition={{
+                  layout: { type: 'spring', stiffness: 260, damping: 28 },
+                  opacity: { duration: 0.2 },
+                  scale: { type: 'spring', stiffness: 400, damping: 25 },
+                }}
+                className="relative aspect-square rounded-uber-lg"
               >
-                <Image
-                  src={image.preview}
-                  alt="Selected"
-                  fill
-                  className="object-cover"
-                />
+                <div className="absolute inset-0 overflow-hidden rounded-uber-lg">
+                  <Image
+                    src={image.preview}
+                    alt="Selected"
+                    fill
+                    className="object-cover"
+                  />
+                </div>
                 <button
                   onClick={() => handleRemoveImage(image.id)}
-                  className="absolute top-2 right-2 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center"
+                  className="absolute top-2 right-2 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center z-10"
                 >
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                     <path
@@ -192,8 +246,15 @@ export function ImageUploadScreen() {
             {/* Add more button */}
             <motion.button
               layout
+              transition={{
+                layout: { type: 'spring', stiffness: 260, damping: 28 },
+              }}
               onClick={openFilePicker}
-              className="aspect-square rounded-uber-lg border-2 border-dashed border-mage-gray-300 flex flex-col items-center justify-center gap-2 hover:border-mage-gray-400 hover:bg-mage-gray-50 transition-colors"
+              className={`aspect-square rounded-uber-lg border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-colors duration-200 ${
+                atCap
+                  ? 'border-mage-gray-200 bg-mage-gray-50 cursor-not-allowed opacity-60'
+                  : 'border-mage-gray-300 hover:border-mage-gray-400 hover:bg-mage-gray-50'
+              }`}
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                 <path
@@ -206,9 +267,9 @@ export function ImageUploadScreen() {
               <span className="text-xs text-mage-gray-500">Add</span>
             </motion.button>
           </AnimatePresence>
-        </div>
+          </div>
 
-        {/* Empty state */}
+          {/* Empty state */}
         {totalImages === 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -247,34 +308,35 @@ export function ImageUploadScreen() {
             </button>
           </motion.div>
         )}
-      </main>
+        </main>
 
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        onChange={handleFileSelect}
-        className="hidden"
-      />
+          {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleFileSelect}
+          className="hidden"
+        />
 
-      {/* Bottom action bar (when images selected) */}
-      {selectedImages.length > 0 && (
-        <motion.div
-          initial={{ y: 100 }}
-          animate={{ y: 0 }}
-          className="p-4 border-t border-mage-gray-200 safe-area-bottom"
-        >
-          <button
-            onClick={handleConfirm}
-            className="w-full py-4 bg-mage-black text-white rounded-uber-full font-semibold text-lg active:scale-[0.98] transition-transform"
+        {/* Bottom action bar (when images selected) */}
+        {selectedImages.length > 0 && (
+          <motion.div
+            initial={{ y: 100 }}
+            animate={{ y: 0 }}
+            className="pt-3 px-4 pb-3 mb-4 safe-area-bottom flex-shrink-0 border-t border-mage-gray-200"
           >
-            Attach {selectedImages.length} Photo
-            {selectedImages.length !== 1 ? 's' : ''}
-          </button>
-        </motion.div>
-      )}
+            <button
+              onClick={handleConfirm}
+              className="w-full max-w-xs mx-auto block py-4 bg-mage-black text-white rounded-uber-full font-semibold text-lg active:scale-[0.98] transition-transform"
+            >
+              Attach {totalImages} Photo
+              {totalImages !== 1 ? 's' : ''}
+            </button>
+          </motion.div>
+        )}
+      </div>
     </motion.div>
   );
 }
