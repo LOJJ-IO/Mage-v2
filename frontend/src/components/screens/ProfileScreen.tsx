@@ -44,7 +44,11 @@ export function ProfileScreen() {
       initial={{ x: '100%' }}
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
-      transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+      transition={{
+        type: 'tween',
+        duration: 0.32,
+        ease: [0.32, 0.72, 0, 1],
+      }}
       className="min-h-screen bg-mage-gray-50 flex flex-col"
       {...swipeHandlers}
     >
@@ -185,7 +189,7 @@ export function ProfileScreen() {
                 <div className="w-12 h-12 bg-mage-black rounded-xl flex items-center justify-center text-white">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                     <path
-                      d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"
+                      d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"
                       stroke="currentColor"
                       strokeWidth="2"
                       strokeLinecap="round"
@@ -223,65 +227,25 @@ export function ProfileScreen() {
               </svg>
             </button>
 
-            {/* Room service */}
+            {/* Check Out */}
             <button
               className="
-                w-full flex items-center gap-4 p-4
-                bg-mage-gray-50 rounded-uber-lg
-                hover:bg-mage-gray-100 active:scale-[0.99]
-                transition-all opacity-50 cursor-not-allowed
+                w-full flex items-center justify-center gap-2 p-4
+                bg-mage-black text-white rounded-uber-lg
+                hover:opacity-90 active:scale-[0.99]
+                transition-all font-semibold
               "
-              disabled
             >
-              <div className="w-12 h-12 bg-mage-gray-300 rounded-xl flex items-center justify-center text-white">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M18 8h1a4 4 0 010 8h-1M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8zM6 1v3M10 1v3M14 1v3"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
-              <div className="flex-1 text-left">
-                <p className="font-semibold text-mage-gray-400">Room Service</p>
-                <p className="text-sm text-mage-gray-400">Coming soon</p>
-              </div>
-            </button>
-
-            {/* Housekeeping */}
-            <button
-              className="
-                w-full flex items-center gap-4 p-4
-                bg-mage-gray-50 rounded-uber-lg
-                hover:bg-mage-gray-100 active:scale-[0.99]
-                transition-all opacity-50 cursor-not-allowed
-              "
-              disabled
-            >
-              <div className="w-12 h-12 bg-mage-gray-300 rounded-xl flex items-center justify-center text-white">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M9 22V12h6v10"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
-              <div className="flex-1 text-left">
-                <p className="font-semibold text-mage-gray-400">Housekeeping</p>
-                <p className="text-sm text-mage-gray-400">Coming soon</p>
-              </div>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              Check Out
             </button>
           </div>
         </motion.div>
