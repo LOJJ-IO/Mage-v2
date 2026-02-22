@@ -36,7 +36,7 @@ export function MessageBubble({ message, isLast = false }: MessageBubbleProps) {
     >
       <div
         className={`
-          max-w-[85%] px-4 py-3 rounded-uber-xl
+          max-w-[85%] min-w-0 px-4 py-3 rounded-uber-xl overflow-hidden
           ${isUser
             ? 'bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black rounded-br-sm'
             : 'bg-mage-gray-100 dark:bg-mage-gray-800 text-mage-black dark:text-white rounded-bl-sm'
@@ -62,8 +62,8 @@ export function MessageBubble({ message, isLast = false }: MessageBubbleProps) {
           </div>
         )}
 
-        {/* Message content */}
-        <p className="text-base leading-relaxed whitespace-pre-wrap">
+        {/* Message content - wrap long words so no horizontal scroll */}
+        <p className="text-base leading-relaxed whitespace-pre-wrap break-words break-all">
           {message.content}
         </p>
 

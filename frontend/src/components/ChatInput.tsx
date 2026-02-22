@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMageStore } from '@/store/mageStore';
-import { useVoiceRecording, formatDuration } from '@/hooks/useVoiceRecording';
+import { useRecording } from '@/components/providers/RecordingProvider';
+import { formatDuration } from '@/hooks/useVoiceRecording';
 import { ImageAttachment } from '@/types';
 import Image from 'next/image';
 
@@ -38,38 +39,24 @@ export function ChatInput({
   const micButtonRef = useRef<HTMLButtonElement>(null);
   const [isFocused, setIsFocused] = useState(false);
 
-  // Voice recording
-  const {
-    isRecording,
-    duration,
-    audioBlob,
-    startRecording,
-    stopRecording,
-    permission,
-    requestPermission,
-  } = useVoiceRecording({
-    onRecordingStart: () => {
-      setRecording({ isRecording: true, duration: 0 });
-    },
-    onRecordingStop: (blob) => {
-      setRecording({ isRecording: false, audioBlob: blob });
-      transition('RELEASE_HOLD');
-    },
-    onRecordingError: (error) => {
-      addToast({
-        type: 'error',
-        message: 'Recording failed. Please try again.',
-      });
-      transition('TAP_CANCEL');
-    },
-  });
+  const MIN_INPUT_HEIGHT = 48;
+  const MAX_INPUT_HEIGHT = 120;
 
-  // Update duration in store
+  const resizeTextarea = useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const h = Math.min(Math.max(el.scrollHeight, MIN_INPUT_HEIGHT), MAX_INPUT_HEIGHT);
+    el.style.height = `${h}px`;
+  }, []);
+
   useEffect(() => {
-    if (isRecording) {
-      setRecording({ duration });
-    }
-  }, [duration, isRecording, setRecording]);
+    resizeTextarea();
+  }, [inputText, resizeTextarea]);
+
+  const { startRecording, stopRecording, requestPermission } = useRecording();
+  const isRecording = recording.isRecording;
+  const duration = recording.duration;
 
   // Focus input when entering typing state
   useEffect(() => {
@@ -108,37 +95,38 @@ export function ChatInput({
   // Handle mic press start (disabled while transcription is in progress)
   const handleMicPressStart = async () => {
     if (isTranscriptionPending) return;
-    if (permission !== 'granted') {
-      const newPermission = await requestPermission();
-      if (newPermission !== 'granted') {
-        addToast({
-          type: 'error',
-          message: 'Microphone access denied',
-        });
-        return;
-      }
+    const perm = await requestPermission();
+    if (perm !== 'granted') {
+      addToast({
+        type: 'error',
+        message: 'Microphone access denied',
+      });
+      return;
     }
     transition('HOLD_MIC');
-    startRecording();
-  };
-
-  // Handle mic press end (release to send)
-  const handleMicPressEnd = () => {
-    if (isRecordingState) {
-      stopRecording();
+    try {
+      await startRecording();
+    } catch {
+      addToast({
+        type: 'error',
+        message: 'Recording failed. Please try again.',
+      });
+      transition('TAP_CANCEL');
     }
   };
 
   // Handle cancel recording
-  const handleCancelRecording = () => {
-    stopRecording();
+  const handleCancelRecording = async () => {
+    await stopRecording();
+    setRecording({ isRecording: false, audioBlob: undefined, isLocked: false });
     transition('TAP_CANCEL');
-    setRecording({ isRecording: false, isLocked: false });
   };
 
-  // Handle send recording: only stop; onRecordingStop will set blob and transition to transcribing
-  const handleSendRecording = () => {
-    stopRecording();
+  // Handle send recording
+  const handleSendRecording = async () => {
+    const blob = await stopRecording();
+    setRecording({ isRecording: false, audioBlob: blob });
+    transition('RELEASE_HOLD');
   };
 
   const hasContent = inputText.trim() || attachedImages.length > 0;
@@ -202,35 +190,64 @@ export function ChatInput({
               </svg>
             </button>
 
-            {/* Text input */}
-            <div className="flex-1 relative h-12">
-              <textarea
-                ref={inputRef}
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
-                placeholder=" Message..."
-                rows={1}
-                className="
-                  w-full px-4 py-3 pr-12
-                  bg-mage-gray-100 dark:bg-mage-gray-800 rounded-uber-xl
-                  text-base font-medium resize-none text-mage-black dark:text-white
-                  placeholder:text-mage-gray-400 dark:placeholder:text-mage-gray-500
-                  focus:outline-none focus:ring-2 focus:ring-mage-black/10 dark:focus:ring-white/20
-                  transition-all
-                "
-                style={{
-                  minHeight: '48px',
-                  maxHeight: '120px',
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-              />
+            {/* Text input or transcribing indicator in same box */}
+            <div className="flex-1 relative min-h-[48px]">
+              {isTranscriptionPending ? (
+                <div
+                  className="
+                    w-full h-12 min-h-[48px] px-4 py-3
+                    bg-mage-gray-100 dark:bg-mage-gray-800 rounded-uber-xl
+                    flex items-center gap-2 text-mage-gray-500 dark:text-mage-gray-400
+                  "
+                >
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 16 16" fill="none">
+                      <path
+                        d="M8 1v2M8 13v2M15 8h-2M3 8H1M13.07 13.07l-1.41-1.41M4.34 4.34L2.93 2.93M13.07 2.93l-1.41 1.41M4.34 11.66l-1.41 1.41"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </motion.div>
+                  <span className="text-sm font-medium">Transcribing...</span>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-uber-xl min-h-[48px] bg-mage-gray-100 dark:bg-mage-gray-800 focus-within:ring-2 focus-within:ring-mage-black/10 dark:focus-within:ring-white/20">
+                  <textarea
+                    ref={inputRef}
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    onFocus={handleFocus}
+                    onBlur={handleBlur}
+                    placeholder=" Message..."
+                    rows={1}
+                    className="
+                      message-input-scrollbar
+                      w-full h-full min-h-[48px] px-4 py-3 pr-12
+                      bg-transparent
+                      text-base font-medium resize-none text-mage-black dark:text-white
+                      placeholder:text-mage-gray-400 dark:placeholder:text-mage-gray-500
+                      focus:outline-none
+                      transition-[height] duration-150 ease-out
+                    "
+                    style={{
+                      minHeight: MIN_INPUT_HEIGHT,
+                      maxHeight: MAX_INPUT_HEIGHT,
+                      overflowY: 'auto',
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                      }
+                    }}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Send / Mic button */}
@@ -260,10 +277,7 @@ export function ChatInput({
               <button
                 ref={micButtonRef}
                 onTouchStart={handleMicPressStart}
-                onTouchEnd={handleMicPressEnd}
                 onMouseDown={handleMicPressStart}
-                onMouseUp={handleMicPressEnd}
-                onMouseLeave={handleMicPressEnd}
                 disabled={isTranscriptionPending}
                 aria-busy={isTranscriptionPending}
                 className={`
@@ -286,7 +300,7 @@ export function ChatInput({
   );
 }
 
-// Recording overlay: Cancel or Send (and release to send)
+// Recording overlay: Cancel or Send only
 interface RecordingOverlayProps {
   duration: number;
   onCancel: () => void;
@@ -309,14 +323,19 @@ function RecordingOverlay({ duration, onCancel, onSend }: RecordingOverlayProps)
           >
             Cancel
           </button>
-          <div className="flex items-center gap-2">
-            <motion.div
-              animate={{ scale: [1, 1.2, 1] }}
-              transition={{ duration: 1, repeat: Infinity }}
-              className="w-3 h-3 rounded-full bg-mage-red"
-            />
-            <span className="text-lg font-semibold tabular-nums">
-              {formatDuration(duration)}
+          <div className="flex flex-col items-center gap-0.5">
+            <div className="flex items-center gap-2">
+              <motion.div
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ duration: 1, repeat: Infinity }}
+                className="w-3 h-3 rounded-full bg-mage-red"
+              />
+              <span className="text-lg font-semibold tabular-nums">
+                {formatDuration(duration)}
+              </span>
+            </div>
+            <span className="text-mage-gray-500 dark:text-mage-gray-400 text-sm">
+              For Transcription
             </span>
           </div>
           <button

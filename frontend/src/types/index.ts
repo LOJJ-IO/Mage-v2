@@ -54,7 +54,9 @@ export type Trigger =
   | 'CONFIRM_IMAGES'
   | 'CONTACT_FRONT_DESK'
   | 'CANCEL_CONNECTION'
-  | 'CONNECTION_TIMEOUT';
+  | 'CONNECTION_TIMEOUT'
+  | 'SEND_RECORDING_FROM_PROFILE'
+  | 'CANCEL_RECORDING_FROM_PROFILE';
 
 // Conversation context types
 export type ConversationContext = 'BOT' | 'FRONT_DESK_AGENT';

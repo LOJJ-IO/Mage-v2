@@ -2,8 +2,8 @@
 
 import { motion } from 'framer-motion';
 import { useMageStore } from '@/store/mageStore';
+import { useRecording } from '@/components/providers/RecordingProvider';
 import { useSwipeGesture } from '@/hooks/useSwipeGesture';
-import { RecordingToast } from '@/components/Toast';
 
 export function ProfileScreen() {
   const {
@@ -11,10 +11,12 @@ export function ProfileScreen() {
     guestProfile,
     context,
     recording,
+    setRecording,
     activeTicket,
     theme,
     setTheme,
   } = useMageStore();
+  const { stopRecording } = useRecording();
 
   const { handlers: swipeHandlers } = useSwipeGesture({
     onSwipeRight: () => transition('BACK'),
@@ -22,7 +24,27 @@ export function ProfileScreen() {
   });
 
   const handleBack = () => transition('BACK');
-  const handleContactFrontDesk = () => transition('CONTACT_FRONT_DESK');
+
+  const handleContactFrontDesk = async () => {
+    if (recording.isRecording) {
+      const blob = await stopRecording();
+      setRecording({ isRecording: false, audioBlob: blob });
+      transition('SEND_RECORDING_FROM_PROFILE');
+      transition('CONTACT_FRONT_DESK');
+    } else {
+      transition('CONTACT_FRONT_DESK');
+    }
+  };
+
+  const handleCheckOut = async () => {
+    if (recording.isRecording) {
+      const blob = await stopRecording();
+      setRecording({ isRecording: false, audioBlob: blob });
+      transition('SEND_RECORDING_FROM_PROFILE');
+    } else {
+      // Placeholder for future Check Out action
+    }
+  };
 
   const formatShortDate = (date: Date | string): string => {
     return new Intl.DateTimeFormat('en-US', {
@@ -51,8 +73,6 @@ export function ProfileScreen() {
       className="min-h-screen bg-mage-gray-50 dark:bg-mage-gray-900 flex flex-col"
       {...swipeHandlers}
     >
-      <RecordingToast isVisible={recording.isRecording} />
-
       <header className="sticky top-0 z-40 bg-white dark:bg-mage-gray-900 border-b border-mage-gray-200 dark:border-mage-gray-700 safe-area-top">
         <div className="px-4 py-3 flex items-center gap-4">
           <button
@@ -246,6 +266,7 @@ export function ProfileScreen() {
               </svg>
             </button>
             <button
+              onClick={handleCheckOut}
               className="
                 w-full flex items-center justify-center gap-2 p-4
                 bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black rounded-uber-lg
