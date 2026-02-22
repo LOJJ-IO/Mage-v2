@@ -96,7 +96,8 @@ class MockDatabase:
                 check_out=datetime.now() + timedelta(days=4),
                 booking_id="BK-2026-0412",
                 email="alex.johnson@email.com",
-                phone="+1 555-0123"
+                phone="+1 555-0123",
+                membership_tier="Platinum"
             ),
             "guest-002": GuestProfile(
                 id="guest-002",
@@ -106,7 +107,8 @@ class MockDatabase:
                 check_out=datetime.now() + timedelta(days=1),
                 booking_id="BK-2026-0305",
                 email="sarah.w@email.com",
-                phone="+1 555-0456"
+                phone="+1 555-0456",
+                membership_tier="Gold"
             )
         }
         

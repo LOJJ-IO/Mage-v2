@@ -241,6 +241,12 @@ export function ChatScreen() {
     lastMessage?.role === 'assistant' &&
     askedSatisfaction;
 
+  const showContactConfirmation =
+    !isAiTyping &&
+    !streamingMessage &&
+    lastMessage?.role === 'assistant' &&
+    lastMessage?.requireContactConfirmation;
+
   if (showSkeleton) {
     return <ChatScreenSkeleton />;
   }
@@ -350,7 +356,7 @@ export function ChatScreen() {
         </AnimatePresence>
 
         {/* Yes/No quick replies when assistant asked if the answer helped */}
-        {showSatisfactionButtons && (
+        {showSatisfactionButtons && !showContactConfirmation && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -370,6 +376,35 @@ export function ChatScreen() {
             >
               No
             </button>
+          </motion.div>
+        )}
+
+        {/* Contact Prompt */}
+        {showContactConfirmation && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="px-4 py-5 flex flex-col items-center gap-3 border-t border-mage-gray-100 dark:border-mage-gray-700 bg-white dark:bg-mage-gray-900 -mx-4 mt-4"
+          >
+            <p className="text-sm font-medium text-mage-gray-600 dark:text-mage-gray-300">
+              Connect you to the front desk?
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button
+                type="button"
+                onClick={() => transition('CONTACT_FRONT_DESK')}
+                className="px-5 py-2.5 rounded-uber-full font-medium bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black hover:opacity-90 active:scale-[0.98] transition-all"
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSendMessage('No, thank you')}
+                className="px-5 py-2.5 rounded-uber-full font-medium bg-mage-gray-100 dark:bg-mage-gray-700 text-mage-black dark:text-white hover:bg-mage-gray-200 dark:hover:bg-mage-gray-600 active:scale-[0.98] transition-all"
+              >
+                No
+              </button>
+            </div>
           </motion.div>
         )}
 

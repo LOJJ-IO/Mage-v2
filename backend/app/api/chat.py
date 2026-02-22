@@ -33,11 +33,12 @@ async def send_message(request: ChatMessageRequest):
             request.content
         )
     
+    require_contact = False
     # FRONT_DESK_AGENT: human-only chat, no LLM or intent pipeline
     if request.conversation_context == ConversationContext.FRONT_DESK_AGENT:
         response_content = "Your message has been sent to the front desk. They will respond shortly."
     else:
-        response_content = await llm_service.generate_response(
+        response_content, require_contact = await llm_service.generate_response(
             user_message=request.content,
             context=request.conversation_context,
             conversation_history=conversation_history,
@@ -57,7 +58,8 @@ async def send_message(request: ChatMessageRequest):
         id=f"msg-{uuid.uuid4().hex[:8]}",
         role=MessageRole.ASSISTANT,
         content=response_content,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.utcnow(),
+        require_contact_confirmation=require_contact
     )
 
 
