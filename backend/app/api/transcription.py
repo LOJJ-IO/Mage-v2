@@ -12,6 +12,10 @@ from app.core.config import get_settings
 settings = get_settings()
 router = APIRouter(tags=["transcription"])
 
+# Allowed audio extensions for temp file (Whisper/ffmpeg support these)
+_ALLOWED_AUDIO_EXTENSIONS = {".webm", ".mp4", ".m4a", ".ogg", ".wav", ".mp3", ".flac"}
+_DEFAULT_AUDIO_EXT = ".webm"
+
 # Global Whisper model instance (loaded lazily on first use)
 _whisper_model: Optional[whisper.Whisper] = None
 
@@ -41,8 +45,10 @@ async def transcribe_audio(audio: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Audio file too large")
     
     try:
-        # Save uploaded file to temporary file for Whisper processing
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(audio.filename)[1] if audio.filename else ".tmp") as tmp_file:
+        # Normalize extension: only allow known audio types, default to .webm
+        raw_ext = os.path.splitext(audio.filename or "")[1].lower()
+        suffix = raw_ext if raw_ext in _ALLOWED_AUDIO_EXTENSIONS else _DEFAULT_AUDIO_EXT
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
             tmp_file.write(content)
             tmp_file_path = tmp_file.name
         
@@ -83,6 +89,11 @@ async def transcribe_audio(audio: UploadFile = File(...)):
             except Exception:
                 pass
         
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Transcription error: {e}")
-        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Transcription failed. The audio format may not be supported.",
+        )

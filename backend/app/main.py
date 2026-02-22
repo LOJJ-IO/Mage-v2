@@ -1,4 +1,6 @@
+import asyncio
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
@@ -8,6 +10,7 @@ from app.models.schemas import HealthResponse
 from app.api import chat, tickets, guests, agents, transcription
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 # Ensure app loggers (e.g. llm_service, database) show in the terminal
 logging.basicConfig(
@@ -16,8 +19,25 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load Whisper model on startup so first request isn't slow."""
+    logger.info("Loading Whisper model (%s)...", settings.whisper_model_size)
+    try:
+        await asyncio.to_thread(transcription.get_whisper_model)
+        logger.info("Whisper model loaded.")
+    except Exception as e:
+        logger.warning(
+            "Whisper model failed to load on startup: %s. Will retry on first /transcribe request.",
+            e,
+        )
+    yield
+
+
 # Create FastAPI app
 app = FastAPI(
+    lifespan=lifespan,
     title=settings.app_name,
     description="AI-powered hotel communication API",
     version="1.0.0",
