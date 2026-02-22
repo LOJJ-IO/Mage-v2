@@ -119,9 +119,16 @@ Output format (strict):
 - First line must be exactly one of: NOT_RELEVANT, HANDOFF, or ANSWER.
 - If NOT_RELEVANT: first line is NOT_RELEVANT, nothing else.
 - If HANDOFF (relevant but too complex): first line is HANDOFF, nothing else.
-- - If ANSWER: first line is ANSWER, then your brief helpful reply. If the guest needs a service, add a second line: 
+- If ANSWER: first line is ANSWER, then your brief helpful reply. If the guest needs a service or information, add a second line: 
   ACTION: MAINTENANCE, ACTION: ROOM_SERVICE, ACTION: HOUSEKEEPING
-  ACTION: GET_GUEST_INFO (if the guest asks for their room number, name, or membership status. The system will append this info to your reply.)
+  ACTION: CONTACT_FRONT_DESK (if guest explicitly wants to speak to a person)
+  ACTION: GET_TIME (if guest asks for the current time)
+  ACTION: GET_WEATHER (if guest asks for the current weather)
+  ACTION: GET_GUEST_INFO (if guest asks for their room, name, or membership)
+  
+CRITICAL INSTRUCTION FOR GET_TIME, GET_WEATHER, and GET_GUEST_INFO: 
+Do NOT tell the guest you will "check" or "fetch" this information. Just output the ACTION line. The system will automatically and instantly append the data to your reply before the guest sees it. Simply respond as if you already appended it.
+
   ACTION: CONTACT_FRONT_DESK (if guest explicitly wants to speak to a person or the front desk)
   ACTION: GET_TIME (if guest asks for the current time)
   ACTION: GET_WEATHER (if guest asks for the current weather)
