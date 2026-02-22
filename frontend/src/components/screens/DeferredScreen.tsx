@@ -72,17 +72,16 @@ export function DeferredScreen() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="min-h-screen bg-white flex flex-col"
+      className="min-h-screen bg-white dark:bg-mage-gray-900 flex flex-col"
     >
-      {/* Header */}
-      <header className="px-4 py-3 border-b border-mage-gray-200 safe-area-top">
+      <header className="px-4 py-3 border-b border-mage-gray-200 dark:border-mage-gray-700 safe-area-top">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-mage-black">
+          <h1 className="text-xl font-semibold text-mage-black dark:text-white">
             Leave a Message
           </h1>
           <button
             onClick={handleSkip}
-            className="text-mage-gray-500 font-medium"
+            className="text-mage-gray-500 dark:text-mage-gray-400 font-medium"
           >
             Skip
           </button>
@@ -109,10 +108,10 @@ export function DeferredScreen() {
               />
             </svg>
           </div>
-          <h2 className="text-2xl font-semibold text-mage-black mb-2">
+          <h2 className="text-2xl font-semibold text-mage-black dark:text-white mb-2">
             No agents available right now
           </h2>
-          <p className="text-mage-gray-500 leading-relaxed">
+          <p className="text-mage-gray-500 dark:text-mage-gray-400 leading-relaxed">
             Leave us a message about your issue and we'll notify you as soon as
             an agent becomes available to help.
           </p>
@@ -125,7 +124,7 @@ export function DeferredScreen() {
           transition={{ delay: 0.2 }}
           className="flex-1 flex flex-col"
         >
-          <label className="text-sm font-medium text-mage-gray-600 mb-2">
+          <label className="text-sm font-medium text-mage-gray-600 dark:text-mage-gray-400 mb-2">
             What do you need help with?
           </label>
           <textarea
@@ -134,14 +133,14 @@ export function DeferredScreen() {
             placeholder="Describe your issue or request..."
             className="
               flex-1 min-h-[200px] p-4
-              bg-mage-gray-50 rounded-uber-xl
-              text-base font-medium resize-none
-              placeholder:text-mage-gray-400
-              focus:outline-none focus:ring-2 focus:ring-mage-black/10
+              bg-mage-gray-50 dark:bg-mage-gray-800 rounded-uber-xl
+              text-base font-medium resize-none text-mage-black dark:text-white
+              placeholder:text-mage-gray-400 dark:placeholder:text-mage-gray-500
+              focus:outline-none focus:ring-2 focus:ring-mage-black/10 dark:focus:ring-white/20
               transition-all
             "
           />
-          <p className="text-xs text-mage-gray-400 mt-2 text-right">
+          <p className="text-xs text-mage-gray-400 dark:text-mage-gray-500 mt-2 text-right">
             {issueText.length} / 500 characters
           </p>
         </motion.div>
@@ -161,8 +160,8 @@ export function DeferredScreen() {
               transition-all active:scale-[0.98]
               ${
                 issueText.trim()
-                  ? 'bg-mage-black text-white'
-                  : 'bg-mage-gray-200 text-mage-gray-400'
+                  ? 'bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black'
+                  : 'bg-mage-gray-200 dark:bg-mage-gray-700 text-mage-gray-400 dark:text-mage-gray-500'
               }
             `}
           >
@@ -194,7 +193,7 @@ export function DeferredScreen() {
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="mt-4 flex items-center justify-center gap-2 text-mage-gray-500"
+          className="mt-4 flex items-center justify-center gap-2 text-mage-gray-500 dark:text-mage-gray-400"
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path

@@ -7,26 +7,26 @@ import { useMageStore } from '@/store/mageStore';
 /** Skeleton that matches InitialScreen layout; shown briefly after the loader. */
 function InitialScreenSkeleton() {
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-      <div className="h-[45vh] bg-mage-gray-200 animate-pulse" />
+    <div className="min-h-screen bg-white dark:bg-mage-gray-900 flex flex-col">
+      <div className="h-[45vh] bg-mage-gray-200 dark:bg-mage-gray-700 animate-pulse" />
       <div className="flex-1 px-6 py-8 space-y-4">
-        <div className="h-8 bg-mage-gray-200 rounded-lg w-3/4 animate-pulse" />
-        <div className="h-4 bg-mage-gray-100 rounded-lg w-full animate-pulse" />
-        <div className="h-4 bg-mage-gray-100 rounded-lg w-full animate-pulse" />
-        <div className="h-4 bg-mage-gray-100 rounded-lg w-5/6 animate-pulse" />
+        <div className="h-8 bg-mage-gray-200 dark:bg-mage-gray-700 rounded-lg w-3/4 animate-pulse" />
+        <div className="h-4 bg-mage-gray-100 dark:bg-mage-gray-800 rounded-lg w-full animate-pulse" />
+        <div className="h-4 bg-mage-gray-100 dark:bg-mage-gray-800 rounded-lg w-full animate-pulse" />
+        <div className="h-4 bg-mage-gray-100 dark:bg-mage-gray-800 rounded-lg w-5/6 animate-pulse" />
         <div className="pt-4 space-y-4">
           {[1, 2, 3].map((i) => (
             <div key={i} className="flex gap-4">
-              <div className="w-12 h-12 bg-mage-gray-200 rounded-uber-lg flex-shrink-0 animate-pulse" />
+              <div className="w-12 h-12 bg-mage-gray-200 dark:bg-mage-gray-700 rounded-uber-lg flex-shrink-0 animate-pulse" />
               <div className="flex-1 space-y-2">
-                <div className="h-4 bg-mage-gray-200 rounded-lg w-1/3 animate-pulse" />
-                <div className="h-3 bg-mage-gray-100 rounded-lg w-2/3 animate-pulse" />
+                <div className="h-4 bg-mage-gray-200 dark:bg-mage-gray-700 rounded-lg w-1/3 animate-pulse" />
+                <div className="h-3 bg-mage-gray-100 dark:bg-mage-gray-800 rounded-lg w-2/3 animate-pulse" />
               </div>
             </div>
           ))}
         </div>
         <div className="mt-auto pt-6">
-          <div className="h-14 bg-mage-gray-200 rounded-uber-full w-full animate-pulse" />
+          <div className="h-14 bg-mage-gray-200 dark:bg-mage-gray-700 rounded-uber-full w-full animate-pulse" />
         </div>
       </div>
     </div>
@@ -52,7 +52,7 @@ export function InitialScreen() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen bg-white dark:bg-mage-gray-900 flex flex-col">
       {/* Header illustration */}
       <div className="relative h-[45vh] bg-mage-black overflow-hidden">
         {/* Abstract pattern */}
@@ -123,10 +123,10 @@ export function InitialScreen() {
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.4, duration: 0.5 }}
         >
-          <h1 className="text-3xl font-semibold text-mage-black mb-3">
+          <h1 className="text-3xl font-semibold text-mage-black dark:text-white mb-3">
             Welcome{guestProfile?.name ? `, ${guestProfile.name.split(' ')[0]}` : ''}!
           </h1>
-          <p className="text-lg text-mage-gray-500 leading-relaxed">
+          <p className="text-lg text-mage-gray-500 dark:text-mage-gray-400 leading-relaxed">
             I&apos;m your personal hotel assistant. Ask me anything about your stay,
             request services, or get help with any issue.
           </p>
@@ -196,7 +196,7 @@ export function InitialScreen() {
             onClick={handleContinue}
             className="
               w-full py-4 px-6
-              bg-mage-black text-white
+              bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black
               rounded-uber-full font-semibold text-lg
               active:scale-[0.98] transition-transform
               shadow-uber-lg
@@ -219,12 +219,12 @@ interface FeatureItemProps {
 function FeatureItem({ icon, title, description }: FeatureItemProps) {
   return (
     <div className="flex items-start gap-4">
-      <div className="w-12 h-12 bg-mage-gray-100 rounded-uber-lg flex items-center justify-center flex-shrink-0 text-mage-black">
+      <div className="w-12 h-12 bg-mage-gray-100 dark:bg-mage-gray-700 rounded-uber-lg flex items-center justify-center flex-shrink-0 text-mage-black dark:text-white">
         {icon}
       </div>
       <div>
-        <h3 className="font-semibold text-mage-black">{title}</h3>
-        <p className="text-mage-gray-500 text-sm">{description}</p>
+        <h3 className="font-semibold text-mage-black dark:text-white">{title}</h3>
+        <p className="text-mage-gray-500 dark:text-mage-gray-400 text-sm">{description}</p>
       </div>
     </div>
   );

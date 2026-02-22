@@ -41,7 +41,7 @@ export function StateRenderer() {
   if (!ScreenComponent) {
     console.error(`No screen component for state: ${currentState}`);
     return (
-      <div className="mage-container bg-white">
+      <div className="mage-container bg-white dark:bg-mage-gray-900">
         <AnimatePresence mode="wait">
           <LoadingScreen key="loading-fallback" />
         </AnimatePresence>
@@ -50,7 +50,7 @@ export function StateRenderer() {
   }
 
   return (
-    <div className="mage-container bg-white relative overflow-x-hidden min-h-screen">
+    <div className="mage-container bg-white dark:bg-mage-gray-900 relative overflow-x-hidden min-h-screen">
       <AnimatePresence mode="wait" initial={false}>
         <ScreenComponent key={getScreenKey(currentState)} />
       </AnimatePresence>

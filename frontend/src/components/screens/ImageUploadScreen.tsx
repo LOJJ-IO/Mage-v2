@@ -121,36 +121,29 @@ export function ImageUploadScreen() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: '100%' }}
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-      className="fixed inset-0 z-50 bg-white flex flex-col items-center"
+      className="fixed inset-0 z-50 flex flex-col items-center bg-white dark:bg-mage-gray-900 md:bg-mage-gray-800 md:dark:bg-mage-gray-100"
     >
-      <div className="w-full max-w-md flex flex-col flex-1 min-h-0">
-        {/* Header */}
-        <header className="px-4 py-3 border-b border-mage-gray-200 flex items-center justify-between safe-area-top flex-shrink-0">
+      <div className="w-full max-w-md flex flex-col flex-1 min-h-full bg-white dark:bg-mage-gray-900">
+        <header className="px-4 py-3 border-b border-mage-gray-200 dark:border-mage-gray-700 flex items-center justify-between safe-area-top flex-shrink-0">
         <button
           onClick={handleCancel}
-          className="p-2 -ml-2 rounded-full hover:bg-mage-gray-100 transition-colors"
+          className="p-2 -ml-2 rounded-full hover:bg-mage-gray-100 dark:hover:bg-mage-gray-800 transition-colors text-mage-black dark:text-white"
         >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M18 6L6 18M6 6l12 12"
-              stroke="#000"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M18 6L6 18M6 6l12 12" />
           </svg>
         </button>
-        <h1 className="text-lg font-semibold">Add Photos</h1>
+        <h1 className="text-lg font-semibold text-mage-black dark:text-white">Add Photos</h1>
         <button
           onClick={handleConfirm}
           disabled={selectedImages.length === 0 && attachedImages.length === 0}
           className={`
-            px-4 py-2 rounded-uber-full font-semibold text-sm
+            px-4 py-2 rounded-uber-full font-semibold text-sm transition-colors
             ${
               selectedImages.length > 0 || attachedImages.length > 0
-                ? 'bg-mage-black text-white'
-                : 'bg-mage-gray-200 text-mage-gray-400'
+                ? 'bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black'
+                : 'bg-mage-gray-200 dark:bg-mage-gray-700 text-mage-gray-400 dark:text-mage-gray-500'
             }
-            transition-colors
           `}
         >
           Done ({totalImages})
@@ -252,19 +245,14 @@ export function ImageUploadScreen() {
               onClick={openFilePicker}
               className={`aspect-square rounded-uber-lg border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-colors duration-200 ${
                 atCap
-                  ? 'border-mage-gray-200 bg-mage-gray-50 cursor-not-allowed opacity-60'
-                  : 'border-mage-gray-300 hover:border-mage-gray-400 hover:bg-mage-gray-50'
+                  ? 'border-mage-gray-200 dark:border-mage-gray-600 bg-mage-gray-50 dark:bg-mage-gray-800 cursor-not-allowed opacity-60'
+                  : 'border-mage-gray-300 dark:border-mage-gray-600 hover:border-mage-gray-400 dark:hover:border-mage-gray-500 hover:bg-mage-gray-50 dark:hover:bg-mage-gray-800'
               }`}
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M12 5v14M5 12h14"
-                  stroke="#757575"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
               </svg>
-              <span className="text-xs text-mage-gray-500">Add</span>
+              <span className="text-xs text-mage-gray-500 dark:text-mage-gray-400">Add</span>
             </motion.button>
           </AnimatePresence>
           </div>
@@ -276,33 +264,21 @@ export function ImageUploadScreen() {
             animate={{ opacity: 1, y: 0 }}
             className="text-center py-12"
           >
-            <div className="w-20 h-20 bg-mage-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                <path
-                  d="M28 25.333V6.667A2.667 2.667 0 0025.333 4H6.667A2.667 2.667 0 004 6.667v18.666A2.667 2.667 0 006.667 28h18.666A2.667 2.667 0 0028 25.333z"
-                  stroke="#CBCBCB"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M11.333 13.333a2 2 0 100-4 2 2 0 000 4zM28 20l-5.333-5.333L6.667 28"
-                  stroke="#CBCBCB"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+            <div className="w-20 h-20 bg-mage-gray-100 dark:bg-mage-gray-800 rounded-2xl flex items-center justify-center mx-auto mb-4 text-mage-gray-400 dark:text-mage-gray-500">
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M28 25.333V6.667A2.667 2.667 0 0025.333 4H6.667A2.667 2.667 0 004 6.667v18.666A2.667 2.667 0 006.667 28h18.666A2.667 2.667 0 0028 25.333z" />
+                <path d="M11.333 13.333a2 2 0 100-4 2 2 0 000 4zM28 20l-5.333-5.333L6.667 28" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-mage-black mb-2">
+            <h3 className="text-lg font-semibold text-mage-black dark:text-white mb-2">
               No photos selected
             </h3>
-            <p className="text-mage-gray-500 mb-6">
+            <p className="text-mage-gray-500 dark:text-mage-gray-400 mb-6">
               Add photos to share with your message
             </p>
             <button
               onClick={openFilePicker}
-              className="px-6 py-3 bg-mage-black text-white rounded-uber-full font-semibold active:scale-[0.98] transition-transform"
+              className="px-6 py-3 bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black rounded-uber-full font-semibold active:scale-[0.98] transition-transform"
             >
               Select Photos
             </button>
@@ -325,11 +301,11 @@ export function ImageUploadScreen() {
           <motion.div
             initial={{ y: 100 }}
             animate={{ y: 0 }}
-            className="pt-3 px-4 pb-3 mb-4 safe-area-bottom flex-shrink-0 border-t border-mage-gray-200"
+            className="pt-3 px-4 pb-3 mb-4 safe-area-bottom flex-shrink-0 border-t border-mage-gray-200 dark:border-mage-gray-700"
           >
             <button
               onClick={handleConfirm}
-              className="w-full max-w-xs mx-auto block py-4 bg-mage-black text-white rounded-uber-full font-semibold text-lg active:scale-[0.98] transition-transform"
+              className="w-full max-w-xs mx-auto block py-4 bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black rounded-uber-full font-semibold text-lg active:scale-[0.98] transition-transform"
             >
               Attach {totalImages} Photo
               {totalImages !== 1 ? 's' : ''}

@@ -118,6 +118,7 @@ export interface GuestProfile {
   checkIn: Date;
   checkOut: Date;
   bookingId: string;
+  membershipTier?: string;
   email?: string;
   phone?: string;
 }

@@ -12,32 +12,31 @@ export function ProfileScreen() {
     context,
     recording,
     activeTicket,
+    theme,
+    setTheme,
   } = useMageStore();
 
-  // Swipe gesture for navigation
   const { handlers: swipeHandlers } = useSwipeGesture({
-    onSwipeRight: () => {
-      transition('BACK');
-    },
+    onSwipeRight: () => transition('BACK'),
     threshold: 80,
   });
 
-  const handleBack = () => {
-    transition('BACK');
-  };
+  const handleBack = () => transition('BACK');
+  const handleContactFrontDesk = () => transition('CONTACT_FRONT_DESK');
 
-  const handleContactFrontDesk = () => {
-    transition('CONTACT_FRONT_DESK');
-  };
-
-  // Format date
-  const formatDate = (date: Date | string): string => {
+  const formatShortDate = (date: Date | string): string => {
     return new Intl.DateTimeFormat('en-US', {
-      weekday: 'short',
       month: 'short',
       day: 'numeric',
     }).format(new Date(date));
   };
+  const formatYear = (date: Date | string): string => {
+    return new Date(date).getFullYear().toString();
+  };
+
+  const nameParts = (guestProfile?.name || 'Guest').trim().split(/\s+/);
+  const firstName = nameParts[0] || 'Guest';
+  const lastName = nameParts.slice(1).join(' ') || '';
 
   return (
     <motion.div
@@ -49,93 +48,112 @@ export function ProfileScreen() {
         duration: 0.32,
         ease: [0.32, 0.72, 0, 1],
       }}
-      className="min-h-screen bg-mage-gray-50 flex flex-col"
+      className="min-h-screen bg-mage-gray-50 dark:bg-mage-gray-900 flex flex-col"
       {...swipeHandlers}
     >
-      {/* Recording toast */}
       <RecordingToast isVisible={recording.isRecording} />
 
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-white border-b border-mage-gray-200 safe-area-top">
+      <header className="sticky top-0 z-40 bg-white dark:bg-mage-gray-900 border-b border-mage-gray-200 dark:border-mage-gray-700 safe-area-top">
         <div className="px-4 py-3 flex items-center gap-4">
           <button
             onClick={handleBack}
-            className="p-2 -ml-2 rounded-full hover:bg-mage-gray-100 transition-colors"
+            className="p-2 -ml-2 rounded-full hover:bg-mage-gray-100 dark:hover:bg-mage-gray-800 transition-colors"
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
               <path
                 d="M19 12H5M12 19l-7-7 7-7"
-                stroke="#000"
+                stroke="currentColor"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
             </svg>
           </button>
-          <h1 className="text-xl font-semibold">Profile</h1>
+          <h1 className="text-xl font-semibold text-mage-black dark:text-white">
+            Profile
+          </h1>
         </div>
       </header>
 
-      {/* Content */}
       <main className="flex-1 p-4 space-y-4">
-        {/* Guest info card */}
+        {/* Guest overview card — wide, large top-left curve, light gray, pill badge */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.1 }}
-          className="bg-white rounded-uber-xl p-6 shadow-uber"
+          className="relative w-full overflow-visible shadow-none border-0 bg-[#D9D9D9] dark:bg-mage-gray-700 rounded-tr-[28px] rounded-bl-[28px] rounded-tl-[48px]"
+          style={{ borderBottomRightRadius: '41px' }}
         >
-          {/* Avatar */}
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-16 h-16 bg-mage-black rounded-2xl flex items-center justify-center text-white text-2xl font-semibold">
-              {guestProfile?.name
-                ? guestProfile.name.charAt(0).toUpperCase()
-                : 'G'}
+          <div className="flex flex-col gap-6 pr-[calc(183px+1rem)] min-h-[140px] px-6 pt-5 pb-[52px]">
+            <div>
+              <h2 className="text-[3rem] sm:text-[3.25rem] leading-tight font-bold text-black dark:text-white">
+                {firstName}
+              </h2>
+              {lastName && (
+                <h2 className="text-[3rem] sm:text-[3.25rem] leading-tight font-bold text-black dark:text-white">
+                  {lastName}
+                </h2>
+              )}
+            </div>
+            <div className="flex flex-wrap items-baseline gap-12">
+              <div>
+                <p className="text-base font-normal text-black dark:text-mage-gray-300">
+                  Check out:
+                </p>
+                <p className="text-xl font-normal text-black dark:text-white">
+                  {guestProfile?.checkOut
+                    ? formatShortDate(guestProfile.checkOut)
+                    : '---'}
+                </p>
+                {guestProfile?.checkOut && (
+                  <p className="text-xl font-normal text-black dark:text-white">
+                    {formatYear(guestProfile.checkOut)}
+                  </p>
+                )}
+              </div>
+              <div className="ml-auto">
+                <p className="text-base font-normal text-black dark:text-mage-gray-300">
+                  Room:
+                </p>
+                <p className="text-xl font-normal text-black dark:text-white">
+                  {guestProfile?.roomNumber || '---'}
+                </p>
+              </div>
             </div>
             <div>
-              <h2 className="text-xl font-semibold text-mage-black">
-                {guestProfile?.name || 'Guest'}
-              </h2>
-              <p className="text-mage-gray-500">
-                Room {guestProfile?.roomNumber || '---'}
+              <p className="text-base font-normal text-black dark:text-mage-gray-300">
+                Booking ID
+              </p>
+              <p className="font-mono text-xl font-normal text-black dark:text-white">
+                {guestProfile?.bookingId || '---'}
               </p>
             </div>
           </div>
-
-          {/* Stay details */}
-          <div className="space-y-3">
-            <div className="flex justify-between items-center py-3 border-t border-mage-gray-100">
-              <span className="text-mage-gray-500">Check-in</span>
-              <span className="font-medium">
-                {guestProfile?.checkIn
-                  ? formatDate(guestProfile.checkIn)
-                  : '---'}
+          {guestProfile?.membershipTier && (
+            <div
+              className="absolute bottom-0 right-0 flex items-center justify-center font-bold text-black w-[183px] h-[52px]"
+              style={{
+                backgroundColor: '#96D0FF',
+                borderTopLeftRadius: '38px',
+                borderTopRightRadius: 0,
+                borderBottomLeftRadius: 0,
+                borderBottomRightRadius: '41px',
+              }}
+            >
+              <span className="text-[32px] leading-none">
+                {guestProfile.membershipTier}
               </span>
             </div>
-            <div className="flex justify-between items-center py-3 border-t border-mage-gray-100">
-              <span className="text-mage-gray-500">Check-out</span>
-              <span className="font-medium">
-                {guestProfile?.checkOut
-                  ? formatDate(guestProfile.checkOut)
-                  : '---'}
-              </span>
-            </div>
-            <div className="flex justify-between items-center py-3 border-t border-mage-gray-100">
-              <span className="text-mage-gray-500">Booking ID</span>
-              <span className="font-mono text-sm text-mage-gray-600">
-                {guestProfile?.bookingId || '---'}
-              </span>
-            </div>
-          </div>
+          )}
         </motion.div>
 
-        {/* Active ticket card */}
+        {/* Active ticket card (unchanged) */}
         {activeTicket && (
           <motion.div
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.15 }}
-            className="bg-mage-blue/10 rounded-uber-xl p-4 border border-mage-blue/20"
+            className="bg-mage-blue/10 dark:bg-mage-blue/20 rounded-uber-xl p-4 border border-mage-blue/20 dark:border-mage-blue/30"
           >
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 bg-mage-blue rounded-xl flex items-center justify-center text-white">
@@ -154,8 +172,10 @@ export function ProfileScreen() {
                 </svg>
               </div>
               <div className="flex-1">
-                <p className="font-medium text-mage-black">Active Request</p>
-                <p className="text-sm text-mage-gray-600 mt-1">
+                <p className="font-medium text-mage-black dark:text-white">
+                  Active Request
+                </p>
+                <p className="text-sm text-mage-gray-600 dark:text-mage-gray-400 mt-1">
                   {activeTicket.issue || 'Your request is being processed'}
                 </p>
                 <p className="text-xs text-mage-blue mt-2">
@@ -166,51 +186,50 @@ export function ProfileScreen() {
           </motion.div>
         )}
 
-        {/* Quick actions */}
+        {/* Quick actions (unchanged) */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="bg-white rounded-uber-xl p-4 shadow-uber"
+          className="bg-white dark:bg-mage-gray-800 rounded-uber-xl p-4 shadow-uber"
         >
-          <h3 className="font-semibold text-mage-black mb-4">Quick Actions</h3>
+          <h3 className="font-semibold text-mage-black dark:text-white mb-4">
+            Quick Actions
+          </h3>
           <div className="space-y-2">
-            {/* Contact Front Desk button */}
             <button
               onClick={handleContactFrontDesk}
-              className="
-                w-full flex items-center gap-4 p-4
-                bg-mage-gray-50 rounded-uber-lg
-                hover:bg-mage-gray-100 active:scale-[0.99]
-                transition-all
-              "
+              className="group w-full flex items-center gap-4 p-4 rounded-uber-lg transition-all
+                bg-mage-gray-50 dark:bg-mage-gray-700
+                hover:bg-mage-gray-100 dark:hover:bg-[#404040] active:scale-[0.99]"
             >
-              <div className="relative">
-                <div className="w-12 h-12 bg-mage-black rounded-xl flex items-center justify-center text-white">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
+              <div className="relative md:self-end">
+                <div className="w-12 h-12 bg-mage-black dark:bg-mage-gray-600 rounded-xl flex items-center justify-center text-white">
+                  <span className="inline-block origin-top group-hover:animate-bell-ring" style={{ transformOrigin: '50% 20%' }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
                 </div>
-                {/* Notification dot for agent available */}
                 {context.agentNotificationPending && (
                   <motion.span
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    className="absolute -top-1 -right-1 w-4 h-4 bg-mage-blue rounded-full border-2 border-white"
+                    className="absolute -top-1 -right-1 w-4 h-4 bg-mage-blue rounded-full border-2 border-white dark:border-mage-gray-800"
                   />
                 )}
               </div>
               <div className="flex-1 text-left">
-                <p className="font-semibold text-mage-black">
+                <p className="font-semibold text-mage-black dark:text-white">
                   Contact Front Desk
                 </p>
-                <p className="text-sm text-mage-gray-500">
+                <p className="text-sm text-mage-gray-500 dark:text-mage-gray-400">
                   {context.humanAgentAvailable
                     ? 'Agent available now'
                     : 'AI assistance available'}
@@ -219,19 +238,17 @@ export function ProfileScreen() {
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <path
                   d="M7.5 15l5-5-5-5"
-                  stroke="#757575"
+                  stroke="currentColor"
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
               </svg>
             </button>
-
-            {/* Check Out */}
             <button
               className="
                 w-full flex items-center justify-center gap-2 p-4
-                bg-mage-black text-white rounded-uber-lg
+                bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black rounded-uber-lg
                 hover:opacity-90 active:scale-[0.99]
                 transition-all font-semibold
               "
@@ -248,6 +265,53 @@ export function ProfileScreen() {
               Check Out
             </button>
           </div>
+        </motion.div>
+
+        {/* Light / Dark mode toggle */}
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.25 }}
+          className="bg-white dark:bg-mage-gray-800 rounded-uber-xl p-4 shadow-uber"
+        >
+          <div className="flex items-center justify-between">
+            <span className="font-medium text-mage-black dark:text-white">
+              Appearance
+            </span>
+            <button
+              role="switch"
+              aria-checked={theme === 'dark'}
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="
+                relative w-12 h-7 rounded-full
+                bg-mage-gray-200 dark:bg-mage-gray-600
+                transition-colors duration-200
+              "
+            >
+              <span
+                className={`
+                  absolute top-1 left-1 w-5 h-5 rounded-full
+                  bg-white dark:bg-mage-gray-300 shadow-uber
+                  transition-transform duration-200 ease-uber
+                  flex items-center justify-center
+                  ${theme === 'dark' ? 'translate-x-5' : 'translate-x-0'}
+                `}
+              >
+                {theme === 'dark' ? (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 3a9 9 0 109 9c-.53 0-1.04-.08-1.54-.22A6.5 6.5 0 0112 3.5V3z" />
+                  </svg>
+                ) : (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 3V1h2v2h-2zm0 18v2h2v-2h-2zM5 12H3v2h2v-2zm16 0h-2v2h2v-2zM6.34 6.34L4.93 4.93l1.41 1.41 1.41-1.41zm12.73 12.73l-1.41-1.41 1.41-1.41 1.41 1.41zM12 7a5 5 0 015 5 5 5 0 01-5 5 5 5 0 01-5-5 5 5 0 015-5z" />
+                  </svg>
+                )}
+              </span>
+            </button>
+          </div>
+          <p className="text-sm text-mage-gray-500 dark:text-mage-gray-400 mt-1">
+            {theme === 'dark' ? 'Dark mode' : 'Light mode'}
+          </p>
         </motion.div>
       </main>
     </motion.div>
