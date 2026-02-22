@@ -5,8 +5,6 @@ Here is the updated `README.md` file with the setup instructions added in a new 
 
 Mage is a mobile-first web application designed to streamline hotel guest requests, automate routine inquiries, and facilitate seamless handoffs to human staff. Built with a Next.js frontend and a FastAPI backend, it provides a highly deterministic, state-driven chat interface.
 
-![Mage Interface](https://via.placeholder.com/800x400?text=Mage+Hotel+Interface)
-
 ## What Problem It Solves
 
 Hotel front desks frequently experience bottlenecks due to high volumes of routine inquiries (e.g., WiFi passwords, check-out times, amenity hours) and minor service requests (e.g., extra towels, room service). 
