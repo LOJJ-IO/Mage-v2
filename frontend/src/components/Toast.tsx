@@ -79,7 +79,7 @@ export function ToastContainer() {
   const { toasts, removeToast } = useMageStore();
 
   return (
-    <div className="fixed top-4 left-0 right-0 z-50 flex flex-col items-center gap-2 pointer-events-none px-4">
+    <div className="fixed top-4 left-0 right-0 z-[100] flex flex-col items-center gap-2 pointer-events-none px-4">
       <AnimatePresence mode="sync">
         {toasts.slice(0, 3).map((toast) => (
           <motion.div

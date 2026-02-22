@@ -10,6 +10,48 @@ import { ChatInput } from '@/components/ChatInput';
 import { RecordingToast } from '@/components/Toast';
 import { ConversationContext } from '@/types';
 
+/** Skeleton that matches ChatScreen layout; shown briefly before chat content. */
+function ChatScreenSkeleton() {
+  return (
+    <div className="h-screen overflow-hidden flex flex-col bg-white">
+      {/* Header skeleton */}
+      <header className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-md z-40 bg-white border-b border-mage-gray-200 safe-area-top">
+        <div className="px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-mage-gray-200 rounded-xl animate-pulse" />
+            <div className="h-5 w-24 bg-mage-gray-200 rounded-lg animate-pulse" />
+          </div>
+          <div className="w-10 h-10 bg-mage-gray-200 rounded-full animate-pulse" />
+        </div>
+      </header>
+
+      {/* Messages area skeleton */}
+      <main className="flex-1 min-h-0 overflow-hidden px-4 pt-20 pb-28">
+        <div className="space-y-4 py-4">
+          <div className="flex justify-start">
+            <div className="h-16 w-3/4 max-w-[85%] bg-mage-gray-100 rounded-uber-xl rounded-bl-sm animate-pulse" />
+          </div>
+          <div className="flex justify-end">
+            <div className="h-12 w-1/2 max-w-[85%] bg-mage-gray-200 rounded-uber-xl rounded-br-sm animate-pulse" />
+          </div>
+          <div className="flex justify-start">
+            <div className="h-20 w-2/3 max-w-[85%] bg-mage-gray-100 rounded-uber-xl rounded-bl-sm animate-pulse" />
+          </div>
+        </div>
+      </main>
+
+      {/* Input bar skeleton */}
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 w-full max-w-md z-30 px-4 pt-4 pb-4 bg-white border-t border-mage-gray-200 safe-area-bottom">
+        <div className="flex items-center gap-2">
+          <div className="w-12 h-12 rounded-full bg-mage-gray-200 animate-pulse" />
+          <div className="flex-1 h-12 rounded-uber-xl bg-mage-gray-100 animate-pulse" />
+          <div className="w-12 h-12 rounded-full bg-mage-gray-200 animate-pulse" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ChatScreen() {
   const {
     currentState,
@@ -26,6 +68,13 @@ export function ChatScreen() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isAiTyping, setIsAiTyping] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
+  const [showSkeleton, setShowSkeleton] = useState(true);
+
+  // Brief skeleton before chat content
+  useEffect(() => {
+    const t = setTimeout(() => setShowSkeleton(false), 550);
+    return () => clearTimeout(t);
+  }, []);
 
   const sendMessageMutation = useSendMessage();
   const transcribeMutation = useTranscribeAudio();
@@ -147,9 +196,13 @@ export function ChatScreen() {
     lastMessage?.role === 'assistant' &&
     askedSatisfaction;
 
+  if (showSkeleton) {
+    return <ChatScreenSkeleton />;
+  }
+
   return (
     <div
-      className="min-h-screen bg-white flex flex-col"
+      className="h-screen overflow-hidden flex flex-col bg-white"
       {...swipeHandlers}
     >
       {/* Recording toast when navigating away while recording */}
@@ -160,8 +213,8 @@ export function ChatScreen() {
         }
       />
 
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-white border-b border-mage-gray-200 safe-area-top">
+      {/* Header - fixed at top, constrained to mobile width */}
+      <header className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-md z-40 bg-white border-b border-mage-gray-200 safe-area-top">
         <div className="px-4 py-3 flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-3">
@@ -201,8 +254,8 @@ export function ChatScreen() {
         </div>
       </header>
 
-      {/* Messages area */}
-      <main className="flex-1 overflow-y-auto px-4 py-4">
+      {/* Messages area - only this scrolls; padding so content is not under fixed header/input */}
+      <main className="flex-1 min-h-0 overflow-y-auto px-4 pt-20 pb-28">
         {/* Empty state */}
         {messages.length === 0 && (
           <motion.div
@@ -285,34 +338,34 @@ export function ChatScreen() {
           )}
         </AnimatePresence>
 
+        {/* Yes/No quick replies when assistant asked if the answer helped */}
+        {showSatisfactionButtons && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="px-4 py-5 flex gap-3 justify-center border-t border-mage-gray-100 bg-white -mx-4 mt-4"
+          >
+            <button
+              type="button"
+              onClick={() => handleSendMessage('Yes')}
+              className="px-5 py-2.5 rounded-uber-full font-medium bg-mage-black text-white hover:opacity-90 active:scale-[0.98] transition-all"
+            >
+              Yes
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSendMessage('No')}
+              className="px-5 py-2.5 rounded-uber-full font-medium bg-mage-gray-100 text-mage-black hover:bg-mage-gray-200 active:scale-[0.98] transition-all"
+            >
+              No
+            </button>
+          </motion.div>
+        )}
+
         <div ref={messagesEndRef} />
       </main>
 
-      {/* Yes/No quick replies when assistant asked if the answer helped */}
-      {showSatisfactionButtons && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="px-4 py-2 flex gap-2 justify-center border-t border-mage-gray-100 bg-white"
-        >
-          <button
-            type="button"
-            onClick={() => handleSendMessage('Yes')}
-            className="px-5 py-2.5 rounded-uber-full font-medium bg-mage-black text-white hover:opacity-90 active:scale-[0.98] transition-all"
-          >
-            Yes
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSendMessage('No')}
-            className="px-5 py-2.5 rounded-uber-full font-medium bg-mage-gray-100 text-mage-black hover:bg-mage-gray-200 active:scale-[0.98] transition-all"
-          >
-            No
-          </button>
-        </motion.div>
-      )}
-
-      {/* Input area */}
+      {/* Input area - fixed at bottom */}
       <ChatInput
         onSend={handleSendMessage}
         onUpload={handleUpload}

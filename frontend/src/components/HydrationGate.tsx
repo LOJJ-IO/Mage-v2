@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useMageStore } from '@/store/mageStore';
+import { getEntryState } from '@/lib/stateMachine';
 
 /**
  * Prevents state-dependent UI from rendering until the client has mounted
@@ -24,6 +25,16 @@ export function HydrationGate({ children }: { children: React.ReactNode }) {
   }, []);
 
   const ready = hasMounted && (hasHydrated || fallbackReady);
+
+  // When we become ready, sync currentState so returning users (hasSeenWelcome) go straight to chat
+  useEffect(() => {
+    if (!ready) return;
+    const state = useMageStore.getState();
+    const entryState = getEntryState(state.context.hasSeenWelcome);
+    if (state.currentState !== entryState) {
+      useMageStore.setState({ currentState: entryState });
+    }
+  }, [ready]);
 
   if (!ready) {
     return <LoadingShell />;
