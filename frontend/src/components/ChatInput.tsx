@@ -53,7 +53,6 @@ export function ChatInput({
     },
     onRecordingStop: (blob) => {
       setRecording({ isRecording: false, audioBlob: blob });
-      // Transition to transcribing
       transition('RELEASE_HOLD');
     },
     onRecordingError: (error) => {
@@ -137,10 +136,9 @@ export function ChatInput({
     setRecording({ isRecording: false, isLocked: false });
   };
 
-  // Handle send recording (stop and send for transcription)
+  // Handle send recording: only stop; onRecordingStop will set blob and transition to transcribing
   const handleSendRecording = () => {
     stopRecording();
-    transition('RELEASE_HOLD');
   };
 
   const hasContent = inputText.trim() || attachedImages.length > 0;

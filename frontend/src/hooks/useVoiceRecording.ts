@@ -149,11 +149,13 @@ export function useVoiceRecording(config: UseVoiceRecordingConfig = {}): UseVoic
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current });
-        setAudioBlob(blob);
-        onRecordingStop?.(blob);
-        
-        // Stop all tracks
+        // Defer so any final ondataavailable (e.g. last timeslice) is included (browser quirks)
+        const mimeType = mimeTypeRef.current;
+        setTimeout(() => {
+          const blob = new Blob(chunksRef.current, { type: mimeType });
+          setAudioBlob(blob);
+          onRecordingStop?.(blob);
+        }, 0);
         streamRef.current?.getTracks().forEach(track => track.stop());
       };
 

@@ -50,8 +50,8 @@ export function StateRenderer() {
   }
 
   return (
-    <div className="mage-container bg-white">
-      <AnimatePresence mode="wait">
+    <div className="mage-container bg-white relative overflow-x-hidden min-h-screen">
+      <AnimatePresence mode="wait" initial={false}>
         <ScreenComponent key={getScreenKey(currentState)} />
       </AnimatePresence>
     </div>

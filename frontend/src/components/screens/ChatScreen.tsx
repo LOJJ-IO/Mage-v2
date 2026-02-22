@@ -131,6 +131,11 @@ export function ChatScreen() {
         if (text) {
           setInputText(text);
           transition('TRANSCRIPTION_SUCCESS');
+          addToast({
+            type: 'success',
+            message: 'Transcription ready',
+            duration: 2000,
+          });
         } else {
           // Empty or no speech (common for silence/short clips), not an API error
           addToast({
@@ -147,7 +152,7 @@ export function ChatScreen() {
         if (!mountedRef.current) return;
         const message =
           error instanceof Error ? error.message : 'Transcription failed';
-        addToast({ type: 'error', message });
+        addToast({ type: 'error', message, duration: 4000 });
         transition('TRANSCRIPTION_FAIL');
       } finally {
         if (mountedRef.current) {
@@ -168,14 +173,26 @@ export function ChatScreen() {
   // When entering transcribing state, run once per blob (ref prevents double call)
   useEffect(() => {
     if (
-      isTranscribing &&
-      recording.audioBlob &&
-      !transcriptionStartedForBlobRef.current
+      !isTranscribing ||
+      !recording.audioBlob ||
+      transcriptionStartedForBlobRef.current
     ) {
-      transcriptionStartedForBlobRef.current = true;
-      handleTranscription(recording.audioBlob);
+      return;
     }
-  }, [isTranscribing, recording.audioBlob, handleTranscription]);
+    if (recording.audioBlob.size < 1024) {
+      addToast({
+        type: 'info',
+        message: 'Recording too short. Try again.',
+        duration: 3000,
+      });
+      transition('TRANSCRIPTION_FAIL');
+      setRecording({ audioBlob: undefined });
+      transcriptionStartedForBlobRef.current = false;
+      return;
+    }
+    transcriptionStartedForBlobRef.current = true;
+    handleTranscription(recording.audioBlob);
+  }, [isTranscribing, recording.audioBlob, handleTranscription, addToast, transition, setRecording]);
 
   // Ignore transcription completion after unmount or navigate away
   useEffect(() => {

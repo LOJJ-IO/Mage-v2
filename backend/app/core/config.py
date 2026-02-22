@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     rate_limit_window: int = 60  # seconds
     
     # Whisper settings (tiny | base | small | medium | large; tiny = smallest/fastest download)
-    whisper_model_size: str = os.getenv("WHISPER_MODEL_SIZE", "tiny")
+    whisper_model_size: str = os.getenv("WHISPER_MODEL_SIZE", "base")
     
     # Hotel context for small model (Option 3: hotel-specific prompt + knowledge)
     hotel_name: str = os.getenv("HOTEL_NAME", "Mage Hotel")

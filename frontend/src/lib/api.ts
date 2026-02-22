@@ -123,7 +123,8 @@ class ApiClient {
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     const formData = new FormData();
-    formData.append('audio', audioBlob, 'recording.webm');
+    const ext = audioBlob.type === 'audio/mp4' ? 'm4a' : audioBlob.type?.includes('ogg') ? 'ogg' : 'webm';
+    formData.append('audio', audioBlob, `recording.${ext}`);
 
     try {
       const response = await fetch(`${this.baseUrl}/api/transcribe`, {
