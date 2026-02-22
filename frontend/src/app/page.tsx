@@ -19,8 +19,9 @@ export default function Home() {
       name: 'Alex Johnson',
       roomNumber: '412',
       checkIn: new Date('2026-01-01'),
-      checkOut: new Date('2026-01-05'),
+      checkOut: new Date('2026-07-14'),
       bookingId: 'BK-2026-0412',
+      membershipTier: 'Platinum',
       email: 'alex.johnson@email.com',
       phone: '+1 555-0123',
     });
@@ -32,7 +33,7 @@ export default function Home() {
   }, [setGuestProfile, context.hasSeenWelcome]);
 
   return (
-    <main className="min-h-screen bg-mage-gray-50">
+    <main className="min-h-screen bg-mage-gray-50 dark:bg-mage-gray-900 md:bg-mage-gray-800 md:dark:bg-mage-gray-100">
       <HydrationGate>
         <StateRenderer />
       </HydrationGate>

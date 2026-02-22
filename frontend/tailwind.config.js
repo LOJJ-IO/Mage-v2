@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: 'class',
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -71,6 +72,7 @@ module.exports = {
         'recording-pulse': 'recordingPulse 1s ease-in-out infinite',
         'bounce-subtle': 'bounceSubtle 0.6s ease-out',
         'toast-slide': 'toastSlide 0.3s ease-out',
+        'bell-ring': 'bellRing 1.2s ease-in-out',
       },
       keyframes: {
         fadeIn: {
@@ -108,6 +110,15 @@ module.exports = {
         toastSlide: {
           '0%': { transform: 'translateY(-100%)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        bellRing: {
+          '0%, 100%': { transform: 'rotate(0deg)' },
+          '10%, 30%': { transform: 'rotate(-12deg)' },
+          '20%, 40%': { transform: 'rotate(12deg)' },
+          '50%': { transform: 'rotate(-8deg)' },
+          '60%, 80%': { transform: 'rotate(8deg)' },
+          '70%': { transform: 'rotate(-4deg)' },
+          '90%': { transform: 'rotate(4deg)' },
         },
       },
       transitionTimingFunction: {

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { QueryProvider } from '@/components/providers/QueryProvider';
 import { ToastContainer } from '@/components/Toast';
+import { ThemeClass } from '@/components/ThemeClass';
 import '@/styles/globals.css';
 
 export const metadata: Metadata = {
@@ -34,6 +35,7 @@ export default function RootLayout({
       </head>
       <body className="font-clash antialiased">
         <QueryProvider>
+          <ThemeClass />
           <ToastContainer />
           {children}
         </QueryProvider>

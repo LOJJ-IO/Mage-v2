@@ -20,7 +20,7 @@ export function MessageBubble({ message, isLast = false }: MessageBubbleProps) {
         animate={{ opacity: 1, y: 0 }}
         className="flex justify-center my-4"
       >
-        <div className="bg-mage-gray-100 text-mage-gray-500 px-4 py-2 rounded-uber-full text-sm">
+        <div className="bg-mage-gray-100 dark:bg-mage-gray-800 text-mage-gray-500 dark:text-mage-gray-400 px-4 py-2 rounded-uber-full text-sm">
           {message.content}
         </div>
       </motion.div>
@@ -38,8 +38,8 @@ export function MessageBubble({ message, isLast = false }: MessageBubbleProps) {
         className={`
           max-w-[85%] px-4 py-3 rounded-uber-xl
           ${isUser
-            ? 'bg-mage-black text-white rounded-br-sm'
-            : 'bg-mage-gray-100 text-mage-black rounded-bl-sm'
+            ? 'bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black rounded-br-sm'
+            : 'bg-mage-gray-100 dark:bg-mage-gray-800 text-mage-black dark:text-white rounded-bl-sm'
           }
         `}
       >
@@ -92,7 +92,7 @@ export function MessageBubble({ message, isLast = false }: MessageBubbleProps) {
         <div
           className={`
             text-xs mt-1
-            ${isUser ? 'text-white/60' : 'text-mage-gray-400'}
+            ${isUser ? 'text-white/60 dark:text-mage-black/60' : 'text-mage-gray-400 dark:text-mage-gray-500'}
           `}
         >
           {formatTime(message.timestamp)}
@@ -119,22 +119,22 @@ export function TypingIndicator() {
       exit={{ opacity: 0, y: -10 }}
       className="flex justify-start mb-3"
     >
-      <div className="bg-mage-gray-100 px-4 py-3 rounded-uber-xl rounded-bl-sm">
+      <div className="bg-mage-gray-100 dark:bg-mage-gray-800 px-4 py-3 rounded-uber-xl rounded-bl-sm">
         <div className="flex gap-1">
           <motion.span
             animate={{ y: [0, -4, 0] }}
             transition={{ duration: 0.6, repeat: Infinity, delay: 0 }}
-            className="w-2 h-2 rounded-full bg-mage-gray-400"
+            className="w-2 h-2 rounded-full bg-mage-gray-400 dark:bg-mage-gray-500"
           />
           <motion.span
             animate={{ y: [0, -4, 0] }}
             transition={{ duration: 0.6, repeat: Infinity, delay: 0.15 }}
-            className="w-2 h-2 rounded-full bg-mage-gray-400"
+            className="w-2 h-2 rounded-full bg-mage-gray-400 dark:bg-mage-gray-500"
           />
           <motion.span
             animate={{ y: [0, -4, 0] }}
             transition={{ duration: 0.6, repeat: Infinity, delay: 0.3 }}
-            className="w-2 h-2 rounded-full bg-mage-gray-400"
+            className="w-2 h-2 rounded-full bg-mage-gray-400 dark:bg-mage-gray-500"
           />
         </div>
       </div>

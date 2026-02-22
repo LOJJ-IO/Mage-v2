@@ -13,39 +13,34 @@ import { ConversationContext } from '@/types';
 /** Skeleton that matches ChatScreen layout; shown briefly before chat content. */
 function ChatScreenSkeleton() {
   return (
-    <div className="h-screen overflow-hidden flex flex-col bg-white">
-      {/* Header skeleton */}
-      <header className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-md z-40 bg-white border-b border-mage-gray-200 safe-area-top">
+    <div className="h-screen overflow-hidden flex flex-col bg-white dark:bg-mage-gray-900">
+      <header className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-md z-40 bg-white dark:bg-mage-gray-900 border-b border-mage-gray-200 dark:border-mage-gray-700 safe-area-top">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-mage-gray-200 rounded-xl animate-pulse" />
-            <div className="h-5 w-24 bg-mage-gray-200 rounded-lg animate-pulse" />
+            <div className="w-10 h-10 bg-mage-gray-200 dark:bg-mage-gray-700 rounded-xl animate-pulse" />
+            <div className="h-5 w-24 bg-mage-gray-200 dark:bg-mage-gray-700 rounded-lg animate-pulse" />
           </div>
-          <div className="w-10 h-10 bg-mage-gray-200 rounded-full animate-pulse" />
+          <div className="w-10 h-10 bg-mage-gray-200 dark:bg-mage-gray-700 rounded-full animate-pulse" />
         </div>
       </header>
-
-      {/* Messages area skeleton */}
       <main className="flex-1 min-h-0 overflow-hidden px-4 pt-20 pb-28">
         <div className="space-y-4 py-4">
           <div className="flex justify-start">
-            <div className="h-16 w-3/4 max-w-[85%] bg-mage-gray-100 rounded-uber-xl rounded-bl-sm animate-pulse" />
+            <div className="h-16 w-3/4 max-w-[85%] bg-mage-gray-100 dark:bg-mage-gray-800 rounded-uber-xl rounded-bl-sm animate-pulse" />
           </div>
           <div className="flex justify-end">
-            <div className="h-12 w-1/2 max-w-[85%] bg-mage-gray-200 rounded-uber-xl rounded-br-sm animate-pulse" />
+            <div className="h-12 w-1/2 max-w-[85%] bg-mage-gray-200 dark:bg-mage-gray-700 rounded-uber-xl rounded-br-sm animate-pulse" />
           </div>
           <div className="flex justify-start">
-            <div className="h-20 w-2/3 max-w-[85%] bg-mage-gray-100 rounded-uber-xl rounded-bl-sm animate-pulse" />
+            <div className="h-20 w-2/3 max-w-[85%] bg-mage-gray-100 dark:bg-mage-gray-800 rounded-uber-xl rounded-bl-sm animate-pulse" />
           </div>
         </div>
       </main>
-
-      {/* Input bar skeleton */}
-      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 w-full max-w-md z-30 px-4 pt-4 pb-4 bg-white border-t border-mage-gray-200 safe-area-bottom">
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 w-full max-w-md z-30 px-4 pt-4 pb-4 bg-white dark:bg-mage-gray-900 border-t border-mage-gray-200 dark:border-mage-gray-700 safe-area-bottom">
         <div className="flex items-center gap-2">
-          <div className="w-12 h-12 rounded-full bg-mage-gray-200 animate-pulse" />
-          <div className="flex-1 h-12 rounded-uber-xl bg-mage-gray-100 animate-pulse" />
-          <div className="w-12 h-12 rounded-full bg-mage-gray-200 animate-pulse" />
+          <div className="w-12 h-12 rounded-full bg-mage-gray-200 dark:bg-mage-gray-700 animate-pulse" />
+          <div className="flex-1 h-12 rounded-uber-xl bg-mage-gray-100 dark:bg-mage-gray-800 animate-pulse" />
+          <div className="w-12 h-12 rounded-full bg-mage-gray-200 dark:bg-mage-gray-700 animate-pulse" />
         </div>
       </div>
     </div>
@@ -257,10 +252,9 @@ export function ChatScreen() {
 
   return (
     <div
-      className="h-screen overflow-hidden flex flex-col bg-white"
+      className="h-screen overflow-hidden flex flex-col bg-white dark:bg-mage-gray-900"
       {...swipeHandlers}
     >
-      {/* Recording toast when navigating away while recording */}
       <RecordingToast
         isVisible={
           currentState === 'S-G-008' &&
@@ -268,12 +262,10 @@ export function ChatScreen() {
         }
       />
 
-      {/* Header - fixed at top, constrained to mobile width */}
-      <header className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-md z-40 bg-white border-b border-mage-gray-200 safe-area-top">
+      <header className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-md z-40 bg-white dark:bg-mage-gray-900 border-b border-mage-gray-200 dark:border-mage-gray-700 safe-area-top">
         <div className="px-4 py-3 flex items-center justify-between">
-          {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-mage-black rounded-xl flex items-center justify-center">
+            <div className="w-10 h-10 bg-mage-black dark:bg-mage-gray-600 rounded-xl flex items-center justify-center">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <path
                   d="M10 2L2 6v8l8 4 8-4V6l-8-4z"
@@ -292,7 +284,7 @@ export function ChatScreen() {
               </svg>
             </div>
             <div>
-              <h1 className="font-semibold text-mage-black">Mage</h1>
+              <h1 className="font-semibold text-mage-black dark:text-white">Mage</h1>
               {contextIndicator && (
                 <p className="text-xs text-mage-blue font-medium">
                   {contextIndicator}
@@ -318,7 +310,7 @@ export function ChatScreen() {
             animate={{ opacity: 1, y: 0 }}
             className="h-full flex flex-col items-center justify-center text-center py-12"
           >
-            <div className="w-16 h-16 bg-mage-gray-100 rounded-2xl flex items-center justify-center mb-4">
+            <div className="w-16 h-16 bg-mage-gray-100 dark:bg-mage-gray-800 rounded-2xl flex items-center justify-center mb-4">
               <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
                 <path
                   d="M28 15.333A12.333 12.333 0 019.4 5.4M4 16.667a12.333 12.333 0 0018.6 9.933"
@@ -329,10 +321,10 @@ export function ChatScreen() {
                 <circle cx="16" cy="16" r="3" fill="#CBCBCB" />
               </svg>
             </div>
-            <h2 className="text-lg font-semibold text-mage-black mb-2">
+            <h2 className="text-lg font-semibold text-mage-black dark:text-white mb-2">
               How can I help?
             </h2>
-            <p className="text-mage-gray-500 max-w-xs">
+            <p className="text-mage-gray-500 dark:text-mage-gray-400 max-w-xs">
               Ask about your room, hotel amenities, or request any service.
             </p>
           </motion.div>
@@ -371,7 +363,7 @@ export function ChatScreen() {
               exit={{ opacity: 0, y: -10 }}
               className="flex justify-center py-4"
             >
-              <div className="bg-mage-gray-100 px-4 py-2 rounded-uber-full flex items-center gap-2">
+              <div className="bg-mage-gray-100 dark:bg-mage-gray-800 px-4 py-2 rounded-uber-full flex items-center gap-2">
                 <motion.div
                   animate={{ rotate: 360 }}
                   transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
@@ -385,7 +377,7 @@ export function ChatScreen() {
                     />
                   </svg>
                 </motion.div>
-                <span className="text-sm text-mage-gray-500">
+                <span className="text-sm text-mage-gray-500 dark:text-mage-gray-400">
                   Transcribing...
                 </span>
               </div>
@@ -398,19 +390,19 @@ export function ChatScreen() {
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="px-4 py-5 flex gap-3 justify-center border-t border-mage-gray-100 bg-white -mx-4 mt-4"
+            className="px-4 py-5 flex gap-3 justify-center border-t border-mage-gray-100 dark:border-mage-gray-700 bg-white dark:bg-mage-gray-900 -mx-4 mt-4"
           >
             <button
               type="button"
               onClick={() => handleSendMessage('Yes')}
-              className="px-5 py-2.5 rounded-uber-full font-medium bg-mage-black text-white hover:opacity-90 active:scale-[0.98] transition-all"
+              className="px-5 py-2.5 rounded-uber-full font-medium bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black hover:opacity-90 active:scale-[0.98] transition-all"
             >
               Yes
             </button>
             <button
               type="button"
               onClick={() => handleSendMessage('No')}
-              className="px-5 py-2.5 rounded-uber-full font-medium bg-mage-gray-100 text-mage-black hover:bg-mage-gray-200 active:scale-[0.98] transition-all"
+              className="px-5 py-2.5 rounded-uber-full font-medium bg-mage-gray-100 dark:bg-mage-gray-700 text-mage-black dark:text-white hover:bg-mage-gray-200 dark:hover:bg-mage-gray-600 active:scale-[0.98] transition-all"
             >
               No
             </button>
@@ -442,12 +434,12 @@ function ProfileButton({ hasNotification, onClick }: ProfileButtonProps) {
   return (
     <button
       onClick={onClick}
-      className="relative p-2 rounded-full hover:bg-mage-gray-100 transition-colors"
+      className="relative p-2 rounded-full hover:bg-mage-gray-100 dark:hover:bg-mage-gray-800 transition-colors"
     >
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-mage-black dark:text-white">
         <path
           d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"
-          stroke="#000"
+          stroke="currentColor"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -456,19 +448,17 @@ function ProfileButton({ hasNotification, onClick }: ProfileButtonProps) {
           cx="12"
           cy="7"
           r="4"
-          stroke="#000"
+          stroke="currentColor"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
       </svg>
-      
-      {/* Notification dot */}
       {hasNotification && (
         <motion.span
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
-          className="absolute top-1 right-1 w-3 h-3 bg-mage-blue rounded-full border-2 border-white"
+          className="absolute top-1 right-1 w-3 h-3 bg-mage-blue rounded-full border-2 border-white dark:border-mage-gray-900"
         />
       )}
     </button>

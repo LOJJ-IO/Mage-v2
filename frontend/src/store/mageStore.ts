@@ -52,12 +52,14 @@ interface MageState {
   
   // UI state
   isLoading: boolean;
+  theme: 'light' | 'dark';
 
   // Persist rehydration (set by persist middleware; do not persist this key)
   _hasHydrated: boolean;
 
   // Actions
   transition: (trigger: Trigger) => boolean;
+  setTheme: (theme: 'light' | 'dark') => void;
   setContext: (updates: Partial<AppContext>) => void;
   addMessage: (message: Omit<Message, 'id' | 'timestamp'>) => void;
   setInputText: (text: string) => void;
@@ -112,6 +114,7 @@ export const useMageStore = create<MageState>()(
       activeTicket: null,
       connectionCountdown: null,
       isLoading: false,
+      theme: 'light',
       _hasHydrated: false,
 
       // Transition to a new state
@@ -299,6 +302,10 @@ export const useMageStore = create<MageState>()(
         set({ isLoading: loading });
       },
 
+      setTheme: (theme: 'light' | 'dark') => {
+        set({ theme });
+      },
+
       // Mark store as rehydrated (called by persist middleware)
       setHasHydrated: (value: boolean) => {
         set({ _hasHydrated: value });
@@ -329,6 +336,7 @@ export const useMageStore = create<MageState>()(
           hasSeenWelcome: state.context.hasSeenWelcome,
         },
         guestProfile: state.guestProfile,
+        theme: state.theme,
       }),
       onRehydrateStorage: () => (state, err) => {
         useMageStore.getState().setHasHydrated(true);

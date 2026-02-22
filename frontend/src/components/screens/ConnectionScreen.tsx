@@ -13,6 +13,7 @@ export function ConnectionScreen() {
     context,
     addToast,
     addMessage,
+    theme,
   } = useMageStore();
 
   const [countdown, setCountdown] = useState(CONNECTION_COUNTDOWN);
@@ -93,18 +94,17 @@ export function ConnectionScreen() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="min-h-screen bg-white flex flex-col items-center justify-center p-6"
+      className="min-h-screen bg-white dark:bg-mage-gray-900 flex flex-col items-center justify-center p-6"
     >
-      {/* Loading animation */}
+      {/* Loading animation — grey wheel, smooth drain */}
       <div className="relative mb-8">
-        {/* Outer ring */}
-        <svg width="120" height="120" viewBox="0 0 120 120">
+        <svg width="120" height="120" viewBox="0 0 120 120" className="overflow-visible">
           <circle
             cx="60"
             cy="60"
             r="54"
             fill="none"
-            stroke="#F6F6F6"
+            stroke={theme === 'dark' ? '#404040' : '#E2E2E2'}
             strokeWidth="8"
           />
           <motion.circle
@@ -112,13 +112,14 @@ export function ConnectionScreen() {
             cy="60"
             r="54"
             fill="none"
-            stroke="#000"
+            stroke={theme === 'dark' ? '#AFAFAF' : '#757575'}
             strokeWidth="8"
             strokeLinecap="round"
             strokeDasharray={339.292}
-            strokeDashoffset={339.292 * (1 - (CONNECTION_COUNTDOWN - countdown) / CONNECTION_COUNTDOWN)}
+            initial={{ strokeDashoffset: 339.292 }}
+            animate={{ strokeDashoffset: 0 }}
             transform="rotate(-90 60 60)"
-            transition={{ duration: 0.5, ease: 'linear' }}
+            transition={{ duration: CONNECTION_COUNTDOWN, ease: 'linear' }}
           />
         </svg>
 
@@ -128,7 +129,7 @@ export function ConnectionScreen() {
             key={countdown}
             initial={{ scale: 1.2, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="text-4xl font-bold text-mage-black"
+            className="text-4xl font-bold text-mage-black dark:text-white"
           >
             {countdown}
           </motion.span>
@@ -142,10 +143,10 @@ export function ConnectionScreen() {
         transition={{ delay: 0.2 }}
         className="text-center mb-8"
       >
-        <h2 className="text-2xl font-semibold text-mage-black mb-2">
+        <h2 className="text-2xl font-semibold text-mage-black dark:text-white mb-2">
           {isConnecting ? 'Connecting...' : 'Preparing connection'}
         </h2>
-        <p className="text-mage-gray-500">
+        <p className="text-mage-gray-500 dark:text-mage-gray-400">
           {context.humanAgentAvailable
             ? 'Connecting you to the front desk'
             : context.aiAgentAvailable && context.isPaidUser
@@ -200,9 +201,9 @@ export function ConnectionScreen() {
         onClick={handleCancel}
         className="
           px-8 py-3
-          bg-mage-gray-100 text-mage-black
+          bg-mage-gray-100 dark:bg-mage-gray-700 text-mage-black dark:text-white
           rounded-uber-full font-semibold
-          hover:bg-mage-gray-200 active:scale-[0.98]
+          hover:bg-mage-gray-200 dark:hover:bg-mage-gray-600 active:scale-[0.98]
           transition-all
         "
       >
@@ -232,9 +233,9 @@ function StatusIndicator({ icon, label, status }: StatusIndicatorProps) {
   };
 
   return (
-    <div className="flex items-center gap-3 p-3 bg-mage-gray-50 rounded-uber-lg">
-      <div className="text-mage-gray-600">{icon}</div>
-      <span className="flex-1 text-mage-black font-medium">{label}</span>
+    <div className="flex items-center gap-3 p-3 bg-mage-gray-50 dark:bg-mage-gray-800 rounded-uber-lg">
+      <div className="text-mage-gray-600 dark:text-mage-gray-400">{icon}</div>
+      <span className="flex-1 text-mage-black dark:text-white font-medium">{label}</span>
       <div className={`w-3 h-3 rounded-full ${getStatusColor()}`} />
     </div>
   );

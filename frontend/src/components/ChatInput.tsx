@@ -158,7 +158,7 @@ export function ChatInput({
 
       {/* Normal input UI - fixed at bottom, constrained to mobile width */}
       {!isRecordingState && (
-        <div className="fixed inset-x-0 bottom-5 left-0 right-0 w-full max-w-md mx-auto z-30 px-4 pt-4 pb-4 bg-white border-t border-mage-gray-200 safe-area-bottom overflow-visible">
+        <div className="fixed inset-x-0 bottom-5 left-0 right-0 w-full max-w-md mx-auto z-30 px-4 pt-4 pb-4 bg-white dark:bg-mage-gray-900 border-t border-mage-gray-200 dark:border-mage-gray-700 safe-area-bottom overflow-visible">
           {/* Attached images preview */}
           {attachedImages.length > 0 && (
             <div className="flex gap-2 mb-3 overflow-x-auto pb-2 pt-3 pr-3">
@@ -195,16 +195,10 @@ export function ChatInput({
             {/* Upload button */}
             <button
               onClick={onUpload}
-              className="flex-shrink-0 p-3 rounded-full hover:bg-mage-gray-100 transition-colors"
+              className="flex-shrink-0 p-3 rounded-full hover:bg-mage-gray-100 dark:hover:bg-mage-gray-800 transition-colors text-mage-black dark:text-white"
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"
-                  stroke="#000"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
               </svg>
             </button>
 
@@ -220,10 +214,10 @@ export function ChatInput({
                 rows={1}
                 className="
                   w-full px-4 py-3 pr-12
-                  bg-mage-gray-100 rounded-uber-xl
-                  text-base font-medium resize-none
-                  placeholder:text-mage-gray-400
-                  focus:outline-none focus:ring-2 focus:ring-mage-black/10
+                  bg-mage-gray-100 dark:bg-mage-gray-800 rounded-uber-xl
+                  text-base font-medium resize-none text-mage-black dark:text-white
+                  placeholder:text-mage-gray-400 dark:placeholder:text-mage-gray-500
+                  focus:outline-none focus:ring-2 focus:ring-mage-black/10 dark:focus:ring-white/20
                   transition-all
                 "
                 style={{
@@ -247,7 +241,7 @@ export function ChatInput({
                 onClick={handleSend}
                 className="
                   flex-shrink-0 w-12 h-12
-                  bg-mage-black text-white rounded-full
+                  bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black rounded-full
                   flex items-center justify-center
                   active:scale-95 transition-transform
                 "
@@ -274,26 +268,14 @@ export function ChatInput({
                 aria-busy={isTranscriptionPending}
                 className={`
                   flex-shrink-0 w-12 h-12 rounded-full
-                  flex items-center justify-center
+                  flex items-center justify-center text-mage-black dark:text-white
                   transition-colors select-none
-                  ${isTranscriptionPending ? 'opacity-50 cursor-not-allowed' : 'bg-mage-gray-100 hover:bg-mage-gray-200 active:bg-mage-gray-300'}
+                  ${isTranscriptionPending ? 'opacity-50 cursor-not-allowed' : 'bg-mage-gray-100 dark:bg-mage-gray-700 hover:bg-mage-gray-200 dark:hover:bg-mage-gray-600 active:bg-mage-gray-300 dark:active:bg-mage-gray-500'}
                 `}
               >
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                  <path
-                    d="M10 1.667a2.5 2.5 0 00-2.5 2.5v5.833a2.5 2.5 0 105 0V4.167a2.5 2.5 0 00-2.5-2.5z"
-                    stroke="#000"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M15.833 8.333v1.667a5.833 5.833 0 11-11.666 0V8.333M10 15.833v2.5M6.667 18.333h6.666"
-                    stroke="#000"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 1.667a2.5 2.5 0 00-2.5 2.5v5.833a2.5 2.5 0 105 0V4.167a2.5 2.5 0 00-2.5-2.5z" />
+                  <path d="M15.833 8.333v1.667a5.833 5.833 0 11-11.666 0V8.333M10 15.833v2.5M6.667 18.333h6.666" />
                 </svg>
               </button>
             )}
@@ -317,13 +299,13 @@ function RecordingOverlay({ duration, onCancel, onSend }: RecordingOverlayProps)
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 20 }}
-      className="fixed inset-x-0 bottom-5 w-full max-w-md mx-auto z-40 bg-white border-t border-mage-gray-200 safe-area-bottom select-none touch-none"
+      className="fixed inset-x-0 bottom-3 w-full max-w-md mx-auto z-40 bg-white dark:bg-mage-gray-900 border-t border-mage-gray-200 dark:border-mage-gray-700 safe-area-bottom select-none touch-none"
     >
-      <div className="px-4 py-6">
-        <div className="flex items-center justify-between mb-4">
+      <div className="px-4 py-3">
+        <div className="flex items-center justify-between">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-mage-red font-medium rounded-uber-full hover:bg-mage-red/10 transition-colors"
+            className="px-4 py-2 text-mage-red font-medium rounded-uber-full bg-mage-red/10 hover:bg-mage-red/20 transition-colors"
           >
             Cancel
           </button>
@@ -344,9 +326,6 @@ function RecordingOverlay({ duration, onCancel, onSend }: RecordingOverlayProps)
             Send
           </button>
         </div>
-        <p className="text-center text-mage-gray-500 text-sm">
-          Or release to send
-        </p>
       </div>
     </motion.div>
   );
