@@ -81,7 +81,7 @@ export const TRANSITIONS: Transition[] = [
   // Voice recording from Idle
   { from: 'S-G-003', trigger: 'HOLD_MIC', to: 'S-G-005' },
 
-  // Recording: cancel or release to send (no lock)
+  // Recording: cancel or send (tap overlay buttons only; no release-to-send gesture)
   { from: 'S-G-005', trigger: 'SWIPE_LEFT', to: 'S-G-003' },
   { from: 'S-G-005', trigger: 'RELEASE_HOLD', to: 'S-G-007' },
   { from: 'S-G-005', trigger: 'TAP_CANCEL', to: 'S-G-003' },
@@ -98,8 +98,13 @@ export const TRANSITIONS: Transition[] = [
   { from: 'S-G-004', trigger: 'UPLOAD', to: 'S-G-010' },
   { from: 'S-G-010', trigger: 'CONFIRM_IMAGES', to: 'PREVIOUS' }, // Return to originating state
 
-  // Front desk connection
+  // Recording from profile: send → transcribing; cancel → idle
+  { from: 'S-G-008', trigger: 'SEND_RECORDING_FROM_PROFILE', to: 'S-G-007' },
+  { from: 'S-G-008', trigger: 'CANCEL_RECORDING_FROM_PROFILE', to: 'S-G-003' },
+
+  // Front desk connection (from profile or from transcribing after send-from-profile)
   { from: 'S-G-008', trigger: 'CONTACT_FRONT_DESK', to: 'S-G-009' },
+  { from: 'S-G-007', trigger: 'CONTACT_FRONT_DESK', to: 'S-G-009' },
   { from: 'S-G-009', trigger: 'CANCEL_CONNECTION', to: 'S-G-003', context: 'BOT' },
 
   // Agent routing (after 8s countdown): human available → front desk; else → deferred

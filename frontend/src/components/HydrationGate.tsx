@@ -4,6 +4,14 @@ import { useEffect, useState } from 'react';
 import { useMageStore } from '@/store/mageStore';
 import { getEntryState } from '@/lib/stateMachine';
 
+const HYDRATION_TIPS = [
+  'Setting up your experience...',
+  'First time running the backend? The transcription model can take ~15 minutes to download.',
+  'If the app is stuck, try refreshing the page.',
+  'Hold the mic to record; tap Cancel or Send when you’re done.',
+  'Swipe left for your profile and room details.',
+];
+
 /**
  * Prevents state-dependent UI from rendering until the client has mounted
  * and the persisted store has rehydrated. Avoids blank screen on first load
@@ -24,7 +32,14 @@ export function HydrationGate({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(t);
   }, []);
 
-  const ready = hasMounted && (hasHydrated || fallbackReady);
+  // Permanent fix: if still not ready after 15s (e.g. chunk load timeout), show app anyway
+  const [forceReady, setForceReady] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setForceReady(true), 15000);
+    return () => clearTimeout(t);
+  }, []);
+
+  const ready = hasMounted && (hasHydrated || fallbackReady || forceReady);
 
   // When we become ready, sync currentState so returning users (hasSeenWelcome) go straight to chat
   useEffect(() => {
@@ -45,6 +60,12 @@ export function HydrationGate({ children }: { children: React.ReactNode }) {
 
 /** Loader look-alike in mobile view until hydration completes (same as LoadingScreen, not fullscreen). */
 function LoadingShell() {
+  const [tipIndex, setTipIndex] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTipIndex((i) => (i + 1) % HYDRATION_TIPS.length), 4000);
+    return () => clearInterval(t);
+  }, []);
+
   return (
     <div className="min-h-screen bg-mage-gray-50">
       <div className="mage-container min-h-screen bg-mage-black flex flex-col items-center justify-center p-8">
@@ -90,7 +111,9 @@ function LoadingShell() {
             style={{ width: '40%' }}
           />
         </div>
-        <p className="text-white/40 text-sm mt-4">Setting up your experience...</p>
+        <p className="text-white/40 text-sm mt-4 max-w-[280px] text-center min-h-[2.5rem] flex items-center justify-center">
+          {HYDRATION_TIPS[tipIndex]}
+        </p>
       </div>
     </div>
   );

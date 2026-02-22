@@ -2,6 +2,7 @@
 
 import { AnimatePresence } from 'framer-motion';
 import { useMageStore } from '@/store/mageStore';
+import { RecordingProvider } from './providers/RecordingProvider';
 import { LoadingScreen } from './screens/LoadingScreen';
 import { InitialScreen } from './screens/InitialScreen';
 import { ChatScreen } from './screens/ChatScreen';
@@ -50,10 +51,12 @@ export function StateRenderer() {
   }
 
   return (
-    <div className="mage-container bg-white dark:bg-mage-gray-900 relative overflow-x-hidden min-h-screen">
-      <AnimatePresence mode="wait" initial={false}>
-        <ScreenComponent key={getScreenKey(currentState)} />
-      </AnimatePresence>
-    </div>
+    <RecordingProvider>
+      <div className="mage-container bg-white dark:bg-mage-gray-900 relative overflow-x-hidden min-h-screen">
+        <AnimatePresence mode="wait" initial={false}>
+          <ScreenComponent key={getScreenKey(currentState)} />
+        </AnimatePresence>
+      </div>
+    </RecordingProvider>
   );
 }

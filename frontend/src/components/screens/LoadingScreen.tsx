@@ -1,12 +1,29 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useEffect, useState, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useMageStore } from '@/store/mageStore';
+
+const LOADING_TIPS = [
+  'Setting up your experience...',
+  'First time running the backend? The transcription model can take ~15 minutes to download.',
+  'If the app is stuck, try refreshing the page.',
+  'Hold the mic to record; tap Cancel or Send when you’re done.',
+  'Swipe left to open your profile and room details.',
+  'You can attach photos before sending a message.',
+  'Contact Front Desk from your profile when you need help.',
+  'Voice messages are transcribed into text automatically.',
+];
+
+const TIP_ROTATE_MS = 4000;
+const LOAD_COMPLETE_MS = 2000;
+const SAFETY_TIMEOUT_MS = 25000; // Force-complete so we never hang forever
 
 export function LoadingScreen() {
   const { transition, setContext, context } = useMageStore();
   const [progress, setProgress] = useState(0);
+  const [tipIndex, setTipIndex] = useState(0);
+  const completedRef = useRef(false);
 
   useEffect(() => {
     // Returning user: skip loading and go straight to chat
@@ -15,28 +32,41 @@ export function LoadingScreen() {
       return;
     }
 
+    const complete = () => {
+      if (completedRef.current) return;
+      completedRef.current = true;
+      setContext({ hasSeenWelcome: false });
+      transition('LOAD_COMPLETE');
+    };
+
     // Simulate loading progress
     const interval = setInterval(() => {
       setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          return 100;
-        }
+        if (prev >= 100) return 100;
         return prev + Math.random() * 15;
       });
     }, 200);
 
-    // Complete loading after animation
-    const timeout = setTimeout(() => {
-      setContext({ hasSeenWelcome: false });
-      transition('LOAD_COMPLETE');
-    }, 2000);
+    // Normal completion after animation
+    const timeout = setTimeout(complete, LOAD_COMPLETE_MS);
+
+    // Safety: force completion so we never wait forever (e.g. slow network, chunk timeout)
+    const safetyTimeout = setTimeout(complete, SAFETY_TIMEOUT_MS);
 
     return () => {
       clearInterval(interval);
       clearTimeout(timeout);
+      clearTimeout(safetyTimeout);
     };
   }, [transition, setContext, context.hasSeenWelcome]);
+
+  // Rotate tips while loading
+  useEffect(() => {
+    const tipInterval = setInterval(() => {
+      setTipIndex((i) => (i + 1) % LOADING_TIPS.length);
+    }, TIP_ROTATE_MS);
+    return () => clearInterval(tipInterval);
+  }, []);
 
   return (
     <div className="min-h-screen bg-mage-black flex flex-col items-center justify-center p-8">
@@ -57,7 +87,7 @@ export function LoadingScreen() {
             transition={{ duration: 2, repeat: Infinity }}
             className="absolute inset-0 bg-white/20 rounded-full blur-xl"
           />
-          
+
           {/* Logo icon */}
           <div className="relative w-24 h-24 bg-white rounded-[28px] flex items-center justify-center">
             <svg
@@ -121,15 +151,25 @@ export function LoadingScreen() {
         />
       </motion.div>
 
-      {/* Loading text */}
-      <motion.p
+      {/* Rotating tip */}
+      <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.5 }}
-        className="text-white/40 text-sm mt-4"
+        className="text-white/40 text-sm mt-4 max-w-[280px] text-center min-h-[2.5rem] flex items-center justify-center"
       >
-        Setting up your experience...
-      </motion.p>
+        <AnimatePresence mode="wait">
+          <motion.p
+            key={tipIndex}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.25 }}
+          >
+            {LOADING_TIPS[tipIndex]}
+          </motion.p>
+        </AnimatePresence>
+      </motion.div>
     </div>
   );
 }

@@ -126,11 +126,6 @@ export function ChatScreen() {
         if (text) {
           setInputText(text);
           transition('TRANSCRIPTION_SUCCESS');
-          addToast({
-            type: 'success',
-            message: 'Transcription ready',
-            duration: 2000,
-          });
         } else {
           // Empty or no speech (common for silence/short clips), not an API error
           addToast({
@@ -301,8 +296,8 @@ export function ChatScreen() {
         </div>
       </header>
 
-      {/* Messages area - only this scrolls; padding so content is not under fixed header/input */}
-      <main className="flex-1 min-h-0 overflow-y-auto px-4 pt-20 pb-28">
+      {/* Messages area - vertical scroll only; no horizontal scroll */}
+      <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 pt-20 pb-28">
         {/* Empty state */}
         {messages.length === 0 && (
           <motion.div
@@ -352,37 +347,6 @@ export function ChatScreen() {
         {/* Typing indicator */}
         <AnimatePresence>
           {isAiTyping && !streamingMessage && <TypingIndicator />}
-        </AnimatePresence>
-
-        {/* Transcribing indicator */}
-        <AnimatePresence>
-          {isTranscribing && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="flex justify-center py-4"
-            >
-              <div className="bg-mage-gray-100 dark:bg-mage-gray-800 px-4 py-2 rounded-uber-full flex items-center gap-2">
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path
-                      d="M8 1v2M8 13v2M15 8h-2M3 8H1M13.07 13.07l-1.41-1.41M4.34 4.34L2.93 2.93M13.07 2.93l-1.41 1.41M4.34 11.66l-1.41 1.41"
-                      stroke="#757575"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </motion.div>
-                <span className="text-sm text-mage-gray-500 dark:text-mage-gray-400">
-                  Transcribing...
-                </span>
-              </div>
-            </motion.div>
-          )}
         </AnimatePresence>
 
         {/* Yes/No quick replies when assistant asked if the answer helped */}
