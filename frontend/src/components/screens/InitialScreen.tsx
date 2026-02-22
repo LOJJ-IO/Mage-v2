@@ -1,15 +1,55 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useMageStore } from '@/store/mageStore';
 
+/** Skeleton that matches InitialScreen layout; shown briefly after the loader. */
+function InitialScreenSkeleton() {
+  return (
+    <div className="min-h-screen bg-white flex flex-col">
+      <div className="h-[45vh] bg-mage-gray-200 animate-pulse" />
+      <div className="flex-1 px-6 py-8 space-y-4">
+        <div className="h-8 bg-mage-gray-200 rounded-lg w-3/4 animate-pulse" />
+        <div className="h-4 bg-mage-gray-100 rounded-lg w-full animate-pulse" />
+        <div className="h-4 bg-mage-gray-100 rounded-lg w-full animate-pulse" />
+        <div className="h-4 bg-mage-gray-100 rounded-lg w-5/6 animate-pulse" />
+        <div className="pt-4 space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex gap-4">
+              <div className="w-12 h-12 bg-mage-gray-200 rounded-uber-lg flex-shrink-0 animate-pulse" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-mage-gray-200 rounded-lg w-1/3 animate-pulse" />
+                <div className="h-3 bg-mage-gray-100 rounded-lg w-2/3 animate-pulse" />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-auto pt-6">
+          <div className="h-14 bg-mage-gray-200 rounded-uber-full w-full animate-pulse" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function InitialScreen() {
   const { transition, setContext, guestProfile } = useMageStore();
+  const [showSkeleton, setShowSkeleton] = useState(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => setShowSkeleton(false), 200);
+    return () => clearTimeout(t);
+  }, []);
 
   const handleContinue = () => {
     setContext({ hasSeenWelcome: true });
     transition('CONTINUE');
   };
+
+  if (showSkeleton) {
+    return <InitialScreenSkeleton />;
+  }
 
   return (
     <div className="min-h-screen bg-white flex flex-col">

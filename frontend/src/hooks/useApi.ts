@@ -36,8 +36,7 @@ export function useAgentAvailability() {
       }
       return response;
     },
-    refetchInterval: 30000, // Poll every 30 seconds
-    staleTime: 10000, // 10 seconds
+    staleTime: 10000, // 10 seconds (no refetchInterval; app uses WebSocket for live updates)
   });
 }
 

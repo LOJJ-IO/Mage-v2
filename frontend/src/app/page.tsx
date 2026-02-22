@@ -2,14 +2,14 @@
 
 import { useEffect } from 'react';
 import { StateRenderer } from '@/components/StateRenderer';
+import { HydrationGate } from '@/components/HydrationGate';
 import { useMageStore } from '@/store/mageStore';
-import { useAgentAvailability } from '@/hooks/useApi';
+import { useAgentAvailabilityWebSocket } from '@/hooks/useAgentAvailabilityWebSocket';
 
 export default function Home() {
   const { setGuestProfile, context, setContext } = useMageStore();
 
-  // Poll for agent availability
-  useAgentAvailability();
+  useAgentAvailabilityWebSocket();
 
   // Initialize mock guest profile on mount
   useEffect(() => {
@@ -33,7 +33,9 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-mage-gray-50">
-      <StateRenderer />
+      <HydrationGate>
+        <StateRenderer />
+      </HydrationGate>
     </main>
   );
 }

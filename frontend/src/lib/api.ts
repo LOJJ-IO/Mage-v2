@@ -2,6 +2,13 @@ import { Message, Ticket, GuestProfile, TranscriptionResponse, ConversationConte
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+/** WebSocket URL for agent availability (ws or wss from http/https). */
+export function getAgentAvailabilityWsUrl(): string {
+  const base = API_BASE_URL.trim().replace(/\/$/, '');
+  const wsBase = base.startsWith('https') ? base.replace(/^https/, 'wss') : base.replace(/^http/, 'ws');
+  return `${wsBase}/api/agents/ws`;
+}
+
 class ApiClient {
   private baseUrl: string;
 
