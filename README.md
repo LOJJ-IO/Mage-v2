@@ -1,5 +1,3 @@
-Here is the updated `README.md` file with the setup instructions added in a new **Getting Started** section just before the API Endpoints.
-
 ```markdown
 # Mage: Hotel Guest Communication Interface
 
