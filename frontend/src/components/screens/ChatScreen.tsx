@@ -61,10 +61,10 @@ export function ChatScreen() {
     preventScroll: true,
   });
 
-  // Scroll to bottom when new messages arrive
+  // Scroll to bottom when new messages arrive or when typing indicator appears
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingMessage]);
+  }, [messages, streamingMessage, isAiTyping]);
 
   // Handle transcription when entering transcribing state
   useEffect(() => {

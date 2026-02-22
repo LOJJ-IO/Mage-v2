@@ -26,6 +26,13 @@ const STATE_SCREENS: Record<StateId, React.ComponentType> = {
   'S-G-011': DeferredScreen,
 };
 
+// Stable key for chat states so ChatScreen does not remount on TAP_SEND (S-G-004 → S-G-003),
+// preserving isAiTyping and showing the typing indicator after every message
+const CHAT_STATES: StateId[] = ['S-G-003', 'S-G-004', 'S-G-005', 'S-G-006', 'S-G-007'];
+function getScreenKey(stateId: StateId): string {
+  return CHAT_STATES.includes(stateId) ? 'chat' : stateId;
+}
+
 export function StateRenderer() {
   const { currentState } = useMageStore();
   
@@ -33,13 +40,19 @@ export function StateRenderer() {
 
   if (!ScreenComponent) {
     console.error(`No screen component for state: ${currentState}`);
-    return null;
+    return (
+      <div className="mage-container bg-white">
+        <AnimatePresence mode="wait">
+          <LoadingScreen key="loading-fallback" />
+        </AnimatePresence>
+      </div>
+    );
   }
 
   return (
     <div className="mage-container bg-white">
       <AnimatePresence mode="wait">
-        <ScreenComponent key={currentState} />
+        <ScreenComponent key={getScreenKey(currentState)} />
       </AnimatePresence>
     </div>
   );

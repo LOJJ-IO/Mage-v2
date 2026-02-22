@@ -52,7 +52,10 @@ interface MageState {
   
   // UI state
   isLoading: boolean;
-  
+
+  // Persist rehydration (set by persist middleware; do not persist this key)
+  _hasHydrated: boolean;
+
   // Actions
   transition: (trigger: Trigger) => boolean;
   setContext: (updates: Partial<AppContext>) => void;
@@ -68,6 +71,7 @@ interface MageState {
   setActiveTicket: (ticket: Ticket | null) => void;
   setConnectionCountdown: (count: number | null) => void;
   setLoading: (loading: boolean) => void;
+  setHasHydrated: (value: boolean) => void;
   goBack: () => void;
   reset: () => void;
 }
@@ -108,6 +112,7 @@ export const useMageStore = create<MageState>()(
       activeTicket: null,
       connectionCountdown: null,
       isLoading: false,
+      _hasHydrated: false,
 
       // Transition to a new state
       transition: (trigger: Trigger) => {
@@ -294,6 +299,11 @@ export const useMageStore = create<MageState>()(
         set({ isLoading: loading });
       },
 
+      // Mark store as rehydrated (called by persist middleware)
+      setHasHydrated: (value: boolean) => {
+        set({ _hasHydrated: value });
+      },
+
       // Reset to initial state
       reset: () => {
         set({
@@ -320,6 +330,9 @@ export const useMageStore = create<MageState>()(
         },
         guestProfile: state.guestProfile,
       }),
+      onRehydrateStorage: () => (state, err) => {
+        useMageStore.getState().setHasHydrated(true);
+      },
     }
   )
 );
