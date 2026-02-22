@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useMageStore } from '@/store/mageStore';
 import { CONNECTION_COUNTDOWN } from '@/lib/stateMachine';
@@ -18,18 +18,20 @@ export function ConnectionScreen() {
   const [countdown, setCountdown] = useState(CONNECTION_COUNTDOWN);
   const [isConnecting, setIsConnecting] = useState(false);
   const createTicketMutation = useCreateTicket();
+  const hasTriggeredConnect = useRef(false);
+  const handleConnectRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   // Handle cancel
   const handleCancel = useCallback(() => {
     transition('CANCEL_CONNECTION');
   }, [transition]);
 
-  // Handle connection after countdown
+  // Handle connection after countdown (called once when countdown hits 0)
   const handleConnect = useCallback(async () => {
     setIsConnecting(true);
 
     try {
-      // Create ticket
+      // Create ticket (single POST per connection attempt)
       await createTicketMutation.mutateAsync('Front desk connection request');
 
       // Determine routing: human available → front desk; else → deferred (state machine sets BOT)
@@ -63,21 +65,28 @@ export function ConnectionScreen() {
     createTicketMutation,
   ]);
 
-  // Countdown timer
+  handleConnectRef.current = handleConnect;
+
+  // Countdown timer: only decrement state; do not run side effects in the updater
   useEffect(() => {
     const timer = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          handleConnect();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-
     return () => clearInterval(timer);
-  }, [handleConnect]);
+  }, []);
+
+  // When countdown reaches 0, run connect once (ref prevents duplicate calls / Strict Mode double-invoke)
+  useEffect(() => {
+    if (countdown !== 0 || hasTriggeredConnect.current) return;
+    hasTriggeredConnect.current = true;
+    handleConnectRef.current();
+  }, [countdown]);
 
   return (
     <motion.div

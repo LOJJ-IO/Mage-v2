@@ -83,14 +83,13 @@ export function ChatScreen() {
   const isIdle = currentState === 'S-G-003';
   const isTyping = currentState === 'S-G-004';
   const isRecording = currentState === 'S-G-005';
-  const isLockedRecording = currentState === 'S-G-006';
   const isTranscribing = currentState === 'S-G-007';
 
   // Swipe gesture for profile navigation
   const { handlers: swipeHandlers } = useSwipeGesture({
     onSwipeLeft: () => {
       // Swipe left (RTL) to go to profile
-      if (!isRecording && !isLockedRecording) {
+      if (!isRecording) {
         transition('SWIPE_RTL_OR_PROFILE');
       } else {
         // Show toast that recording is preserved
@@ -115,37 +114,76 @@ export function ChatScreen() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingMessage, isAiTyping]);
 
-  // Handle transcription when entering transcribing state
+  // Guard: only start transcription once per blob (avoids double-invoke / Strict Mode)
+  const transcriptionStartedForBlobRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  // Transcription handler (stable; used in effect)
+  const handleTranscription = useCallback(
+    async (audioBlob: Blob) => {
+      try {
+        const result = await transcribeMutation.mutateAsync(audioBlob);
+        if (!mountedRef.current) return;
+
+        const text = result?.text?.trim() ?? '';
+        const confidence = result?.confidence ?? 0;
+
+        if (text) {
+          setInputText(text);
+          transition('TRANSCRIPTION_SUCCESS');
+        } else {
+          // Empty or no speech (common for silence/short clips), not an API error
+          addToast({
+            type: 'info',
+            message:
+              confidence < 0.5
+                ? 'No speech detected. Try again.'
+                : 'Nothing to transcribe.',
+            duration: 3000,
+          });
+          transition('TRANSCRIPTION_FAIL');
+        }
+      } catch (error) {
+        if (!mountedRef.current) return;
+        const message =
+          error instanceof Error ? error.message : 'Transcription failed';
+        addToast({ type: 'error', message });
+        transition('TRANSCRIPTION_FAIL');
+      } finally {
+        if (mountedRef.current) {
+          setRecording({ audioBlob: undefined });
+        }
+        transcriptionStartedForBlobRef.current = false;
+      }
+    },
+    [
+      transcribeMutation,
+      setInputText,
+      transition,
+      addToast,
+      setRecording,
+    ]
+  );
+
+  // When entering transcribing state, run once per blob (ref prevents double call)
   useEffect(() => {
-    if (isTranscribing && recording.audioBlob) {
+    if (
+      isTranscribing &&
+      recording.audioBlob &&
+      !transcriptionStartedForBlobRef.current
+    ) {
+      transcriptionStartedForBlobRef.current = true;
       handleTranscription(recording.audioBlob);
     }
-  }, [isTranscribing, recording.audioBlob]);
+  }, [isTranscribing, recording.audioBlob, handleTranscription]);
 
-  // Transcription handler
-  const handleTranscription = async (audioBlob: Blob) => {
-    try {
-      const result = await transcribeMutation.mutateAsync(audioBlob);
-      if (result?.text) {
-        setInputText(result.text);
-        transition('TRANSCRIPTION_SUCCESS');
-      } else {
-        addToast({
-          type: 'error',
-          message: 'Could not transcribe audio',
-        });
-        transition('TRANSCRIPTION_FAIL');
-      }
-    } catch (error) {
-      addToast({
-        type: 'error',
-        message: 'Transcription failed',
-      });
-      transition('TRANSCRIPTION_FAIL');
-    } finally {
-      setRecording({ audioBlob: undefined });
-    }
-  };
+  // Ignore transcription completion after unmount or navigate away
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Send message handler
   const handleSendMessage = async (text: string, images?: string[]) => {
@@ -371,7 +409,7 @@ export function ChatScreen() {
         onUpload={handleUpload}
         isTypingState={isTyping}
         isRecordingState={isRecording}
-        isLockedRecording={isLockedRecording}
+        isTranscriptionPending={transcribeMutation.isPending}
       />
     </div>
   );

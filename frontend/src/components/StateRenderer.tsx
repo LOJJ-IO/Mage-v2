@@ -28,7 +28,7 @@ const STATE_SCREENS: Record<StateId, React.ComponentType> = {
 
 // Stable key for chat states so ChatScreen does not remount on TAP_SEND (S-G-004 → S-G-003),
 // preserving isAiTyping and showing the typing indicator after every message
-const CHAT_STATES: StateId[] = ['S-G-003', 'S-G-004', 'S-G-005', 'S-G-006', 'S-G-007'];
+const CHAT_STATES: StateId[] = ['S-G-003', 'S-G-004', 'S-G-005', 'S-G-007'];
 function getScreenKey(stateId: StateId): string {
   return CHAT_STATES.includes(stateId) ? 'chat' : stateId;
 }

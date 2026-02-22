@@ -38,10 +38,16 @@ export function useSwipeGesture(config: SwipeConfig) {
   });
 
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const lastDeltaRef = useRef<{
+    deltaX: number;
+    deltaY: number;
+    direction: 'left' | 'right' | 'up' | 'down' | null;
+  }>({ deltaX: 0, deltaY: 0, direction: null });
 
   const handleTouchStart = useCallback((e: TouchEvent) => {
     const touch = e.touches[0];
     touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    lastDeltaRef.current = { deltaX: 0, deltaY: 0, direction: null };
     setSwipeState({
       startX: touch.clientX,
       startY: touch.clientY,
@@ -59,7 +65,6 @@ export function useSwipeGesture(config: SwipeConfig) {
     const deltaX = touch.clientX - touchStartRef.current.x;
     const deltaY = touch.clientY - touchStartRef.current.y;
 
-    // Determine direction
     let direction: 'left' | 'right' | 'up' | 'down' | null = null;
     if (Math.abs(deltaX) > Math.abs(deltaY)) {
       direction = deltaX > 0 ? 'right' : 'left';
@@ -67,9 +72,14 @@ export function useSwipeGesture(config: SwipeConfig) {
       direction = deltaY > 0 ? 'down' : 'up';
     }
 
-    // Prevent vertical scroll if horizontal swipe is detected
-    if (preventScroll && Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY)) {
-      e.preventDefault();
+    lastDeltaRef.current = { deltaX, deltaY, direction };
+
+    if (preventScroll) {
+      if (Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY)) {
+        e.preventDefault();
+      } else if (Math.abs(deltaY) > 10 && Math.abs(deltaY) > Math.abs(deltaX)) {
+        e.preventDefault();
+      }
     }
 
     setSwipeState((prev) => ({
@@ -83,11 +93,10 @@ export function useSwipeGesture(config: SwipeConfig) {
   const handleTouchEnd = useCallback(() => {
     if (!touchStartRef.current) return;
 
-    const { deltaX, deltaY, direction } = swipeState;
+    const { deltaX, deltaY, direction } = lastDeltaRef.current;
     const absX = Math.abs(deltaX);
     const absY = Math.abs(deltaY);
 
-    // Check if swipe exceeds threshold
     if (absX > threshold && absX > absY) {
       if (direction === 'left' && onSwipeLeft) {
         onSwipeLeft();
@@ -103,6 +112,7 @@ export function useSwipeGesture(config: SwipeConfig) {
     }
 
     touchStartRef.current = null;
+    lastDeltaRef.current = { deltaX: 0, deltaY: 0, direction: null };
     setSwipeState({
       startX: 0,
       startY: 0,
@@ -111,7 +121,7 @@ export function useSwipeGesture(config: SwipeConfig) {
       isSwiping: false,
       direction: null,
     });
-  }, [swipeState, threshold, onSwipeLeft, onSwipeRight, onSwipeUp, onSwipeDown]);
+  }, [threshold, onSwipeLeft, onSwipeRight, onSwipeUp, onSwipeDown]);
 
   const handlers = {
     onTouchStart: handleTouchStart,

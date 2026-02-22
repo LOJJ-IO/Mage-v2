@@ -4,7 +4,6 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMageStore } from '@/store/mageStore';
 import { useVoiceRecording, formatDuration } from '@/hooks/useVoiceRecording';
-import { useSwipeGesture } from '@/hooks/useSwipeGesture';
 import { ImageAttachment } from '@/types';
 import Image from 'next/image';
 
@@ -13,7 +12,7 @@ interface ChatInputProps {
   onUpload: () => void;
   isTypingState: boolean;
   isRecordingState: boolean;
-  isLockedRecording: boolean;
+  isTranscriptionPending?: boolean;
 }
 
 export function ChatInput({
@@ -21,7 +20,7 @@ export function ChatInput({
   onUpload,
   isTypingState,
   isRecordingState,
-  isLockedRecording,
+  isTranscriptionPending = false,
 }: ChatInputProps) {
   const {
     inputText,
@@ -66,30 +65,6 @@ export function ChatInput({
     },
   });
 
-  // Swipe gesture for recording lock
-  const { handlers: swipeHandlers, deltaY } = useSwipeGesture({
-    onSwipeUp: () => {
-      if (isRecordingState && !isLockedRecording) {
-        transition('SWIPE_UP');
-        setRecording({ isLocked: true });
-      }
-    },
-    onSwipeLeft: () => {
-      if (isRecordingState) {
-        stopRecording();
-        transition('SWIPE_LEFT');
-        setRecording({ isRecording: false, isLocked: false });
-      }
-    },
-    onSwipeDown: () => {
-      if (isLockedRecording) {
-        transition('SWIPE_DOWN');
-        setRecording({ isLocked: false });
-      }
-    },
-    threshold: 50,
-  });
-
   // Update duration in store
   useEffect(() => {
     if (isRecording) {
@@ -131,8 +106,9 @@ export function ChatInput({
     }
   };
 
-  // Handle mic press start
+  // Handle mic press start (disabled while transcription is in progress)
   const handleMicPressStart = async () => {
+    if (isTranscriptionPending) return;
     if (permission !== 'granted') {
       const newPermission = await requestPermission();
       if (newPermission !== 'granted') {
@@ -143,28 +119,15 @@ export function ChatInput({
         return;
       }
     }
-    
     transition('HOLD_MIC');
     startRecording();
   };
 
-  // Handle mic press end
+  // Handle mic press end (release to send)
   const handleMicPressEnd = () => {
-    if (isRecordingState && !isLockedRecording) {
+    if (isRecordingState) {
       stopRecording();
     }
-  };
-
-  // Handle locked recording send
-  const handleLockedSend = () => {
-    stopRecording();
-    transition('TAP_SEND');
-  };
-
-  // Handle unlock
-  const handleUnlock = () => {
-    transition('TAP_UNLOCK');
-    setRecording({ isLocked: false });
   };
 
   // Handle cancel recording
@@ -174,28 +137,30 @@ export function ChatInput({
     setRecording({ isRecording: false, isLocked: false });
   };
 
+  // Handle send recording (stop and send for transcription)
+  const handleSendRecording = () => {
+    stopRecording();
+    transition('RELEASE_HOLD');
+  };
+
   const hasContent = inputText.trim() || attachedImages.length > 0;
 
   return (
     <div className="relative">
       {/* Recording UI - fixed at bottom */}
       <AnimatePresence>
-        {(isRecordingState || isLockedRecording) && (
+        {isRecordingState && (
           <RecordingOverlay
             duration={duration}
-            isLocked={isLockedRecording}
             onCancel={handleCancelRecording}
-            onSend={handleLockedSend}
-            onUnlock={handleUnlock}
-            swipeHandlers={swipeHandlers}
-            deltaY={deltaY}
+            onSend={handleSendRecording}
           />
         )}
       </AnimatePresence>
 
       {/* Normal input UI - fixed at bottom, constrained to mobile width */}
-      {!isRecordingState && !isLockedRecording && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 w-full max-w-md z-30 px-4 pt-4 pb-4 bg-white border-t border-mage-gray-200 safe-area-bottom overflow-visible">
+      {!isRecordingState && (
+        <div className="fixed inset-x-0 bottom-5 left-0 right-0 w-full max-w-md mx-auto z-30 px-4 pt-4 pb-4 bg-white border-t border-mage-gray-200 safe-area-bottom overflow-visible">
           {/* Attached images preview */}
           {attachedImages.length > 0 && (
             <div className="flex gap-2 mb-3 overflow-x-auto pb-2 pt-3 pr-3">
@@ -307,13 +272,14 @@ export function ChatInput({
                 onMouseDown={handleMicPressStart}
                 onMouseUp={handleMicPressEnd}
                 onMouseLeave={handleMicPressEnd}
-                className="
-                  flex-shrink-0 w-12 h-12
-                  bg-mage-gray-100 rounded-full
+                disabled={isTranscriptionPending}
+                aria-busy={isTranscriptionPending}
+                className={`
+                  flex-shrink-0 w-12 h-12 rounded-full
                   flex items-center justify-center
-                  hover:bg-mage-gray-200 active:bg-mage-gray-300
                   transition-colors select-none
-                "
+                  ${isTranscriptionPending ? 'opacity-50 cursor-not-allowed' : 'bg-mage-gray-100 hover:bg-mage-gray-200 active:bg-mage-gray-300'}
+                `}
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                   <path
@@ -340,45 +306,29 @@ export function ChatInput({
   );
 }
 
-// Recording overlay component
+// Recording overlay: Cancel or Send (and release to send)
 interface RecordingOverlayProps {
   duration: number;
-  isLocked: boolean;
   onCancel: () => void;
   onSend: () => void;
-  onUnlock: () => void;
-  swipeHandlers: ReturnType<typeof useSwipeGesture>['handlers'];
-  deltaY: number;
 }
 
-function RecordingOverlay({
-  duration,
-  isLocked,
-  onCancel,
-  onSend,
-  onUnlock,
-  swipeHandlers,
-  deltaY,
-}: RecordingOverlayProps) {
+function RecordingOverlay({ duration, onCancel, onSend }: RecordingOverlayProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 20 }}
-      className="fixed bottom-5 left-1/2 -translate-x-1/2 w-full max-w-md z-40 bg-white border-t border-mage-gray-200 safe-area-bottom"
-      {...swipeHandlers}
+      className="fixed inset-x-0 bottom-5 w-full max-w-md mx-auto z-40 bg-white border-t border-mage-gray-200 safe-area-bottom select-none touch-none"
     >
       <div className="px-4 py-6">
         <div className="flex items-center justify-between mb-4">
-          {/* Cancel button */}
           <button
             onClick={onCancel}
             className="px-4 py-2 text-mage-red font-medium rounded-uber-full hover:bg-mage-red/10 transition-colors"
           >
             Cancel
           </button>
-
-          {/* Duration */}
           <div className="flex items-center gap-2">
             <motion.div
               animate={{ scale: [1, 1.2, 1] }}
@@ -389,83 +339,16 @@ function RecordingOverlay({
               {formatDuration(duration)}
             </span>
           </div>
-
-          {/* Lock indicator / Send button */}
-          {isLocked ? (
-            <button
-              onClick={onSend}
-              className="px-4 py-2 bg-mage-black text-white font-medium rounded-uber-full active:scale-95 transition-transform"
-            >
-              Send
-            </button>
-          ) : (
-            <div className="w-20" /> // Spacer
-          )}
+          <button
+            onClick={onSend}
+            className="px-4 py-2 bg-mage-black text-white font-medium rounded-uber-full active:scale-95 transition-transform"
+          >
+            Send
+          </button>
         </div>
-
-        {/* Instructions */}
-        <div className="text-center">
-          {isLocked ? (
-            <div className="space-y-2">
-              <p className="text-mage-gray-500 text-sm">
-                Recording locked • Tap Send when ready
-              </p>
-              <button
-                onClick={onUnlock}
-                className="text-mage-blue text-sm font-medium"
-              >
-                Tap to unlock
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <p className="text-mage-gray-500 text-sm">
-                Release to send • Swipe up to lock
-              </p>
-              <motion.div
-                animate={{ y: Math.min(0, deltaY * 0.3) }}
-                className="flex justify-center"
-              >
-                <div className="flex flex-col items-center">
-                  <svg
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    className="text-mage-gray-400"
-                  >
-                    <path
-                      d="M12 19V5M5 12l7-7 7 7"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <span className="text-xs text-mage-gray-400 mt-1">
-                    Swipe up to lock
-                  </span>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </div>
-
-        {/* Swipe left to cancel hint */}
-        {!isLocked && (
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 text-mage-gray-400">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path
-                d="M10 12L6 8l4-4"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <span className="text-xs">Cancel</span>
-          </div>
-        )}
+        <p className="text-center text-mage-gray-500 text-sm">
+          Or release to send
+        </p>
       </div>
     </motion.div>
   );

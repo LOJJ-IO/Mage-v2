@@ -113,8 +113,15 @@ class ApiClient {
     }
   }
 
-  // Transcription endpoints
-  async transcribeAudio(audioBlob: Blob): Promise<ApiResponse<TranscriptionResponse>> {
+  // Transcription endpoints (with timeout and backend error message preserved)
+  async transcribeAudio(
+    audioBlob: Blob,
+    options?: { timeoutMs?: number }
+  ): Promise<ApiResponse<TranscriptionResponse>> {
+    const timeoutMs = options?.timeoutMs ?? 60_000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
     const formData = new FormData();
     formData.append('audio', audioBlob, 'recording.webm');
 
@@ -122,18 +129,35 @@ class ApiClient {
       const response = await fetch(`${this.baseUrl}/api/transcribe`, {
         method: 'POST',
         body: formData,
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
-        return { success: false, error: 'Transcription failed' };
+        const errBody = await response.json().catch(() => ({}));
+        const detail =
+          typeof errBody?.detail === 'string'
+            ? errBody.detail
+            : Array.isArray(errBody?.detail)
+              ? errBody.detail.join(', ')
+              : 'Transcription failed';
+        return { success: false, error: detail };
       }
 
       const data = await response.json();
       return { success: true, data };
     } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error) {
+        const message =
+          error.name === 'AbortError'
+            ? 'Transcription timed out. Try a shorter recording.'
+            : error.message;
+        return { success: false, error: message };
+      }
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Transcription error',
+        error: 'Transcription error',
       };
     }
   }

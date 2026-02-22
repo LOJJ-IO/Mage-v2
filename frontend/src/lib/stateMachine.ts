@@ -81,16 +81,10 @@ export const TRANSITIONS: Transition[] = [
   // Voice recording from Idle
   { from: 'S-G-003', trigger: 'HOLD_MIC', to: 'S-G-005' },
 
-  // Recording state transitions
-  { from: 'S-G-005', trigger: 'SWIPE_UP', to: 'S-G-006' },
+  // Recording: cancel or release to send (no lock)
   { from: 'S-G-005', trigger: 'SWIPE_LEFT', to: 'S-G-003' },
   { from: 'S-G-005', trigger: 'RELEASE_HOLD', to: 'S-G-007' },
   { from: 'S-G-005', trigger: 'TAP_CANCEL', to: 'S-G-003' },
-
-  // Locked recording transitions
-  { from: 'S-G-006', trigger: 'TAP_UNLOCK', to: 'S-G-005' },
-  { from: 'S-G-006', trigger: 'SWIPE_DOWN', to: 'S-G-005' },
-  { from: 'S-G-006', trigger: 'TAP_SEND', to: 'S-G-007' },
 
   // Transcription results
   { from: 'S-G-007', trigger: 'TRANSCRIPTION_SUCCESS', to: 'S-G-004' },
@@ -117,11 +111,11 @@ export const TRANSITIONS: Transition[] = [
 ];
 
 // States where recording should be preserved during navigation
-export const RECORDING_PRESERVE_STATES: StateId[] = ['S-G-005', 'S-G-006'];
+export const RECORDING_PRESERVE_STATES: StateId[] = ['S-G-005'];
 
 // States that can be entered from swipe gestures
 export const SWIPE_NAVIGABLE_STATES: StateId[] = [
-  'S-G-003', 'S-G-004', 'S-G-005', 'S-G-006', 'S-G-008',
+  'S-G-003', 'S-G-004', 'S-G-005', 'S-G-008',
 ];
 
 // Maximum recording duration in seconds
