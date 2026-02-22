@@ -1,6 +1,7 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useMageStore } from '@/store/mageStore';
 import { useRecording } from '@/components/providers/RecordingProvider';
 import { useSwipeGesture } from '@/hooks/useSwipeGesture';
@@ -9,6 +10,7 @@ export function ProfileScreen() {
   const {
     transition,
     guestProfile,
+    setGuestProfile,
     context,
     recording,
     setRecording,
@@ -17,6 +19,10 @@ export function ProfileScreen() {
     setTheme,
   } = useMageStore();
   const { stopRecording } = useRecording();
+
+  // Modal states
+  const [showCheckoutConfirm, setShowCheckoutConfirm] = useState(false);
+  const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
 
   const { handlers: swipeHandlers } = useSwipeGesture({
     onSwipeRight: () => transition('BACK'),
@@ -41,9 +47,48 @@ export function ProfileScreen() {
       const blob = await stopRecording();
       setRecording({ isRecording: false, audioBlob: blob });
       transition('SEND_RECORDING_FROM_PROFILE');
-    } else {
-      // Placeholder for future Check Out action
     }
+    setShowCheckoutConfirm(true);
+  };
+
+  const confirmCheckOut = () => {
+    setShowCheckoutConfirm(false);
+    setTimeout(() => {
+      setShowProfileSwitcher(true);
+    }, 300); // Wait for first modal to animate out
+  };
+
+  const switchProfile = (profileId: 'alex' | 'sarah') => {
+    const now = new Date();
+    
+    if (profileId === 'alex') {
+      setGuestProfile({
+        id: 'guest-001',
+        name: 'Alex Johnson',
+        roomNumber: '412',
+        checkIn: new Date(now.getTime() - 86400000), // 1 day ago
+        checkOut: new Date(now.getTime() + 86400000 * 4), // 4 days from now
+        bookingId: 'BK-2026-0412',
+        membershipTier: 'Platinum',
+        email: 'alex.johnson@email.com',
+        phone: '+1 555-0123',
+      });
+    } else {
+      setGuestProfile({
+        id: 'guest-002',
+        name: 'Sarah Williams',
+        roomNumber: '305',
+        checkIn: new Date(now.getTime() - 86400000 * 2), // 2 days ago
+        checkOut: new Date(now.getTime() + 86400000 * 1), // 1 day from now
+        bookingId: 'BK-2026-0305',
+        membershipTier: 'Gold',
+        email: 'sarah.w@email.com',
+        phone: '+1 555-0456',
+      });
+    }
+    
+    setShowProfileSwitcher(false);
+    transition('BACK'); // Go back to chat with new profile
   };
 
   const formatShortDate = (date: Date | string): string => {
@@ -52,10 +97,21 @@ export function ProfileScreen() {
       day: 'numeric',
     }).format(new Date(date));
   };
+  
   const formatYear = (date: Date | string): string => {
     return new Date(date).getFullYear().toString();
   };
 
+  // Calculate days remaining for warning modal
+  const getDaysRemaining = () => {
+    if (!guestProfile?.checkOut) return 0;
+    const checkOutDate = new Date(guestProfile.checkOut);
+    const today = new Date();
+    const diffTime = checkOutDate.getTime() - today.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  const daysLeft = getDaysRemaining();
   const nameParts = (guestProfile?.name || 'Guest').trim().split(/\s+/);
   const firstName = nameParts[0] || 'Guest';
   const lastName = nameParts.slice(1).join(' ') || '';
@@ -65,14 +121,104 @@ export function ProfileScreen() {
       initial={{ x: '100%' }}
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
-      transition={{
-        type: 'tween',
-        duration: 0.32,
-        ease: [0.32, 0.72, 0, 1],
-      }}
-      className="min-h-screen bg-mage-gray-50 dark:bg-mage-gray-900 flex flex-col"
+      transition={{ type: 'tween', duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+      className="min-h-screen bg-mage-gray-50 dark:bg-mage-gray-900 flex flex-col relative"
       {...swipeHandlers}
     >
+      {/* Check Out Warning Modal */}
+      <AnimatePresence>
+        {showCheckoutConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowCheckoutConfirm(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="relative w-full max-w-sm bg-white dark:bg-mage-gray-800 rounded-[28px] p-6 shadow-2xl"
+            >
+              <div className="w-12 h-12 bg-mage-gray-100 dark:bg-mage-gray-700 rounded-full flex items-center justify-center mb-4">
+                <span className="text-xl">⚠️</span>
+              </div>
+              <h3 className="text-xl font-bold text-mage-black dark:text-white mb-2">
+                Leaving so soon?
+              </h3>
+              <p className="text-mage-gray-600 dark:text-mage-gray-300 mb-6">
+                You still have <strong>{daysLeft > 0 ? `${daysLeft} days` : 'less than a day'}</strong> left until your scheduled checkout on {guestProfile?.checkOut ? formatShortDate(guestProfile.checkOut) : 'your checkout date'}. Are you sure you want to check out right now?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowCheckoutConfirm(false)}
+                  className="flex-1 py-3 px-4 bg-mage-gray-100 dark:bg-mage-gray-700 text-mage-black dark:text-white font-semibold rounded-xl active:scale-[0.98] transition-transform"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmCheckOut}
+                  className="flex-1 py-3 px-4 bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black font-semibold rounded-xl active:scale-[0.98] transition-transform"
+                >
+                  Confirm
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Switch Demo Profile Modal */}
+      <AnimatePresence>
+        {showProfileSwitcher && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="relative w-full max-w-sm bg-white dark:bg-mage-gray-800 rounded-[28px] p-6 shadow-2xl"
+            >
+              <h3 className="text-xl font-bold text-mage-black dark:text-white mb-2">
+                Checked Out Successfully
+              </h3>
+              <p className="text-mage-gray-600 dark:text-mage-gray-300 mb-6 text-sm">
+                For demo purposes, please select a new guest profile to simulate a new stay.
+              </p>
+              <div className="space-y-3">
+                <button
+                  onClick={() => switchProfile('alex')}
+                  className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-mage-gray-100 dark:border-mage-gray-700 hover:border-mage-blue transition-colors text-left"
+                >
+                  <div className="w-10 h-10 bg-[#D9D9D9] rounded-full flex items-center justify-center font-bold text-black">A</div>
+                  <div>
+                    <p className="font-bold text-mage-black dark:text-white">Alex Johnson</p>
+                    <p className="text-xs text-mage-gray-500">Room 412 • Platinum</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => switchProfile('sarah')}
+                  className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-mage-gray-100 dark:border-mage-gray-700 hover:border-mage-blue transition-colors text-left"
+                >
+                  <div className="w-10 h-10 bg-[#D9D9D9] rounded-full flex items-center justify-center font-bold text-black">S</div>
+                  <div>
+                    <p className="font-bold text-mage-black dark:text-white">Sarah Williams</p>
+                    <p className="text-xs text-mage-gray-500">Room 305 • Gold</p>
+                  </div>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <header className="sticky top-0 z-40 bg-white dark:bg-mage-gray-900 border-b border-mage-gray-200 dark:border-mage-gray-700 safe-area-top">
         <div className="px-4 py-3 flex items-center gap-4">
           <button
@@ -96,7 +242,7 @@ export function ProfileScreen() {
       </header>
 
       <main className="flex-1 p-4 space-y-4">
-        {/* Guest overview card — wide, large top-left curve, light gray, pill badge */}
+        {/* Guest overview card */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -167,7 +313,7 @@ export function ProfileScreen() {
           )}
         </motion.div>
 
-        {/* Active ticket card (unchanged) */}
+        {/* Active ticket card */}
         {activeTicket && (
           <motion.div
             initial={{ y: 20, opacity: 0 }}
@@ -206,7 +352,7 @@ export function ProfileScreen() {
           </motion.div>
         )}
 
-        {/* Quick actions (unchanged) */}
+        {/* Quick actions */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -219,9 +365,7 @@ export function ProfileScreen() {
           <div className="space-y-2">
             <button
               onClick={handleContactFrontDesk}
-              className="group w-full flex items-center gap-4 p-4 rounded-uber-lg transition-all
-                bg-mage-gray-50 dark:bg-mage-gray-700
-                hover:bg-mage-gray-100 dark:hover:bg-[#404040] active:scale-[0.99]"
+              className="group w-full flex items-center gap-4 p-4 rounded-uber-lg transition-all bg-mage-gray-50 dark:bg-mage-gray-700 hover:bg-mage-gray-100 dark:hover:bg-[#404040] active:scale-[0.99]"
             >
               <div className="relative md:self-end">
                 <div className="w-12 h-12 bg-mage-black dark:bg-mage-gray-600 rounded-xl flex items-center justify-center text-white">
@@ -267,12 +411,7 @@ export function ProfileScreen() {
             </button>
             <button
               onClick={handleCheckOut}
-              className="
-                w-full flex items-center justify-center gap-2 p-4
-                bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black rounded-uber-lg
-                hover:opacity-90 active:scale-[0.99]
-                transition-all font-semibold
-              "
+              className="w-full flex items-center justify-center gap-2 p-4 bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black rounded-uber-lg hover:opacity-90 active:scale-[0.99] transition-all font-semibold"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                 <path
@@ -303,11 +442,7 @@ export function ProfileScreen() {
               role="switch"
               aria-checked={theme === 'dark'}
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="
-                relative w-12 h-7 rounded-full
-                bg-mage-gray-200 dark:bg-mage-gray-600
-                transition-colors duration-200
-              "
+              className="relative w-12 h-7 rounded-full bg-mage-gray-200 dark:bg-mage-gray-600 transition-colors duration-200"
             >
               <span
                 className={`

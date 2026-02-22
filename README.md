@@ -1,63 +1,84 @@
-# Mage - AI-Powered Hotel Communication Interface
+Here is the updated `README.md` file with the setup instructions added in a new **Getting Started** section just before the API Endpoints.
 
-A mobile-first, AI-powered hotel communication interface built with Next.js (frontend) and FastAPI (backend). Features a sophisticated state machine for guest interactions, voice recording, and intelligent agent routing.
+```markdown
+# Mage: Hotel Guest Communication Interface
 
-![Mage](https://via.placeholder.com/800x400?text=Mage+Hotel+Assistant)
+Mage is a mobile-first web application designed to streamline hotel guest requests, automate routine inquiries, and facilitate seamless handoffs to human staff. Built with a Next.js frontend and a FastAPI backend, it provides a highly deterministic, state-driven chat interface.
 
-## Features
+![Mage Interface](https://via.placeholder.com/800x400?text=Mage+Hotel+Interface)
 
-### State Machine Architecture
+## What Problem It Solves
 
-The app follows a precisely defined state machine with 11 states:
+Hotel front desks frequently experience bottlenecks due to high volumes of routine inquiries (e.g., WiFi passwords, check-out times, amenity hours) and minor service requests (e.g., extra towels, room service). 
 
-| State ID | Name | Description |
-| --- | --- | --- |
-| S-G-001 | Loading | Initial branded loading and session setup |
-| S-G-002 | Initial | First-time chat entry per booking |
-| S-G-003 | Idle | Resting chat view with no active input |
-| S-G-004 | Typing | Keyboard-focused editable text input |
-| S-G-005 | Recording | Active hold-to-record voice input |
-| S-G-006 | LockedRecording | Hands-free locked voice recording |
-| S-G-007 | Transcribing | Audio-to-text processing |
-| S-G-008 | Profile | Guest profile and service actions |
-| S-G-009 | Connection | Ticket creation & agent routing (8s countdown) |
-| S-G-010 | ImageSelect | Image selection & confirmation |
-| S-G-011 | Deferred | No-agent explanation & issue capture |
+Mage solves this by acting as the first layer of guest interaction:
+1. **Deflection of Routine Queries:** Instantly answers common questions using a deterministic intent layer and a scoped knowledge base.
+2. **Automated Ticketing:** Parses service requests (maintenance, housekeeping) and automatically generates tickets in the hotel's property management system.
+3. **Frictionless Escalation:** Transitions guests to a human front-desk agent when requests fall outside the automated scope or when specifically requested.
 
-### Key Features
+## Architecture
 
-- 🎙️ **Voice Recording**: Hold-to-record with swipe-to-lock functionality
-- 💬 **AI Chat**: Powered by Gemini 2.0 Flash via OpenRouter
-- 👤 **Agent Routing**: Smart routing between AI and human agents
-- 📱 **Mobile-First**: Uber-inspired design with Clash Display font
-- 🔔 **Toast Notifications**: Non-stacking, inline error handling
-- 📸 **Image Attachments**: Multi-image upload support
-- 🎫 **Ticket System**: Issue tracking with deferred support
+The system is split between a strictly typed React frontend and a Python backend handling routing, transcription, and database operations.
+
+```text
++-------------------+        HTTP / REST        +-----------------------+
+|                   | ------------------------> |                       |
+|  Guest Device     |                           |  FastAPI Backend      | ---> [ OpenRouter / LLMs ]
+|  (Next.js / PWA)  | <------------------------ |                       |
+|                   |        Server-Sent Events +-------+-------+-------+
++-------------------+        (Streaming text)           |       |
+         |                                              |       |
+         | WebSockets (Agent Availability)              v       v
+         +--------------------------------> [ Supabase ]     [ Whisper Transcription ]
+                                            (Tickets/Auth)   (Audio Processing)
+
+```
 
 ## Tech Stack
 
-### Frontend
+**Frontend**
 
-- **Framework**: Next.js 14 (App Router)
-- **State Management**: Zustand + TanStack Query
-- **Styling**: Tailwind CSS
-- **Animation**: Framer Motion
-- **Font**: Clash Display
+* **Framework:** Next.js / React
+* **State Management:** Zustand (Application State) & React Query (Server State)
+* **Styling & Animation:** Tailwind CSS & Framer Motion
+* **Audio:** Native Web Audio API (MediaRecorder)
 
-### Backend
+**Backend**
 
-- **Framework**: FastAPI
-- **Database**: Supabase (PostgreSQL) - mocked for MVP
-- **AI/LLM**: Gemini 2.0 Flash Experimental via OpenRouter
-- **Rate Limiting**: Custom sliding window implementation
+* **Framework:** FastAPI (Python)
+* **Data Layer:** Supabase (PostgreSQL) / Internal Mock Database for dev
+* **Inference Routing:** OpenRouter API
+* **Audio Processing:** Whisper (Local or API-driven transcription)
+
+## How It Works
+
+### 1. Frontend State Machine
+
+To prevent UI desync and race conditions, the frontend operates on a strict 11-state machine. The application can only exist in one of these predefined states (e.g., `Idle`, `Typing`, `Recording`, `Transcribing`, `Connection`). State transitions are triggered by explicit user actions or backend events.
+
+### 2. Request Routing & Intent Parsing
+
+When a message is sent to the backend, it passes through a multi-layered filter:
+
+* **Deterministic Layer:** A Python regex/intent layer intercepts common keywords ("WiFi", "Check out") for zero-latency, hardcoded responses.
+* **Triage Layer (Small Model):** A fast LLM determines if the query is relevant to the hotel. It can trigger backend functions (e.g., fetch weather, lookup guest name/room) or format the response for a ticket action (`ACTION: HOUSEKEEPING`).
+* **Complex Layer (Large Model):** If the small model flags the request as relevant but too complex (`HANDOFF`), a heavier model processes the request.
+
+### 3. Non-Prompting Tools & Context Injection
+
+The backend intercepts specific action flags from the triage model (like `GET_WEATHER` or `GET_GUEST_INFO`) and injects real-time data from external APIs or the database directly into the response stream before the user sees it.
+
+### 4. Agent Handoff
+
+If the system determines human intervention is required, the frontend enters the `Connection` state. An 8-second countdown allows the guest to cancel. Once complete, the system checks WebSocket availability for human agents. If available, the chat transitions to a live queue; if not, it creates a deferred support ticket.
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18+
-- Python 3.11+
-- npm or yarn
+* Node.js 18+
+* Python 3.11+
+* npm or yarn
 
 ### Frontend Setup
 
@@ -72,12 +93,13 @@ cp .env.example .env.local
 
 # Start development server
 npm run dev
+
 ```
 
 The frontend will be available at `http://localhost:3000`
 
 ### Backend Setup
-
+Backend takes 15 mins to start due the whisper translation model downloading for the first time.
 ```bash
 cd backend
 
@@ -93,143 +115,41 @@ cp .env.example .env
 
 # Start server
 uvicorn app.main:app --reload --port 8000
+
 ```
-
-The backend API will be available at `http://localhost:8000`
-
-- Swagger docs: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-## Environment Variables
-
-### Frontend (.env.local)
-
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
-### Backend (.env)
-
-```env
-# Supabase (optional - mocked for MVP)
-SUPABASE_URL=your_supabase_url
-SUPABASE_KEY=your_supabase_key
-
-# OpenRouter API Key for Gemini
-OPENROUTER_API_KEY=your_openrouter_key
-
-# Rate Limiting
-RATE_LIMIT_REQUESTS=60
-RATE_LIMIT_WINDOW=60
-```
-
-## Project Structure
-
-```text
-mage/
-├── mage-frontend/
-│   ├── src/
-│   │   ├── app/              # Next.js App Router pages
-│   │   ├── components/       # React components
-│   │   │   ├── screens/      # State-specific screens
-│   │   │   └── providers/    # Context providers
-│   │   ├── hooks/            # Custom React hooks
-│   │   ├── lib/              # Utilities and state machine
-│   │   ├── store/            # Zustand store
-│   │   ├── styles/           # Global styles
-│   │   └── types/            # TypeScript types
-│   └── public/               # Static assets
-│
-└── mage-backend/
-    ├── app/
-    │   ├── api/              # FastAPI routers
-    │   ├── core/             # Config and utilities
-    │   ├── models/           # Pydantic schemas
-    │   └── services/         # Business logic
-    └── tests/                # Test files
-```
-
-## State Machine Navigation
-
-### Swipe Gestures
-
-- **Swipe Left (RTL)**: Navigate to Profile from any chat state
-- **Swipe Right (LTR)**: Go back to previous state
-- **Swipe Up**: Lock recording in Recording state
-- **Swipe Down**: Unlock recording in LockedRecording state
-
-### Recording Behavior
-
-- Recording is **preserved** when navigating to Profile via swipe
-- A toast notification indicates recording is still active
-- 5-minute maximum recording duration
-
-### Agent Connection
-
-- 8-second countdown before ticket creation
-- Cancel button available during countdown
-- Routing priority:
-
-  1. Human agent (if available)
-  2. AI agent (if available and user is paid)
-  3. Deferred screen (capture issue for later)
 
 ## API Endpoints
 
-### Chat
+**Chat & Processing**
 
-- `POST /api/chat/message` - Send message, get response
-- `POST /api/chat/stream` - Stream response (SSE)
+* `POST /api/chat/message` - Standard synchronous message processing.
+* `POST /api/chat/stream` - SSE endpoint for streaming token responses.
+* `POST /api/transcribe` - Accepts audio blobs and returns transcribed text.
 
-### Transcription
+**Ticketing & Operations**
 
-- `POST /api/transcribe` - Transcribe audio to text
+* `POST /api/tickets` - Generate a new staff ticket.
+* `PATCH /api/tickets/{id}` - Update ticket status or assignment.
+* `GET /api/guests/{id}` - Retrieve guest profile and membership data.
+* `GET /api/agents/availability` - Poll for current live-agent capacity.
 
-### Tickets
+## Screenshots
 
-- `POST /api/tickets` - Create new ticket
-- `PATCH /api/tickets/{id}` - Update ticket
-- `POST /api/tickets/{id}/resolve` - Resolve ticket
-- `POST /api/tickets/{id}/cancel` - Cancel ticket
+*(Replace the placeholder URLs with actual paths to your repository images)*
 
-### Guests
-
-- `GET /api/guests/{id}` - Get guest profile
-- `GET /api/guests/booking/{id}` - Get guest by booking
-
-### Agents
-
-- `GET /api/agents/availability` - Check agent availability
+| Chat Interface | Voice Recording | Profile & Tickets |
+| --- | --- | --- |
+|  |  |  |
+|  | *Hold-to-record with swipe-to-lock mechanics.* | *Guest dashboard and active tickets.* |
 
 ## Design System
 
-### Colors (Uber-inspired)
+The application utilizes an Uber-inspired, high-contrast design system optimized for mobile readability and fast touch interactions.
 
-- **Black**: #000000 (Primary)
-- **White**: #FFFFFF
-- **Blue**: #276EF1 (Accent)
-- **Green**: #05944F (Success)
-- **Red**: #E11900 (Error)
-- **Yellow**: #FFC043 (Warning)
+* **Primary:** Black `#000000` / White `#FFFFFF`
+* **Accent:** Blue `#276EF1`
+* **Status:** Green `#05944F` (Success), Red `#E11900` (Error), Yellow `#FFC043` (Warning)
+* **Typography:** Clash Display (200-700 weights)
+* **Geometry:** 8px base border radius (sm), 24px extreme radius (uber-xl)
 
-### Typography
 
-- **Font**: Clash Display (200-700 weights)
-- **Source**: Fontshare API
-
-### Spacing & Radius
-
-- Border radius: 8px (sm), 16px (md), 24px (lg), 100px (full)
-- Standard padding: 16px, 24px
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
-
-## License
-
-MIT License - See LICENSE file for details
