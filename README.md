@@ -95,7 +95,7 @@ npm run dev
 The frontend will be available at `http://localhost:3000`
 
 ### Backend Setup
-Backend takes 15 mins to start due the whisper translation model downloading for the first time.
+Backend takes 15 mins to start due the whisper translation model downloading for the first time. Only work on *Chrome*
 ```bash
 cd backend
 
