@@ -75,6 +75,7 @@ export function useSendMessage() {
         addMessage({
           role: 'assistant',
           content: response.data.content,
+          requireContactConfirmation: (response.data as any).require_contact_confirmation,
         });
       }
     },

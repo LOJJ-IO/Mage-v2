@@ -56,6 +56,7 @@ class Message(BaseModel):
     content: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     images: Optional[List[str]] = None
+    require_contact_confirmation: Optional[bool] = None
 
 
 class GuestProfile(BaseModel):
@@ -68,6 +69,7 @@ class GuestProfile(BaseModel):
     booking_id: str
     email: Optional[str] = None
     phone: Optional[str] = None
+    membership_tier: Optional[str] = None
 
 
 class Ticket(BaseModel):

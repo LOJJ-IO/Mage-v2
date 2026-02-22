@@ -96,6 +96,7 @@ export interface Message {
   timestamp: Date;
   images?: string[];
   isTyping?: boolean;
+  requireContactConfirmation?: boolean;
 }
 
 // Ticket types

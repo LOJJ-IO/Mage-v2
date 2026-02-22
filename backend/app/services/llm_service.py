@@ -2,6 +2,7 @@ import asyncio
 import logging
 import re
 import time
+from datetime import datetime
 import httpx
 from pathlib import Path
 from typing import AsyncGenerator, Optional, List, Dict, Any, Literal, Tuple
@@ -118,7 +119,12 @@ Output format (strict):
 - First line must be exactly one of: NOT_RELEVANT, HANDOFF, or ANSWER.
 - If NOT_RELEVANT: first line is NOT_RELEVANT, nothing else.
 - If HANDOFF (relevant but too complex): first line is HANDOFF, nothing else.
-- If ANSWER: first line is ANSWER, then your brief helpful reply. If the guest needs a service (maintenance, room service, housekeeping, etc.), add a second line: ACTION: MAINTENANCE or ACTION: ROOM_SERVICE or ACTION: HOUSEKEEPING (optionally add a colon and short issue summary, e.g. ACTION: MAINTENANCE: AC not working).
+- - If ANSWER: first line is ANSWER, then your brief helpful reply. If the guest needs a service, add a second line: 
+  ACTION: MAINTENANCE, ACTION: ROOM_SERVICE, ACTION: HOUSEKEEPING
+  ACTION: GET_GUEST_INFO (if the guest asks for their room number, name, or membership status. The system will append this info to your reply.)
+  ACTION: CONTACT_FRONT_DESK (if guest explicitly wants to speak to a person or the front desk)
+  ACTION: GET_TIME (if guest asks for the current time)
+  ACTION: GET_WEATHER (if guest asks for the current weather)
 """
     if hotel_context:
         base += f"\nHotel knowledge:\n{hotel_context}\n"
@@ -213,6 +219,18 @@ class LLMService:
             messages.append({"role": "user", "content": user_message})
         return messages
     
+    async def _fetch_weather(self, location: str = "Edmonton") -> str:
+        """Fetch current weather using wttr.in (no API key required)."""
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                # %C gets the condition (e.g., Clear), %t gets the temp
+                response = await client.get(f"https://wttr.in/{location}?format=%C,+%t")
+                response.raise_for_status()
+                return response.text.strip()
+        except Exception as e:
+            logger.error("Failed to fetch weather: %s", e)
+            return "Currently unavailable"
+
     def _parse_action_from_content(self, content: str) -> Tuple[str, Optional[Tuple[str, str]]]:
         """Strip ACTION: line and leading ANSWER line from content; return (clean_text, (action_type, issue_summary) or None)."""
         action: Optional[Tuple[str, str]] = None
@@ -243,6 +261,7 @@ class LLMService:
         user_message: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         images: Optional[List[str]] = None,
+        guest_id: Optional[str] = None,
     ) -> Tuple[str, Literal["non_answer", "handoff", "answer"], Optional[Tuple[str, str]]]:
         """Call small model via OpenRouter; on 404/unavailable try fallback models. Returns (response_text, outcome, optional_action)."""
         messages = self._build_small_model_messages(user_message, conversation_history, images)
@@ -264,10 +283,20 @@ class LLMService:
                         return (NON_ANSWER, "non_answer", None)
                     if "HANDOFF" in first_line or content.upper().startswith("HANDOFF"):
                         return ("", "handoff", None)
-                    clean_text, action = self._parse_action_from_content(content)
-                    if not clean_text and action:
+                clean_text, action = self._parse_action_from_content(content)
+                    
+                if action:
+                        action_type, issue = action
+                        if action_type == "GET_GUEST_INFO" and guest_id:
+                            db = get_database()
+                            guest = db.get_guest(guest_id)
+                            if guest:
+                                info = f"(Guest Info - Name: {guest.name}, Room: {guest.room_number}, Membership: {guest.membership_tier or 'Standard'})"
+                                clean_text += f"\n{info}"
+                    
+                if not clean_text and action and action[0] not in ("GET_GUEST_INFO", "GET_TIME", "GET_WEATHER", "CONTACT_FRONT_DESK"):
                         clean_text = "I've logged your request. Our team will follow up shortly."
-                    return (clean_text or content, "answer", action)
+                return (clean_text or content, "answer", action)
             except httpx.HTTPStatusError as e:
                 last_http_error = e
                 body = (e.response.text or "")[:300]
@@ -346,40 +375,47 @@ class LLMService:
         conversation_history: Optional[List[Dict[str, str]]] = None,
         images: Optional[List[str]] = None,
         guest_id: Optional[str] = None,
-    ) -> str:
+    ) -> Tuple[str, bool]:
         """Generate a response: Python intent first, then small model, then large if handoff."""
         
         if not await rate_limiter.wait_and_acquire():
-            return "I'm currently experiencing high demand. Please try again in a moment."
+            return "I'm currently experiencing high demand. Please try again in a moment.", False
         
         if context == ConversationContext.FRONT_DESK_AGENT:
-            return "Your message has been sent to the front desk. They will respond shortly."
+            return "Your message has been sent to the front desk. They will respond shortly.", False
         
-        # 1. Python intent (generic answer, closing-after-no, or None)
+        # 1. Python intent
         generic = self._get_intent_response(user_message, conversation_history)
         if generic is not None:
             if generic == CLOSING_AFTER_NO:
-                return generic
-            return generic + SATISFACTION_SUFFIX
+                return generic, False
+            return generic + SATISFACTION_SUFFIX, False
         
         # 2. No API key: fallback
         if not self.api_key:
-            return "I'm here to help! Could you tell me more about what you need? I can assist with hotel amenities, local recommendations, or connect you with our front desk."
+            return "I'm here to help! Could you tell me more about what you need? I can assist with hotel amenities, local recommendations, or connect you with our front desk.", False
         
         # 3. Small model
-        small_text, outcome, action = await self._call_small_model(user_message, conversation_history, images)
+        small_text, outcome, action = await self._call_small_model(user_message, conversation_history, images, guest_id)
         if outcome == "non_answer":
-            return small_text
+            return small_text, False
         if outcome == "handoff":
-            return await self._call_large_model(user_message, conversation_history, images)
-        if outcome == "answer" and action and guest_id:
+            large_text = await self._call_large_model(user_message, conversation_history, images)
+            return large_text, False
+            
+        require_contact = False
+        if outcome == "answer" and action:
             action_type, issue_summary = action
-            issue = issue_summary or f"{action_type} request: {user_message[:200]}"
-            try:
-                get_database().create_ticket(guest_id, issue)
-            except Exception as e:
-                logger.exception("Ticket creation error: %s", e)
-        return small_text
+            if action_type == "CONTACT_FRONT_DESK":
+                require_contact = True
+            elif guest_id and action_type not in ("GET_TIME", "GET_WEATHER"):
+                issue = issue_summary or f"{action_type} request: {user_message[:200]}"
+                try:
+                    get_database().create_ticket(guest_id, issue)
+                except Exception as e:
+                    logger.exception("Ticket creation error: %s", e)
+                    
+        return small_text, require_contact
     
     async def generate_stream(
         self,
@@ -416,7 +452,7 @@ class LLMService:
                 await asyncio.sleep(0.05)
             return
         
-        small_text, outcome, action = await self._call_small_model(user_message, conversation_history, images)
+        small_text, outcome, action = await self._call_small_model(user_message, conversation_history, images, guest_id)
         if outcome == "answer" and action and guest_id:
             action_type, issue_summary = action
             issue = issue_summary or f"{action_type} request: {user_message[:200]}"
