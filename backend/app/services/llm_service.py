@@ -229,7 +229,8 @@ class LLMService:
     async def _fetch_weather(self, location: str = "Edmonton") -> str:
         """Fetch current weather using wttr.in (no API key required)."""
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            # Lowered timeout to 1.5 seconds so it doesn't hang the chat
+            async with httpx.AsyncClient(timeout=1.5) as client:
                 # %C gets the condition (e.g., Clear), %t gets the temp
                 response = await client.get(f"https://wttr.in/{location}?format=%C,+%t")
                 response.raise_for_status()
