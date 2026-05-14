@@ -36,7 +36,7 @@ function ChatScreenSkeleton() {
           </div>
         </div>
       </main>
-      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 w-full max-w-md z-30 px-4 pt-4 pb-4 bg-white dark:bg-mage-gray-900 border-t border-mage-gray-200 dark:border-mage-gray-700 safe-area-bottom">
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-30 px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] bg-white dark:bg-mage-gray-900 border-t border-mage-gray-200 dark:border-mage-gray-700 shadow-[0_-8px_32px_rgba(0,0,0,0.06)] dark:shadow-[0_-8px_32px_rgba(0,0,0,0.35)]">
         <div className="flex items-center gap-2">
           <div className="w-12 h-12 rounded-full bg-mage-gray-200 dark:bg-mage-gray-700 animate-pulse" />
           <div className="flex-1 h-12 rounded-uber-xl bg-mage-gray-100 dark:bg-mage-gray-800 animate-pulse" />

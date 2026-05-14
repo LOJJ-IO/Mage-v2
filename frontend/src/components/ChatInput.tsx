@@ -146,7 +146,7 @@ export function ChatInput({
 
       {/* Normal input UI - fixed at bottom, constrained to mobile width */}
       {!isRecordingState && (
-        <div className="fixed inset-x-0 bottom-5 left-0 right-0 w-full max-w-md mx-auto z-30 px-4 pt-4 pb-4 bg-white dark:bg-mage-gray-900 border-t border-mage-gray-200 dark:border-mage-gray-700 safe-area-bottom overflow-visible">
+        <div className="fixed inset-x-0 bottom-0 left-0 right-0 w-full max-w-md mx-auto z-30 px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] bg-white dark:bg-mage-gray-900 border-t border-mage-gray-200 dark:border-mage-gray-700 overflow-visible shadow-[0_-8px_32px_rgba(0,0,0,0.06)] dark:shadow-[0_-8px_32px_rgba(0,0,0,0.35)]">
           {/* Attached images preview */}
           {attachedImages.length > 0 && (
             <div className="flex gap-2 mb-3 overflow-x-auto pb-2 pt-3 pr-3">
@@ -179,7 +179,7 @@ export function ChatInput({
             </div>
           )}
 
-          <div className="flex items-end gap-2">
+          <div className="flex items-center gap-2">
             {/* Upload button */}
             <button
               onClick={onUpload}
@@ -191,7 +191,7 @@ export function ChatInput({
             </button>
 
             {/* Text input or transcribing indicator in same box */}
-            <div className="flex-1 relative min-h-[48px]">
+            <div className="flex-1 relative min-h-[48px] flex items-center">
               {isTranscriptionPending ? (
                 <div
                   className="
@@ -216,20 +216,20 @@ export function ChatInput({
                   <span className="text-sm font-medium">Transcribing...</span>
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-uber-xl min-h-[48px] bg-mage-gray-100 dark:bg-mage-gray-800 focus-within:ring-2 focus-within:ring-mage-black/10 dark:focus-within:ring-white/20">
+                <div className="w-full overflow-hidden rounded-uber-xl min-h-[48px] bg-mage-gray-100 dark:bg-mage-gray-800 focus-within:ring-2 focus-within:ring-mage-black/10 dark:focus-within:ring-white/20 flex items-center">
                   <textarea
                     ref={inputRef}
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
                     onFocus={handleFocus}
                     onBlur={handleBlur}
-                    placeholder=" Message..."
+                    placeholder="Message..."
                     rows={1}
                     className="
                       message-input-scrollbar
-                      w-full h-full min-h-[48px] px-4 py-3 pr-12
+                      w-full min-h-[48px] max-h-[120px] px-4 py-3
                       bg-transparent
-                      text-base font-medium resize-none text-mage-black dark:text-white
+                      text-base font-medium leading-6 resize-none text-mage-black dark:text-white
                       placeholder:text-mage-gray-400 dark:placeholder:text-mage-gray-500
                       focus:outline-none
                       transition-[height] duration-150 ease-out
@@ -313,7 +313,7 @@ function RecordingOverlay({ duration, onCancel, onSend }: RecordingOverlayProps)
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 20 }}
-      className="fixed inset-x-0 bottom-3 w-full max-w-md mx-auto z-40 bg-white dark:bg-mage-gray-900 border-t border-mage-gray-200 dark:border-mage-gray-700 safe-area-bottom select-none touch-none"
+      className="fixed inset-x-0 bottom-0 w-full max-w-md mx-auto z-40 bg-white dark:bg-mage-gray-900 border-t border-mage-gray-200 dark:border-mage-gray-700 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] shadow-[0_-8px_32px_rgba(0,0,0,0.06)] dark:shadow-[0_-8px_32px_rgba(0,0,0,0.35)] select-none touch-none"
     >
       <div className="px-4 py-3">
         <div className="flex items-center justify-between">
