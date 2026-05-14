@@ -63,7 +63,7 @@ export function MessageBubble({ message, isLast = false }: MessageBubbleProps) {
         )}
 
         {/* Message content - wrap long words so no horizontal scroll */}
-        <p className="text-base leading-relaxed whitespace-pre-wrap break-words break-all">
+        <p className="text-base leading-relaxed whitespace-pre-wrap break-words">
           {message.content}
         </p>
 
