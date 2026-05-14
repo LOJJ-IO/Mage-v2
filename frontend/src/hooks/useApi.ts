@@ -68,21 +68,29 @@ export function useSendMessage() {
         guestProfile?.id
       );
 
-      return response;
-    },
-    onSuccess: (response) => {
-      if (response.success && response.data) {
-        addMessage({
-          role: 'assistant',
-          content: response.data.content,
-          requireContactConfirmation: (response.data as any).require_contact_confirmation,
-        });
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to send message');
       }
+      return response.data;
     },
-    onError: (error) => {
+    onSuccess: (data) => {
       addMessage({
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: data.content,
+        requireContactConfirmation: (data as Message & { require_contact_confirmation?: boolean })
+          .require_contact_confirmation,
+      });
+    },
+    onError: (error) => {
+      const detail =
+        error instanceof Error ? error.message : 'Sorry, I encountered an error. Please try again.';
+      const hint =
+        detail === 'Failed to fetch' || (error instanceof Error && error.name === 'TypeError')
+          ? ' Check that the API is running. If you set NEXT_PUBLIC_API_URL to http://localhost:8000, remove it so the app uses the Next.js proxy to the backend.'
+          : '';
+      addMessage({
+        role: 'assistant',
+        content: `${detail}${hint}`,
       });
     },
   });

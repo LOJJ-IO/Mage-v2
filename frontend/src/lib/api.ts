@@ -1,12 +1,24 @@
 import { Message, Ticket, GuestProfile, TranscriptionResponse, ConversationContext, ApiResponse } from '@/types';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+/**
+ * When unset, requests use same-origin `/api/...` (see next.config.js rewrites → FastAPI).
+ * Set NEXT_PUBLIC_API_URL only if you need the browser to talk to the API host directly
+ * (e.g. no Next dev server in front).
+ */
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '');
 
 /** WebSocket URL for agent availability (ws or wss from http/https). */
 export function getAgentAvailabilityWsUrl(): string {
   const base = API_BASE_URL.trim().replace(/\/$/, '');
-  const wsBase = base.startsWith('https') ? base.replace(/^https/, 'wss') : base.replace(/^http/, 'ws');
-  return `${wsBase}/api/agents/ws`;
+  if (base) {
+    const wsBase = base.startsWith('https') ? base.replace(/^https/, 'wss') : base.replace(/^http/, 'ws');
+    return `${wsBase}/api/agents/ws`;
+  }
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.hostname}:8000/api/agents/ws`;
+  }
+  return 'ws://127.0.0.1:8000/api/agents/ws';
 }
 
 class ApiClient {
@@ -21,7 +33,8 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     try {
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      const url = `${this.baseUrl}${endpoint}`;
+      const response = await fetch(url, {
         ...options,
         headers: {
           'Content-Type': 'application/json',
@@ -31,7 +44,19 @@ class ApiClient {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-        return { success: false, error: error.detail || 'Request failed' };
+        const detail = (error as { detail?: unknown }).detail;
+        let message: string;
+        if (Array.isArray(detail)) {
+          message = detail
+            .map((d: { msg?: string }) => d?.msg || JSON.stringify(d))
+            .filter(Boolean)
+            .join('; ');
+        } else if (typeof detail === 'string') {
+          message = detail;
+        } else {
+          message = 'Request failed';
+        }
+        return { success: false, error: message || 'Request failed' };
       }
 
       const data = await response.json();

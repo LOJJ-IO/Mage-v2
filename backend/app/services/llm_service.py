@@ -76,6 +76,15 @@ SATISFACTION_SUFFIX = "\n\nDo you require any further assistance? (Yes / No)"
 # When user replies No to the above: end the turn (no small model); conversation resumes on next prompt
 CLOSING_AFTER_NO = "No problem. Feel free to ask if you need anything else."
 
+# When OPENROUTER_API_KEY is unset, rotate these instead of one identical line every time
+_NO_API_KEY_FALLBACK_VARIANTS = [
+    "I can help with Wi-Fi, checkout times, dining, the pool, parking, and housekeeping. What would you like to know?",
+    "Ask about room amenities, restaurant hours, local tips, or I can connect you with the front desk—what do you need?",
+    "For room service, dial 0 from your room phone. I can also help with Wi-Fi, checkout, fitness hours, and common requests.",
+    "Tell me if you need anything about your stay: billing, lost items, maintenance, or local recommendations.",
+    "I'm here for questions about the hotel—amenities, dining, your room, or getting in touch with staff. What's on your mind?",
+]
+
 # Cached hotel knowledge (path -> content) so we don't read the file every request
 _hotel_knowledge_cache: Dict[str, str] = {}
 
@@ -144,8 +153,15 @@ class LLMService:
     
     def __init__(self):
         self.base_url = settings.openrouter_base_url
-        self.api_key = settings.openrouter_api_key
+        self.api_key = (settings.openrouter_api_key or "").strip()
         self.model = settings.llm_model
+
+    @staticmethod
+    def _no_api_key_fallback_text(user_message: str) -> str:
+        """Stable variety when no LLM key: same message always maps to the same variant."""
+        s = user_message or ""
+        idx = abs(sum(ord(c) for c in s)) % len(_NO_API_KEY_FALLBACK_VARIANTS)
+        return _NO_API_KEY_FALLBACK_VARIANTS[idx]
         
     def _get_headers(self) -> Dict[str, str]:
         """Get request headers."""
@@ -399,9 +415,9 @@ class LLMService:
                 return generic, False
             return generic + SATISFACTION_SUFFIX, False
         
-        # 2. No API key: fallback
+        # 2. No API key: keyword intents only; otherwise rotating offline copy
         if not self.api_key:
-            return "I'm here to help! Could you tell me more about what you need? I can assist with hotel amenities, local recommendations, or connect you with our front desk.", False
+            return self._no_api_key_fallback_text(user_message), False
         
         # 3. Small model
         small_text, outcome, action = await self._call_small_model(user_message, conversation_history, images, guest_id)
@@ -454,7 +470,7 @@ class LLMService:
             return
         
         if not self.api_key:
-            fallback = "I'm here to help! Could you tell me more about what you need? I can assist with hotel amenities, local recommendations, or connect you with our front desk."
+            fallback = self._no_api_key_fallback_text(user_message)
             for word in fallback.split():
                 yield word + " "
                 await asyncio.sleep(0.05)
@@ -540,7 +556,42 @@ class LLMService:
             return "Pets are welcome with a small daily fee. Please let the front desk know so they can note your reservation. Pet amenities are available on request."
         if words & {"lost", "left", "forgot", "missing"}:
             return "For lost items, please contact the front desk or housekeeping. They keep a lost-and-found log and will follow up if something is found."
-        # No match → small model
+        if words & {"towel", "towels", "pillow", "pillows", "blanket", "blankets"}:
+            return "Extra towels, pillows, or blankets are available through housekeeping—dial 0 from your room, or ask and I can help route your request."
+        if "housekeeping" in message_lower or (words & {"housekeeper"}):
+            return "Housekeeping can refresh your room or bring supplies—dial 0 from your room phone, or tell me what you need."
+        if words & {"elevator", "lift"}:
+            return "Guest elevators are in the lobby and at hallway ends. For accessibility needs, ask the front desk."
+        if words & {"shuttle", "airport"} or "taxi" in message_lower or words & {"uber", "lyft"}:
+            return "For airport shuttles or taxis, the front desk can book or share schedules and rates—dial 0 or stop by the lobby."
+        if "minibar" in message_lower or "mini-bar" in message_lower or "mini bar" in message_lower:
+            return "Minibar items are billed separately. If something looks wrong on your bill, ask the front desk to review it."
+        if any(
+            p in message_lower
+            for p in ("room safe", "in-room safe", "in room safe", "hotel safe", "safe box", "open the safe")
+        ):
+            return "Safe instructions are in your welcome guide. If you need help opening or resetting it, contact the front desk."
+        if words & {"noise", "loud", "noisy"}:
+            return "I'm sorry for the disturbance. I can note a noise concern or connect you with the front desk to help."
+        if words & {"cold", "hot", "temperature", "thermostat", "heating", "cooling"} or "air conditioning" in message_lower or "a/c" in message_lower:
+            return "Try the wall thermostat for room climate. If it's still uncomfortable, dial 0 and maintenance can assist."
+        if words & {"bar", "lounge", "cocktail", "wine", "beer"}:
+            return "Bar and lounge hours are posted in the lobby—the front desk can share specials or help with reservations."
+        if words & {"coffee", "tea"} and not (words & {"breakfast", "restaurant", "dining"}):
+            return "Coffee and tea are available at breakfast in the dining room; ask the front desk for in-room options if you prefer."
+        if words & {"upgrade", "upgrades"}:
+            return "Room upgrades depend on availability—ask the front desk and they can check options and rates."
+        if "ironing" in message_lower or words & {"iron"}:
+            return "An iron and ironing board are typically in the closet. If yours is missing, dial 0 and housekeeping can bring one."
+        if "hair dryer" in message_lower or "hairdryer" in message_lower or "blow dryer" in message_lower:
+            return "A hair dryer is usually in the bathroom drawer. If it's missing, ask housekeeping or dial 0."
+        if words & {"concierge", "directions"} or "nearby" in message_lower:
+            return "Our concierge can help with maps, directions, and local reservations—visit the front desk or dial 0."
+        if "thank" in message_lower or words & {"thanks", "thx"}:
+            return "You're welcome! Let me know if you need anything else during your stay."
+        if words & {"amenities", "amenity"}:
+            return "Common amenities include Wi-Fi, fitness, pool, dining, parking, and housekeeping—what would you like details on?"
+        # No match → small model (or offline fallback if no API key)
         return None
     
     def _get_mock_response(self, user_message: str, context: ConversationContext) -> str:
@@ -550,7 +601,7 @@ class LLMService:
             if generic == CLOSING_AFTER_NO:
                 return generic
             return generic + SATISFACTION_SUFFIX
-        return "I'm here to help! Could you tell me more about what you need? I can assist with hotel amenities, local recommendations, or connect you with our front desk."
+        return self._no_api_key_fallback_text(user_message)
 
 
 # Global LLM service instance

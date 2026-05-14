@@ -32,6 +32,11 @@ async def lifespan(app: FastAPI):
             "Whisper model failed to load on startup: %s. Will retry on first /transcribe request.",
             e,
         )
+    if not (settings.openrouter_api_key or "").strip():
+        logger.warning(
+            "OPENROUTER_API_KEY is not set. Chat uses keyword rules and offline fallbacks only; "
+            "set a key from https://openrouter.ai/ for full AI responses."
+        )
     yield
 
 
@@ -45,14 +50,20 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Configure CORS (explicit origins + in debug, regex for LAN / IPv6 localhost)
+_cors: dict = {
+    "allow_origins": settings.cors_origins,
+    "allow_credentials": True,
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+}
+if settings.debug:
+    _cors["allow_origin_regex"] = (
+        r"https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?|"
+        r"https?://192\.168\.\d{1,3}\.\d{1,3}(:\d+)?|"
+        r"https?://10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?"
+    )
+app.add_middleware(CORSMiddleware, **_cors)
 
 # Include routers
 app.include_router(chat.router, prefix=settings.api_prefix)
