@@ -1,15 +1,39 @@
-# Python
+# Python (venv/ and .venv/ = whole virtualenv folders)
 venv/
+.venv/
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Env (keep *.example committed)
 .env
+.env.*
+!.env.example
+!**/.env.example
 
 # Node / Next.js
 node_modules/
 .next/
-dist/
-build/
+out/
+.turbo
+*.tsbuildinfo
 
 # OS
 .DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Deploy / tooling
 .vercel
