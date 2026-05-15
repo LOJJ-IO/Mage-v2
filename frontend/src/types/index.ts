@@ -163,6 +163,10 @@ export interface ChatResponse {
   conversationContext: ConversationContext;
 }
 
+export interface ChatMessageResponse {
+  messages: Message[];
+}
+
 export interface TranscriptionResponse {
   text: string;
   confidence: number;

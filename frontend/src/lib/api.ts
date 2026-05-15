@@ -1,4 +1,4 @@
-import { Message, Ticket, GuestProfile, TranscriptionResponse, ConversationContext, ApiResponse } from '@/types';
+import { Message, Ticket, GuestProfile, TranscriptionResponse, ConversationContext, ApiResponse, ChatMessageResponse } from '@/types';
 
 /**
  * When unset, requests use same-origin `/api/...` (see next.config.js rewrites → FastAPI).
@@ -75,8 +75,8 @@ class ApiClient {
     conversationContext: ConversationContext,
     images?: string[],
     guestId?: string
-  ): Promise<ApiResponse<Message>> {
-    return this.request<Message>('/api/chat/message', {
+  ): Promise<ApiResponse<ChatMessageResponse>> {
+    return this.request<ChatMessageResponse>('/api/chat/message', {
       method: 'POST',
       body: JSON.stringify({
         content: message,

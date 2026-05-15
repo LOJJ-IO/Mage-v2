@@ -7,6 +7,8 @@ import httpx
 from pathlib import Path
 from typing import AsyncGenerator, Optional, List, Dict, Any, Literal, Tuple
 from collections import deque
+from urllib.parse import quote
+from zoneinfo import ZoneInfo
 from app.core.config import get_settings
 from app.models.schemas import ConversationContext
 from app.services.database import get_database
@@ -75,6 +77,19 @@ NON_ANSWER = "I'm here to help with your stay—amenities, room, dining, and loc
 SATISFACTION_SUFFIX = "\n\nDo you require any further assistance? (Yes / No)"
 # When user replies No to the above: end the turn (no small model); conversation resumes on next prompt
 CLOSING_AFTER_NO = "No problem. Feel free to ask if you need anything else."
+HELLO_RESPONSE = "Hello! I'm Mage, your hotel assistant. I can help with room service, amenities, local recommendations, or any questions about your stay. What can I do for you?"
+ACKNOWLEDGMENT_RESPONSE = "I understand. I'm here if you'd like more help with anything about your stay."
+THANKS_RESPONSE = "You're welcome! Let me know if you need anything else during your stay."
+
+_DEFERRAL_PATTERNS = (
+    r"\bhold on\b",
+    r"\bjust a moment\b",
+    r"\bone moment\b",
+    r"\bplease wait\b",
+    r"\blet me (?:check|get|pull|confirm)\b",
+    r"\bteam will follow up\b",
+    r"\bfollow up shortly\b",
+)
 
 # When OPENROUTER_API_KEY is unset, rotate these instead of one identical line every time
 _NO_API_KEY_FALLBACK_VARIANTS = [
@@ -128,23 +143,23 @@ Output format (strict):
 - First line must be exactly one of: NOT_RELEVANT, HANDOFF, or ANSWER.
 - If NOT_RELEVANT: first line is NOT_RELEVANT, nothing else.
 - If HANDOFF (relevant but too complex): first line is HANDOFF, nothing else.
-- If ANSWER: first line is ANSWER, then your brief helpful reply. If the guest needs a service or information, add a second line: 
+- If ANSWER: first line is ANSWER, second line is your brief guest-visible reply, and optionally add ONE ACTION line after that.
   ACTION: MAINTENANCE, ACTION: ROOM_SERVICE, ACTION: HOUSEKEEPING
   ACTION: CONTACT_FRONT_DESK (if guest explicitly wants to speak to a person)
   ACTION: GET_TIME (if guest asks for the current time)
   ACTION: GET_WEATHER (if guest asks for the current weather)
   ACTION: GET_GUEST_INFO (if guest asks for their room, name, or membership)
-  
-CRITICAL INSTRUCTION FOR GET_TIME, GET_WEATHER, and GET_GUEST_INFO: 
-Do NOT tell the guest you will "check" or "fetch" this information. Just output the ACTION line. The system will automatically and instantly append the data to your reply before the guest sees it. Simply respond as if you already appended it.
 
-  ACTION: CONTACT_FRONT_DESK (if guest explicitly wants to speak to a person or the front desk)
-  ACTION: GET_TIME (if guest asks for the current time)
-  ACTION: GET_WEATHER (if guest asks for the current weather)
+Rules:
+- Never output ANSWER, HANDOFF, NOT_RELEVANT, or ACTION in the guest-visible reply line.
+- Do NOT invent weather or time values. For weather/time questions, keep the reply generic and add ACTION: GET_WEATHER or ACTION: GET_TIME.
+- Only use service ACTIONs (MAINTENANCE, ROOM_SERVICE, HOUSEKEEPING) when the guest is asking to create or route a service request.
+- For informational questions (amenities, directions, explanations), do not add service ACTIONs.
+- Short follow-ups like "okay", "i see", "got it", and "thanks" should stay relevant and never be classified as NOT_RELEVANT when they refer to the ongoing hotel conversation.
 """
     if hotel_context:
         base += f"\nHotel knowledge:\n{hotel_context}\n"
-    base += "\nPut NOT_RELEVANT or HANDOFF on the first line by itself when applicable. For ANSWER, put ANSWER on the first line, then your reply, then optionally an ACTION line."
+    base += "\nPut NOT_RELEVANT or HANDOFF on the first line by itself when applicable. For ANSWER, use exactly: line 1 ANSWER, line 2 reply, optional line 3 ACTION."
     return base
 
 
@@ -245,20 +260,98 @@ class LLMService:
     async def _fetch_weather(self, location: str = "Edmonton") -> str:
         """Fetch current weather using wttr.in (no API key required)."""
         try:
-            # Lowered timeout to 1.5 seconds so it doesn't hang the chat
+            encoded_location = quote((location or "").strip() or settings.default_weather_location)
             async with httpx.AsyncClient(timeout=1.5) as client:
-                # %C gets the condition (e.g., Clear), %t gets the temp
-                response = await client.get(f"https://wttr.in/{location}?format=%C,+%t")
+                response = await client.get(f"https://wttr.in/{encoded_location}?format=%C,+%t")
                 response.raise_for_status()
-                return response.text.strip()
+                weather = response.text.strip()
+                if not weather or "Unknown location" in weather:
+                    return "currently unavailable"
+                return weather
         except Exception as e:
             logger.error("Failed to fetch weather: %s", e)
-            return "Currently unavailable"
+            return "currently unavailable"
+
+    def _extract_weather_location(self, user_message: str) -> str:
+        """Extract weather location from the message, with a hotel-config default fallback."""
+        default_location = (settings.default_weather_location or "").strip()
+        if not default_location:
+            hotel_context = _load_hotel_knowledge()
+            for pattern in (
+                r"(?im)^\s*city\s*:\s*([a-zA-Z][a-zA-Z\s\-']{1,60})\s*$",
+                r"(?im)^\s*location\s*:\s*([a-zA-Z][a-zA-Z\s\-']{1,60})\s*$",
+            ):
+                match = re.search(pattern, hotel_context)
+                if match:
+                    default_location = match.group(1).strip()
+                    break
+        default_location = default_location or "Edmonton"
+        message = (user_message or "").strip()
+        match = re.search(r"(?:weather\s+(?:in|for)|in)\s+([a-zA-Z][a-zA-Z\s\-']{1,60})\??$", message, flags=re.I)
+        if not match:
+            return default_location
+        location = re.sub(r"\s+", " ", match.group(1)).strip(" ?.,!")
+        return location or default_location
+
+    def _build_time_message(self) -> str:
+        """Build a formatted current-time message in hotel timezone."""
+        tz_name = (settings.hotel_timezone or "").strip()
+        try:
+            tz = ZoneInfo(tz_name) if tz_name else datetime.now().astimezone().tzinfo
+        except Exception:
+            tz = datetime.now().astimezone().tzinfo
+            tz_name = ""
+        now = datetime.now(tz)
+        suffix = f" ({tz_name})" if tz_name else ""
+        return f"The current time is {now.strftime('%I:%M %p')}{suffix}."
+
+    async def _build_weather_message(self, user_message: str) -> str:
+        """Build weather message with extracted or configured location."""
+        location = self._extract_weather_location(user_message)
+        weather = await self._fetch_weather(location)
+        if weather == "currently unavailable":
+            return f"I'm sorry, I couldn't fetch live weather for {location} right now."
+        return f"The weather in {location} is {weather}."
+
+    @staticmethod
+    def _sanitize_guest_text(text: str) -> str:
+        """Remove protocol markers and collapse extra blank lines for guest-facing output."""
+        cleaned = (text or "").strip()
+        if not cleaned:
+            return ""
+        cleaned = re.sub(r"^\s*(?:ANSWER|HANDOFF|NOT_RELEVANT)\s*:?\s*", "", cleaned, flags=re.I)
+        lines: List[str] = []
+        for line in cleaned.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                if lines and lines[-1] != "":
+                    lines.append("")
+                continue
+            if re.match(r"^(?:ANSWER|HANDOFF|NOT_RELEVANT)\b", stripped, flags=re.I):
+                continue
+            if re.match(r"^ACTION\s*:", stripped, flags=re.I):
+                continue
+            lines.append(stripped)
+        return "\n".join(lines).strip()
+
+    @staticmethod
+    def _contains_deferral_phrase(text: str) -> bool:
+        """Detect phrases that imply a promised follow-up message."""
+        lowered = (text or "").lower()
+        return any(re.search(pattern, lowered) for pattern in _DEFERRAL_PATTERNS)
+
+    @staticmethod
+    def _build_ticket_summary(action_type: str, issue_summary: str, user_message: str) -> str:
+        """Create a ticket summary with user detail when model omits detail."""
+        if issue_summary.strip():
+            return issue_summary.strip()
+        normalized_action = action_type.replace("_", " ").strip().lower()
+        return f"{normalized_action}: {(user_message or '').strip()[:200]}"
 
     def _parse_action_from_content(self, content: str) -> Tuple[str, Optional[Tuple[str, str]]]:
         """Strip ACTION: line and leading ANSWER line from content; return (clean_text, (action_type, issue_summary) or None)."""
         action: Optional[Tuple[str, str]] = None
-        lines = content.split("\n")
+        lines = (content or "").split("\n")
         kept = []
         for line in lines:
             stripped = line.strip()
@@ -272,12 +365,7 @@ class LLMService:
             else:
                 kept.append(line)
         clean = "\n".join(kept).strip()
-        if clean.upper().startswith("ANSWER"):
-            first_newline = clean.find("\n")
-            if first_newline != -1:
-                clean = clean[first_newline + 1 :].strip()
-            else:
-                clean = ""
+        clean = self._sanitize_guest_text(clean)
         return (clean, action)
 
     async def _call_small_model(
@@ -308,19 +396,7 @@ class LLMService:
                     if "HANDOFF" in first_line or content.upper().startswith("HANDOFF"):
                         return ("", "handoff", None)
                 clean_text, action = self._parse_action_from_content(content)
-                    
-                if action:
-                        action_type, issue = action
-                        if action_type == "GET_GUEST_INFO" and guest_id:
-                            db = get_database()
-                            guest = db.get_guest(guest_id)
-                            if guest:
-                                info = f"(Guest Info - Name: {guest.name}, Room: {guest.room_number}, Membership: {guest.membership_tier or 'Standard'})"
-                                clean_text += f"\n{info}"
-                    
-                if not clean_text and action and action[0] not in ("GET_GUEST_INFO", "GET_TIME", "GET_WEATHER", "CONTACT_FRONT_DESK"):
-                        clean_text = "I've logged your request. Our team will follow up shortly."
-                return (clean_text or content, "answer", action)
+                return (clean_text, "answer", action)
             except httpx.HTTPStatusError as e:
                 last_http_error = e
                 body = (e.response.text or "")[:300]
@@ -391,6 +467,82 @@ class LLMService:
                 body,
             )
         return "Something went wrong. Please try again or contact the front desk directly."
+
+    async def _build_small_model_segments(
+        self,
+        user_message: str,
+        clean_text: str,
+        action: Optional[Tuple[str, str]],
+        guest_id: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """Build one or more guest-facing assistant messages from parsed model output."""
+        segments: List[Dict[str, Any]] = []
+        text = self._sanitize_guest_text(clean_text)
+        if action is None:
+            fallback = text or "I'm sorry, I didn't catch that. Could you rephrase that for me?"
+            if self._contains_deferral_phrase(fallback):
+                return [
+                    {"content": fallback, "require_contact_confirmation": False},
+                    {"content": "Thanks for waiting. Could you share a little more detail so I can help right away?", "require_contact_confirmation": False},
+                ]
+            return [{"content": fallback, "require_contact_confirmation": False}]
+
+        action_type, issue_summary = action
+        require_contact = action_type == "CONTACT_FRONT_DESK"
+
+        follow_up: Optional[str] = None
+        if action_type == "GET_WEATHER":
+            follow_up = await self._build_weather_message(user_message)
+            if self._contains_deferral_phrase(text) and text:
+                segments.append({"content": text, "require_contact_confirmation": False})
+            segments.append({"content": follow_up, "require_contact_confirmation": False})
+            return segments
+
+        if action_type == "GET_TIME":
+            follow_up = self._build_time_message()
+            if self._contains_deferral_phrase(text) and text:
+                segments.append({"content": text, "require_contact_confirmation": False})
+            segments.append({"content": follow_up, "require_contact_confirmation": False})
+            return segments
+
+        if action_type == "GET_GUEST_INFO":
+            if guest_id:
+                guest = get_database().get_guest(guest_id)
+                if guest:
+                    follow_up = (
+                        f"Your profile shows: Name {guest.name}, Room {guest.room_number}, "
+                        f"Membership {guest.membership_tier or 'Standard'}."
+                    )
+                else:
+                    follow_up = "I couldn't find your guest profile details right now."
+            else:
+                follow_up = "I can share your guest details once your profile is linked in this chat."
+            if self._contains_deferral_phrase(text) and text:
+                segments.append({"content": text, "require_contact_confirmation": False})
+            segments.append({"content": follow_up, "require_contact_confirmation": False})
+            return segments
+
+        if guest_id and action_type not in ("CONTACT_FRONT_DESK",):
+            issue = self._build_ticket_summary(action_type, issue_summary, user_message)
+            try:
+                get_database().create_ticket(guest_id, issue)
+            except Exception as e:
+                logger.exception("Ticket creation error: %s", e)
+
+        if not text:
+            text = "I've logged your request. Our team will follow up shortly."
+
+        segments.append({"content": text, "require_contact_confirmation": require_contact})
+        if self._contains_deferral_phrase(text):
+            issue_label = issue_summary.strip() or user_message.strip()[:120]
+            confirmation = f"I've logged your {action_type.replace('_', ' ').lower()} request"
+            if issue_label:
+                confirmation += f": {issue_label}."
+            else:
+                confirmation += "."
+            if confirmation.lower() != text.lower():
+                segments.append({"content": confirmation, "require_contact_confirmation": require_contact})
+        return segments
     
     async def generate_response(
         self,
@@ -399,47 +551,37 @@ class LLMService:
         conversation_history: Optional[List[Dict[str, str]]] = None,
         images: Optional[List[str]] = None,
         guest_id: Optional[str] = None,
-    ) -> Tuple[str, bool]:
-        """Generate a response: Python intent first, then small model, then large if handoff."""
+    ) -> List[Dict[str, Any]]:
+        """Generate one or more assistant messages for a user prompt."""
         
         if not await rate_limiter.wait_and_acquire():
-            return "I'm currently experiencing high demand. Please try again in a moment.", False
+            return [{"content": "I'm currently experiencing high demand. Please try again in a moment.", "require_contact_confirmation": False}]
         
         if context == ConversationContext.FRONT_DESK_AGENT:
-            return "Your message has been sent to the front desk. They will respond shortly.", False
+            return [{"content": "Your message has been sent to the front desk. They will respond shortly.", "require_contact_confirmation": False}]
         
         # 1. Python intent
         generic = self._get_intent_response(user_message, conversation_history)
         if generic is not None:
             if generic == CLOSING_AFTER_NO:
-                return generic, False
-            return generic + SATISFACTION_SUFFIX, False
+                return [{"content": generic, "require_contact_confirmation": False}]
+            if generic in (HELLO_RESPONSE, ACKNOWLEDGMENT_RESPONSE, THANKS_RESPONSE):
+                return [{"content": generic, "require_contact_confirmation": False}]
+            return [{"content": generic + SATISFACTION_SUFFIX, "require_contact_confirmation": False}]
         
         # 2. No API key: keyword intents only; otherwise rotating offline copy
         if not self.api_key:
-            return self._no_api_key_fallback_text(user_message), False
+            return [{"content": self._no_api_key_fallback_text(user_message), "require_contact_confirmation": False}]
         
         # 3. Small model
         small_text, outcome, action = await self._call_small_model(user_message, conversation_history, images, guest_id)
         if outcome == "non_answer":
-            return small_text, False
+            return [{"content": small_text, "require_contact_confirmation": False}]
         if outcome == "handoff":
             large_text = await self._call_large_model(user_message, conversation_history, images)
-            return large_text, False
-            
-        require_contact = False
-        if outcome == "answer" and action:
-            action_type, issue_summary = action
-            if action_type == "CONTACT_FRONT_DESK":
-                require_contact = True
-            elif guest_id and action_type not in ("GET_TIME", "GET_WEATHER"):
-                issue = issue_summary or f"{action_type} request: {user_message[:200]}"
-                try:
-                    get_database().create_ticket(guest_id, issue)
-                except Exception as e:
-                    logger.exception("Ticket creation error: %s", e)
-                    
-        return small_text, require_contact
+            return [{"content": self._sanitize_guest_text(large_text), "require_contact_confirmation": False}]
+
+        return await self._build_small_model_segments(user_message, small_text, action, guest_id)
     
     async def generate_stream(
         self,
@@ -463,7 +605,10 @@ class LLMService:
         
         generic = self._get_intent_response(user_message, conversation_history)
         if generic is not None:
-            full = generic if generic == CLOSING_AFTER_NO else generic + SATISFACTION_SUFFIX
+            if generic in (CLOSING_AFTER_NO, HELLO_RESPONSE, ACKNOWLEDGMENT_RESPONSE, THANKS_RESPONSE):
+                full = generic
+            else:
+                full = generic + SATISFACTION_SUFFIX
             for word in full.split():
                 yield word + " "
                 await asyncio.sleep(0.05)
@@ -477,13 +622,30 @@ class LLMService:
             return
         
         small_text, outcome, action = await self._call_small_model(user_message, conversation_history, images, guest_id)
-        if outcome == "answer" and action and guest_id:
+        if outcome == "answer" and action:
             action_type, issue_summary = action
-            issue = issue_summary or f"{action_type} request: {user_message[:200]}"
-            try:
-                get_database().create_ticket(guest_id, issue)
-            except Exception as e:
-                logger.exception("Ticket creation error: %s", e)
+            if action_type == "GET_WEATHER":
+                small_text = await self._build_weather_message(user_message)
+            elif action_type == "GET_TIME":
+                small_text = self._build_time_message()
+            elif action_type == "GET_GUEST_INFO":
+                if guest_id:
+                    guest = get_database().get_guest(guest_id)
+                    if guest:
+                        small_text = (
+                            f"Your profile shows: Name {guest.name}, Room {guest.room_number}, "
+                            f"Membership {guest.membership_tier or 'Standard'}."
+                        )
+                    else:
+                        small_text = "I couldn't find your guest profile details right now."
+                else:
+                    small_text = "I can share your guest details once your profile is linked in this chat."
+            elif guest_id and action_type != "CONTACT_FRONT_DESK":
+                issue = self._build_ticket_summary(action_type, issue_summary, user_message)
+                try:
+                    get_database().create_ticket(guest_id, issue)
+                except Exception as e:
+                    logger.exception("Ticket creation error: %s", e)
         if outcome == "non_answer":
             for word in small_text.split():
                 yield word + " "
@@ -495,7 +657,8 @@ class LLMService:
                 yield word + " "
                 await asyncio.sleep(0.05)
             return
-        for word in small_text.split():
+        final_text = self._sanitize_guest_text(small_text) or "I'm sorry, I didn't catch that. Could you rephrase that for me?"
+        for word in final_text.split():
             yield word + " "
             await asyncio.sleep(0.05)
     
@@ -507,6 +670,8 @@ class LLMService:
         """
         message_lower = user_message.lower().strip()
         words = set(re.findall(r"\b\w+\b", message_lower))
+        if message_lower in {"ok", "okay", "i see", "got it", "understood", "alright"} and conversation_history:
+            return ACKNOWLEDGMENT_RESPONSE
         # Follow-up "No": last assistant asked satisfaction and user said no → end turn (closing message)
         if conversation_history:
             hist = conversation_history[-10:]
@@ -542,8 +707,10 @@ class LLMService:
             return "Checkout is at 11 AM. Would you like a late checkout? I can check availability for you."
         if words & {"pool", "gym", "fitness", "spa", "swim"}:
             return "The pool and fitness center are on the 3rd floor, open 6 AM - 10 PM. Towels are provided at the entrance."
+        if re.fullmatch(r"(?:hi[\W_]*){2,}", message_lower):
+            return HELLO_RESPONSE
         if words & {"help", "hi", "hello", "hey", "greetings"}:
-            return "Hello! I'm Mage, your hotel assistant. I can help with room service, amenities, local recommendations, or any questions about your stay. What can I do for you?"
+            return HELLO_RESPONSE
         if words & {"problem", "issue", "broken", "maintenance"} or ("not" in words and "working" in words):
             return "I'm sorry to hear that. Can you describe the issue? I'll make sure the right team is notified to help you."
         if words & {"parking", "park", "car", "valet"}:
@@ -588,7 +755,7 @@ class LLMService:
         if words & {"concierge", "directions"} or "nearby" in message_lower:
             return "Our concierge can help with maps, directions, and local reservations—visit the front desk or dial 0."
         if "thank" in message_lower or words & {"thanks", "thx"}:
-            return "You're welcome! Let me know if you need anything else during your stay."
+            return THANKS_RESPONSE
         if words & {"amenities", "amenity"}:
             return "Common amenities include Wi-Fi, fitness, pool, dining, parking, and housekeeping—what would you like details on?"
         # No match → small model (or offline fallback if no API key)
@@ -598,7 +765,7 @@ class LLMService:
         """Legacy: mock response when no API key. Uses intent layer; if no match, single fallback."""
         generic = self._get_intent_response(user_message, None)
         if generic is not None:
-            if generic == CLOSING_AFTER_NO:
+            if generic in (CLOSING_AFTER_NO, HELLO_RESPONSE, ACKNOWLEDGMENT_RESPONSE, THANKS_RESPONSE):
                 return generic
             return generic + SATISFACTION_SUFFIX
         return self._no_api_key_fallback_text(user_message)

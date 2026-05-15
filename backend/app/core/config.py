@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     # Hotel context for small model (Option 3: hotel-specific prompt + knowledge)
     hotel_name: str = os.getenv("HOTEL_NAME", "Mage Hotel")
     hotel_knowledge_path: str = os.getenv("HOTEL_KNOWLEDGE_PATH", "")
+    default_weather_location: str = os.getenv("DEFAULT_WEATHER_LOCATION", "Edmonton")
+    hotel_timezone: str = os.getenv("HOTEL_TIMEZONE", "America/Edmonton")
     
     class Config:
         env_file = ".env"
