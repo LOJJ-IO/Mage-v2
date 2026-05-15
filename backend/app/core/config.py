@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     hotel_knowledge_path: str = os.getenv("HOTEL_KNOWLEDGE_PATH", "")
     default_weather_location: str = os.getenv("DEFAULT_WEATHER_LOCATION", "Edmonton")
     hotel_timezone: str = os.getenv("HOTEL_TIMEZONE", "America/Edmonton")
+
+    staff_access_key: str = os.getenv("STAFF_ACCESS_KEY", "mage-staff-dev")
     
     class Config:
         env_file = ".env"
