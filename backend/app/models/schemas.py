@@ -59,6 +59,11 @@ class Message(BaseModel):
     require_contact_confirmation: Optional[bool] = None
 
 
+class ChatMessageResponse(BaseModel):
+    """Chat response model with one or more assistant messages."""
+    messages: List[Message]
+
+
 class GuestProfile(BaseModel):
     """Guest profile model."""
     id: str

@@ -1,6 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
-import { ConversationContext, Ticket, GuestProfile, Message } from '@/types';
+import { ConversationContext, Ticket, GuestProfile, Message, ChatMessageResponse } from '@/types';
 import { useMageStore } from '@/store/mageStore';
 
 // Query keys
@@ -42,7 +42,6 @@ export function useAgentAvailability() {
 
 // Send message mutation
 export function useSendMessage() {
-  const queryClient = useQueryClient();
   const { addMessage, context, guestProfile } = useMageStore();
 
   return useMutation({
@@ -74,12 +73,19 @@ export function useSendMessage() {
       return response.data;
     },
     onSuccess: (data) => {
-      addMessage({
-        role: 'assistant',
-        content: data.content,
-        requireContactConfirmation: (data as Message & { require_contact_confirmation?: boolean })
-          .require_contact_confirmation,
-      });
+      const payload = data as ChatMessageResponse & Message & { require_contact_confirmation?: boolean };
+      const messages = Array.isArray(payload.messages) && payload.messages.length > 0
+        ? payload.messages
+        : [payload as unknown as Message];
+
+      for (const assistantMessage of messages) {
+        addMessage({
+          role: 'assistant',
+          content: assistantMessage.content,
+          requireContactConfirmation: (assistantMessage as Message & { require_contact_confirmation?: boolean })
+            .require_contact_confirmation ?? assistantMessage.requireContactConfirmation,
+        });
+      }
     },
     onError: (error) => {
       const detail =

@@ -6,6 +6,7 @@ import json
 
 from app.models.schemas import (
     ChatMessageRequest,
+    ChatMessageResponse,
     Message,
     MessageRole,
     ConversationContext,
@@ -16,7 +17,7 @@ from app.services.database import get_database
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
-@router.post("/message", response_model=Message)
+@router.post("/message", response_model=ChatMessageResponse)
 async def send_message(request: ChatMessageRequest):
     """Send a message and get a response."""
     
@@ -33,34 +34,46 @@ async def send_message(request: ChatMessageRequest):
             request.content
         )
     
-    require_contact = False
+    assistant_segments = []
     # FRONT_DESK_AGENT: human-only chat, no LLM or intent pipeline
     if request.conversation_context == ConversationContext.FRONT_DESK_AGENT:
-        response_content = "Your message has been sent to the front desk. They will respond shortly."
+        assistant_segments = [
+            {
+                "content": "Your message has been sent to the front desk. They will respond shortly.",
+                "require_contact_confirmation": False,
+            }
+        ]
     else:
-        response_content, require_contact = await llm_service.generate_response(
+        assistant_segments = await llm_service.generate_response(
             user_message=request.content,
             context=request.conversation_context,
             conversation_history=conversation_history,
             images=request.images,
             guest_id=request.guest_id,
         )
-    
-    # Add assistant response to history
-    if request.guest_id:
-        db.add_message_to_conversation(
-            request.guest_id,
-            "assistant",
-            response_content
+
+    response_messages = []
+    for segment in assistant_segments:
+        content = (segment.get("content") or "").strip()
+        if not content:
+            continue
+        if request.guest_id:
+            db.add_message_to_conversation(
+                request.guest_id,
+                "assistant",
+                content
+            )
+        response_messages.append(
+            Message(
+                id=f"msg-{uuid.uuid4().hex[:8]}",
+                role=MessageRole.ASSISTANT,
+                content=content,
+                timestamp=datetime.utcnow(),
+                require_contact_confirmation=bool(segment.get("require_contact_confirmation", False)),
+            )
         )
-    
-    return Message(
-        id=f"msg-{uuid.uuid4().hex[:8]}",
-        role=MessageRole.ASSISTANT,
-        content=response_content,
-        timestamp=datetime.utcnow(),
-        require_contact_confirmation=require_contact
-    )
+
+    return ChatMessageResponse(messages=response_messages)
 
 
 @router.post("/stream")
