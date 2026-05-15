@@ -1,4 +1,28 @@
-import { Message, Ticket, GuestProfile, TranscriptionResponse, ConversationContext, ApiResponse, ChatMessageResponse } from '@/types';
+import {
+  Message,
+  Ticket,
+  GuestProfile,
+  TranscriptionResponse,
+  ConversationContext,
+  ApiResponse,
+  ChatMessageResponse,
+  StaffAction,
+  StaffActionStatus,
+} from '@/types';
+
+function mapStaffAction(raw: Record<string, unknown>): StaffAction {
+  return {
+    id: String(raw.id),
+    guestId: String(raw.guest_id),
+    actionType: raw.action_type as StaffAction['actionType'],
+    summary: String(raw.summary),
+    sourceMessage: String(raw.source_message),
+    status: raw.status as StaffActionStatus,
+    createdAt: String(raw.created_at),
+    guestName: raw.guest_name != null ? String(raw.guest_name) : undefined,
+    roomNumber: raw.room_number != null ? String(raw.room_number) : undefined,
+  };
+}
 
 /**
  * When unset, requests use same-origin `/api/...` (see next.config.js rewrites → FastAPI).
@@ -30,16 +54,21 @@ class ApiClient {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    staffKey?: string
   ): Promise<ApiResponse<T>> {
     try {
       const url = `${this.baseUrl}${endpoint}`;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(options.headers as Record<string, string>),
+      };
+      if (staffKey) {
+        headers['X-Staff-Key'] = staffKey;
+      }
       const response = await fetch(url, {
         ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
+        headers,
       });
 
       if (!response.ok) {
@@ -244,6 +273,56 @@ class ApiClient {
   // Health check
   async healthCheck(): Promise<ApiResponse<{ status: string }>> {
     return this.request<{ status: string }>('/api/health');
+  }
+
+  // Staff inbox
+  async listStaffActions(
+    staffKey: string,
+    status?: StaffActionStatus
+  ): Promise<ApiResponse<StaffAction[]>> {
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    const qs = params.toString();
+    const result = await this.request<Record<string, unknown>[]>(
+      `/api/staff/actions${qs ? `?${qs}` : ''}`,
+      {},
+      staffKey
+    );
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    return { success: true, data: result.data.map(mapStaffAction) };
+  }
+
+  async getStaffAction(staffKey: string, actionId: string): Promise<ApiResponse<StaffAction>> {
+    const result = await this.request<Record<string, unknown>>(
+      `/api/staff/actions/${actionId}`,
+      {},
+      staffKey
+    );
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    return { success: true, data: mapStaffAction(result.data) };
+  }
+
+  async updateStaffAction(
+    staffKey: string,
+    actionId: string,
+    status: StaffActionStatus
+  ): Promise<ApiResponse<StaffAction>> {
+    const result = await this.request<Record<string, unknown>>(
+      `/api/staff/actions/${actionId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      },
+      staffKey
+    );
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    return { success: true, data: mapStaffAction(result.data) };
   }
 }
 

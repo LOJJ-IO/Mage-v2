@@ -179,3 +179,27 @@ export interface StateHistoryEntry {
   inputText?: string;
   recording?: RecordingState;
 }
+
+// Staff inbox
+export type StaffStateId = 'S-S-001' | 'S-S-002' | 'S-S-003';
+
+export type ActionType =
+  | 'MAINTENANCE'
+  | 'ROOM_SERVICE'
+  | 'HOUSEKEEPING'
+  | 'CONTACT_FRONT_DESK'
+  | 'HANDOFF';
+
+export type StaffActionStatus = 'pending' | 'acknowledged' | 'resolved';
+
+export interface StaffAction {
+  id: string;
+  guestId: string;
+  actionType: ActionType;
+  summary: string;
+  sourceMessage: string;
+  status: StaffActionStatus;
+  createdAt: string;
+  guestName?: string;
+  roomNumber?: string;
+}

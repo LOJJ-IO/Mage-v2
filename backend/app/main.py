@@ -7,7 +7,7 @@ from datetime import datetime
 
 from app.core.config import get_settings
 from app.models.schemas import HealthResponse
-from app.api import chat, tickets, guests, agents, transcription
+from app.api import chat, tickets, guests, agents, transcription, staff
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -71,6 +71,7 @@ app.include_router(tickets.router, prefix=settings.api_prefix)
 app.include_router(guests.router, prefix=settings.api_prefix)
 app.include_router(agents.router, prefix=settings.api_prefix)
 app.include_router(transcription.router, prefix=settings.api_prefix)
+app.include_router(staff.router, prefix=settings.api_prefix)
 
 
 @app.get("/")

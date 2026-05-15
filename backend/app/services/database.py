@@ -1,7 +1,15 @@
 from datetime import datetime, timedelta
 from typing import Dict, Optional, List, Protocol
 from pydantic import ValidationError
-from app.models.schemas import GuestProfile, Ticket, TicketStatus, ConversationContext
+from app.models.schemas import (
+    GuestProfile,
+    Ticket,
+    TicketStatus,
+    ConversationContext,
+    StaffAction,
+    StaffActionStatus,
+    ActionType,
+)
 from app.core.config import get_settings
 from functools import lru_cache
 import uuid
@@ -81,6 +89,37 @@ class DatabaseProtocol(Protocol):
         """Clear conversation history for a guest."""
         ...
 
+    # Staff action inbox
+    def log_staff_action(
+        self,
+        guest_id: str,
+        action_type: ActionType,
+        summary: str,
+        source_message: str,
+    ) -> StaffAction:
+        """Log a chatbot-flagged action for staff."""
+        ...
+
+    def list_staff_actions(
+        self,
+        limit: int = 50,
+        status: Optional[StaffActionStatus] = None,
+    ) -> List[StaffAction]:
+        """List staff actions, newest first."""
+        ...
+
+    def get_staff_action(self, action_id: str) -> Optional[StaffAction]:
+        """Get a staff action by ID."""
+        ...
+
+    def update_staff_action_status(
+        self,
+        action_id: str,
+        status: StaffActionStatus,
+    ) -> Optional[StaffAction]:
+        """Update staff action status."""
+        ...
+
 
 class MockDatabase:
     """Mock database for development/testing."""
@@ -113,7 +152,8 @@ class MockDatabase:
         }
         
         self.tickets: Dict[str, Ticket] = {}
-        
+        self.staff_actions: Dict[str, StaffAction] = {}
+
         # Simulated agent availability
         self.human_agent_available = False
         self.ai_agent_available = True
@@ -233,6 +273,54 @@ class MockDatabase:
     def clear_conversation(self, guest_id: str):
         """Clear conversation history for a guest."""
         self.conversations[guest_id] = []
+
+    def log_staff_action(
+        self,
+        guest_id: str,
+        action_type: ActionType,
+        summary: str,
+        source_message: str,
+    ) -> StaffAction:
+        action_id = f"ACT-{uuid.uuid4().hex[:8].upper()}"
+        guest = self.get_guest(guest_id)
+        action = StaffAction(
+            id=action_id,
+            guest_id=guest_id,
+            action_type=action_type,
+            summary=summary,
+            source_message=source_message,
+            status=StaffActionStatus.PENDING,
+            created_at=datetime.utcnow(),
+            guest_name=guest.name if guest else None,
+            room_number=guest.room_number if guest else None,
+        )
+        self.staff_actions[action_id] = action
+        return action
+
+    def list_staff_actions(
+        self,
+        limit: int = 50,
+        status: Optional[StaffActionStatus] = None,
+    ) -> List[StaffAction]:
+        actions = list(self.staff_actions.values())
+        if status is not None:
+            actions = [a for a in actions if a.status == status]
+        actions.sort(key=lambda a: a.created_at, reverse=True)
+        return actions[:limit]
+
+    def get_staff_action(self, action_id: str) -> Optional[StaffAction]:
+        return self.staff_actions.get(action_id)
+
+    def update_staff_action_status(
+        self,
+        action_id: str,
+        status: StaffActionStatus,
+    ) -> Optional[StaffAction]:
+        action = self.staff_actions.get(action_id)
+        if not action:
+            return None
+        action.status = status
+        return action
 
 
 class SupabaseDatabase:
@@ -469,6 +557,78 @@ class SupabaseDatabase:
         except Exception as e:
             logger.error(f"Error clearing conversation for guest {guest_id}: {e}")
             raise
+
+    def log_staff_action(
+        self,
+        guest_id: str,
+        action_type: ActionType,
+        summary: str,
+        source_message: str,
+    ) -> StaffAction:
+        try:
+            guest = self.get_guest(guest_id)
+            row = {
+                "id": f"ACT-{uuid.uuid4().hex[:8].upper()}",
+                "guest_id": guest_id,
+                "action_type": action_type.value,
+                "summary": summary,
+                "source_message": source_message,
+                "status": StaffActionStatus.PENDING.value,
+                "created_at": datetime.utcnow().isoformat(),
+                "guest_name": guest.name if guest else None,
+                "room_number": guest.room_number if guest else None,
+            }
+            response = self.client.table("staff_actions").insert(row).execute()
+            if response.data:
+                return StaffAction(**response.data[0])
+            return StaffAction(**row)
+        except Exception as e:
+            logger.error(f"Error logging staff action: {e}")
+            raise
+
+    def list_staff_actions(
+        self,
+        limit: int = 50,
+        status: Optional[StaffActionStatus] = None,
+    ) -> List[StaffAction]:
+        try:
+            query = self.client.table("staff_actions").select("*").order("created_at", desc=True).limit(limit)
+            if status is not None:
+                query = query.eq("status", status.value)
+            response = query.execute()
+            return [StaffAction(**row) for row in (response.data or [])]
+        except Exception as e:
+            logger.error(f"Error listing staff actions: {e}")
+            return []
+
+    def get_staff_action(self, action_id: str) -> Optional[StaffAction]:
+        try:
+            response = self.client.table("staff_actions").select("*").eq("id", action_id).execute()
+            if response.data:
+                return StaffAction(**response.data[0])
+            return None
+        except Exception as e:
+            logger.error(f"Error getting staff action {action_id}: {e}")
+            return None
+
+    def update_staff_action_status(
+        self,
+        action_id: str,
+        status: StaffActionStatus,
+    ) -> Optional[StaffAction]:
+        try:
+            response = (
+                self.client.table("staff_actions")
+                .update({"status": status.value})
+                .eq("id", action_id)
+                .execute()
+            )
+            if response.data:
+                return StaffAction(**response.data[0])
+            return None
+        except Exception as e:
+            logger.error(f"Error updating staff action {action_id}: {e}")
+            return None
 
 
 @lru_cache()

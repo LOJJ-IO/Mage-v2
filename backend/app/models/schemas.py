@@ -25,6 +25,22 @@ class TicketStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class ActionType(str, Enum):
+    """Chatbot-flagged action types for staff inbox."""
+    MAINTENANCE = "MAINTENANCE"
+    ROOM_SERVICE = "ROOM_SERVICE"
+    HOUSEKEEPING = "HOUSEKEEPING"
+    CONTACT_FRONT_DESK = "CONTACT_FRONT_DESK"
+    HANDOFF = "HANDOFF"
+
+
+class StaffActionStatus(str, Enum):
+    """Staff inbox item status."""
+    PENDING = "pending"
+    ACKNOWLEDGED = "acknowledged"
+    RESOLVED = "resolved"
+
+
 # Request models
 class ChatMessageRequest(BaseModel):
     """Request model for sending a chat message."""
@@ -46,6 +62,11 @@ class UpdateTicketRequest(BaseModel):
     issue: Optional[str] = None
     assigned_to: Optional[str] = None
     assigned_type: Optional[ConversationContext] = None
+
+
+class UpdateStaffActionRequest(BaseModel):
+    """Request model for updating a staff action."""
+    status: StaffActionStatus
 
 
 # Response models
@@ -87,6 +108,19 @@ class Ticket(BaseModel):
     resolved_at: Optional[datetime] = None
     assigned_to: Optional[str] = None
     assigned_type: Optional[ConversationContext] = None
+
+
+class StaffAction(BaseModel):
+    """Staff inbox item logged from chatbot actions."""
+    id: str
+    guest_id: str
+    action_type: ActionType
+    summary: str
+    source_message: str
+    status: StaffActionStatus = StaffActionStatus.PENDING
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    guest_name: Optional[str] = None
+    room_number: Optional[str] = None
 
 
 class AgentAvailability(BaseModel):

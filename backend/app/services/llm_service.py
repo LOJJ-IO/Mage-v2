@@ -10,11 +10,38 @@ from collections import deque
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 from app.core.config import get_settings
-from app.models.schemas import ConversationContext
+from app.models.schemas import ConversationContext, ActionType
 from app.services.database import get_database
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+STAFF_INBOX_ACTION_TYPES = frozenset({
+    "MAINTENANCE",
+    "ROOM_SERVICE",
+    "HOUSEKEEPING",
+    "CONTACT_FRONT_DESK",
+    "HANDOFF",
+})
+
+
+def _try_log_staff_action(
+    guest_id: Optional[str],
+    action_type: str,
+    summary: str,
+    source_message: str,
+) -> None:
+    if not guest_id or action_type not in STAFF_INBOX_ACTION_TYPES:
+        return
+    try:
+        get_database().log_staff_action(
+            guest_id=guest_id,
+            action_type=ActionType(action_type),
+            summary=summary,
+            source_message=source_message,
+        )
+    except Exception as e:
+        logger.exception("Staff action log error: %s", e)
 
 
 class RateLimiter:
@@ -522,12 +549,9 @@ class LLMService:
             segments.append({"content": follow_up, "require_contact_confirmation": False})
             return segments
 
-        if guest_id and action_type not in ("CONTACT_FRONT_DESK",):
-            issue = self._build_ticket_summary(action_type, issue_summary, user_message)
-            try:
-                get_database().create_ticket(guest_id, issue)
-            except Exception as e:
-                logger.exception("Ticket creation error: %s", e)
+        if guest_id and action_type in STAFF_INBOX_ACTION_TYPES:
+            summary = self._build_ticket_summary(action_type, issue_summary, user_message)
+            _try_log_staff_action(guest_id, action_type, summary, user_message)
 
         if not text:
             text = "I've logged your request. Our team will follow up shortly."
@@ -571,6 +595,32 @@ class LLMService:
         
         # 2. No API key: keyword intents only; otherwise rotating offline copy
         if not self.api_key:
+            if guest_id:
+                msg_lower = user_message.lower()
+                if any(
+                    k in msg_lower
+                    for k in ("shower", "broken", "leak", "maintenance", "not working", "repair", "plumbing")
+                ):
+                    _try_log_staff_action(
+                        guest_id,
+                        "MAINTENANCE",
+                        user_message.strip()[:200] or "Maintenance request",
+                        user_message,
+                    )
+                elif any(k in msg_lower for k in ("room service", "food order", "hungry", "order food")):
+                    _try_log_staff_action(
+                        guest_id,
+                        "ROOM_SERVICE",
+                        user_message.strip()[:200] or "Room service request",
+                        user_message,
+                    )
+                elif any(k in msg_lower for k in ("housekeeping", "clean", "towels", "sheets")):
+                    _try_log_staff_action(
+                        guest_id,
+                        "HOUSEKEEPING",
+                        user_message.strip()[:200] or "Housekeeping request",
+                        user_message,
+                    )
             return [{"content": self._no_api_key_fallback_text(user_message), "require_contact_confirmation": False}]
         
         # 3. Small model
@@ -578,6 +628,13 @@ class LLMService:
         if outcome == "non_answer":
             return [{"content": small_text, "require_contact_confirmation": False}]
         if outcome == "handoff":
+            if guest_id:
+                _try_log_staff_action(
+                    guest_id,
+                    "HANDOFF",
+                    user_message.strip()[:200] or "Guest request requires staff follow-up",
+                    user_message,
+                )
             large_text = await self._call_large_model(user_message, conversation_history, images)
             return [{"content": self._sanitize_guest_text(large_text), "require_contact_confirmation": False}]
 
@@ -640,12 +697,16 @@ class LLMService:
                         small_text = "I couldn't find your guest profile details right now."
                 else:
                     small_text = "I can share your guest details once your profile is linked in this chat."
-            elif guest_id and action_type != "CONTACT_FRONT_DESK":
-                issue = self._build_ticket_summary(action_type, issue_summary, user_message)
-                try:
-                    get_database().create_ticket(guest_id, issue)
-                except Exception as e:
-                    logger.exception("Ticket creation error: %s", e)
+            elif guest_id and action_type in STAFF_INBOX_ACTION_TYPES:
+                summary = self._build_ticket_summary(action_type, issue_summary, user_message)
+                _try_log_staff_action(guest_id, action_type, summary, user_message)
+        if outcome == "handoff" and guest_id:
+            _try_log_staff_action(
+                guest_id,
+                "HANDOFF",
+                user_message.strip()[:200] or "Guest request requires staff follow-up",
+                user_message,
+            )
         if outcome == "non_answer":
             for word in small_text.split():
                 yield word + " "
