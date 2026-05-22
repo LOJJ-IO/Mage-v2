@@ -38,3 +38,4 @@ Desktop.ini
 # Deploy / tooling
 .vercel
 frontend/.env.local
+backend/.env.local
