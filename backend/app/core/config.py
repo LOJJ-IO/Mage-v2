@@ -92,7 +92,11 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 60
     rate_limit_window: int = 60  # seconds
     
-    # Whisper settings (tiny | base | small | medium | large; tiny = smallest/fastest download)
+    # Transcription: auto | local | openai (auto = local if Whisper installed, else OpenAI on Vercel)
+    transcription_provider: str = os.getenv("TRANSCRIPTION_PROVIDER", "auto")
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    openai_transcription_model: str = os.getenv("OPENAI_TRANSCRIPTION_MODEL", "whisper-1")
+    # Local Whisper only (tiny | base | small | medium | large)
     whisper_model_size: str = os.getenv("WHISPER_MODEL_SIZE", "base")
     
     # Hotel context for small model (Option 3: hotel-specific prompt + knowledge)

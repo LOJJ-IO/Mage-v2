@@ -1,0 +1,21 @@
+# Python virtualenvs (can be multi-GB with torch)
+venv/
+.venv/
+**/.venv/
+**/venv/
+
+# Local caches and build artifacts
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+.git/
+
+# Dev-only Whisper stack (use requirements-local.txt locally)
+backend/requirements-local.txt
+
+# Tests (not needed at runtime)
+backend/tests/
