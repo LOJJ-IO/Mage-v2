@@ -39,3 +39,4 @@ Desktop.ini
 .vercel
 frontend/.env.local
 backend/.env.local
+.env*
