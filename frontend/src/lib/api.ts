@@ -14,6 +14,13 @@ import {
 import { mapApiMessage } from '@/lib/mapMessage';
 import { GUEST_CHAT_ERROR, toGuestFriendlyError } from '@/lib/guestErrors';
 
+/** Raw POST /api/chat/message payload (snake_case from FastAPI). */
+type ChatMessageApiPayload = {
+  messages: Record<string, unknown>[];
+  continue_task?: boolean;
+  task_message?: string | null;
+};
+
 function mapStaffAction(raw: Record<string, unknown>): StaffAction {
   return {
     id: String(raw.id),
@@ -168,7 +175,7 @@ class ApiClient {
     guestId?: string,
     taskContinuation?: boolean
   ): Promise<ApiResponse<ChatMessageResponse>> {
-    const res = await this.request<{ messages: Record<string, unknown>[] }>(
+    const res = await this.request<ChatMessageApiPayload>(
       '/api/chat/message',
       {
         method: 'POST',
