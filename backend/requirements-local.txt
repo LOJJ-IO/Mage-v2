@@ -1,0 +1,5 @@
+# Optional local speech-to-text (PyTorch + Whisper). NOT used on Vercel — too large for Lambda.
+# Install after base requirements: pip install -r requirements.txt -r requirements-local.txt
+openai-whisper>=20231117
+torch>=2.0.0
+torchaudio>=2.0.0

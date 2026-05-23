@@ -8,6 +8,7 @@ from datetime import datetime
 from app.core.config import get_settings
 from app.models.schemas import HealthResponse
 from app.api import chat, tickets, guests, agents, transcription, staff
+from app.services import transcription_service
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -22,16 +23,20 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load Whisper model on startup so first request isn't slow."""
-    logger.info("Loading Whisper model (%s)...", settings.whisper_model_size)
-    try:
-        await asyncio.to_thread(transcription.get_whisper_model)
-        logger.info("Whisper model loaded.")
-    except Exception as e:
-        logger.warning(
-            "Whisper model failed to load on startup: %s. Will retry on first /transcribe request.",
-            e,
-        )
+    """Preload local Whisper when configured; OpenAI API needs no warmup."""
+    provider = transcription_service.resolve_provider()
+    if provider == "local":
+        logger.info("Loading Whisper model (%s)...", settings.whisper_model_size)
+        try:
+            await asyncio.to_thread(transcription_service.preload_whisper_model)
+            logger.info("Whisper model loaded.")
+        except Exception as e:
+            logger.warning(
+                "Whisper model failed to load on startup: %s. Will retry on first /transcribe request.",
+                e,
+            )
+    else:
+        logger.info("Transcription provider: %s", provider)
     if not (settings.openrouter_api_key or "").strip():
         logger.warning(
             "OPENROUTER_API_KEY is not set. Chat uses keyword rules and offline fallbacks only; "
