@@ -1,11 +1,13 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
-import { ConversationContext, Ticket, GuestProfile, Message, ChatMessageResponse } from '@/types';
+import { toGuestFriendlyError } from '@/lib/guestErrors';
+import { ConversationContext, Ticket, GuestProfile, Message } from '@/types';
 import { useMageStore } from '@/store/mageStore';
 
 // Query keys
 export const queryKeys = {
   guestProfile: (guestId: string) => ['guest', guestId],
+  conversationHistory: (guestId: string) => ['chat', 'history', guestId],
   agentAvailability: ['agents', 'availability'],
   health: ['health'],
 };
@@ -40,6 +42,24 @@ export function useAgentAvailability() {
   });
 }
 
+export function useConversationHistory(guestId: string | undefined) {
+  const setMessages = useMageStore((s) => s.setMessages);
+
+  return useQuery({
+    queryKey: queryKeys.conversationHistory(guestId || ''),
+    queryFn: async () => {
+      const response = await apiClient.getConversationHistory(guestId!);
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to load history');
+      }
+      return response.data.messages;
+    },
+    enabled: !!guestId,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+}
+
 // Send message mutation
 export function useSendMessage() {
   const { addMessage, context, guestProfile } = useMageStore();
@@ -48,23 +68,28 @@ export function useSendMessage() {
     mutationFn: async ({
       content,
       images,
+      skipUserBubble,
+      taskContinuation,
     }: {
       content: string;
       images?: string[];
+      skipUserBubble?: boolean;
+      taskContinuation?: boolean;
     }) => {
-      // Add user message immediately
-      addMessage({
-        role: 'user',
-        content,
-        images,
-      });
+      if (!skipUserBubble) {
+        addMessage({
+          role: 'user',
+          content,
+          images,
+        });
+      }
 
-      // Send to API
       const response = await apiClient.sendMessage(
         content,
         context.conversationContext,
         images,
-        guestProfile?.id
+        guestProfile?.id,
+        taskContinuation ?? skipUserBubble
       );
 
       if (!response.success || !response.data) {
@@ -73,31 +98,83 @@ export function useSendMessage() {
       return response.data;
     },
     onSuccess: (data) => {
-      const payload = data as ChatMessageResponse & Message & { require_contact_confirmation?: boolean };
-      const messages = Array.isArray(payload.messages) && payload.messages.length > 0
-        ? payload.messages
-        : [payload as unknown as Message];
-
-      for (const assistantMessage of messages) {
+      const list = data.messages ?? [];
+      for (const m of list) {
         addMessage({
-          role: 'assistant',
-          content: assistantMessage.content,
-          requireContactConfirmation: (assistantMessage as Message & { require_contact_confirmation?: boolean })
-            .require_contact_confirmation ?? assistantMessage.requireContactConfirmation,
+          role: m.role,
+          content: m.content,
+          kind: m.kind,
+          intro: m.intro,
+          faqItems: m.faqItems,
+          triggerContent: m.triggerContent,
+          faqResolved: m.faqResolved,
+          requireContactConfirmation: m.requireContactConfirmation,
         });
       }
     },
     onError: (error) => {
-      const detail =
-        error instanceof Error ? error.message : 'Sorry, I encountered an error. Please try again.';
-      const hint =
-        detail === 'Failed to fetch' || (error instanceof Error && error.name === 'TypeError')
-          ? ' Check that the API is running. If you set NEXT_PUBLIC_API_URL to http://localhost:8000, remove it so the app uses the Next.js proxy to the backend.'
-          : '';
       addMessage({
         role: 'assistant',
-        content: `${detail}${hint}`,
+        content: toGuestFriendlyError(
+          error instanceof Error ? error.message : undefined
+        ),
       });
+    },
+  });
+}
+
+export function useFaqFeedback() {
+  const { addMessage, updateMessage, guestProfile } = useMageStore();
+
+  return useMutation({
+    mutationFn: async ({
+      helpful,
+      triggerContent,
+      faqTitles,
+      faqMessageId,
+      faqPanelMessageId,
+    }: {
+      helpful: boolean;
+      triggerContent: string;
+      faqTitles?: string[];
+      faqMessageId?: string;
+      faqPanelMessageId: string;
+    }) => {
+      if (!guestProfile?.id) {
+        throw new Error('No guest profile');
+      }
+      updateMessage(faqPanelMessageId, { faqResolved: helpful });
+      const response = await apiClient.sendFaqFeedback({
+        guestId: guestProfile.id,
+        helpful,
+        triggerContent,
+        faqTitles,
+        faqMessageId,
+      });
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to send feedback');
+      }
+      return response.data;
+    },
+    onSuccess: (data, variables) => {
+      for (const m of data.messages ?? []) {
+        addMessage({
+          role: m.role,
+          content: m.content,
+          kind: m.kind,
+          intro: m.intro,
+          faqItems: m.faqItems,
+          triggerContent: m.triggerContent,
+          faqResolved: m.faqResolved,
+          requireContactConfirmation: m.requireContactConfirmation,
+        });
+      }
+      updateMessage(variables.faqPanelMessageId, {
+        faqResolved: variables.helpful,
+      });
+    },
+    onError: (_err, variables) => {
+      updateMessage(variables.faqPanelMessageId, { faqResolved: null });
     },
   });
 }

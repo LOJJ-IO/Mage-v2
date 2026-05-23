@@ -4,7 +4,8 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMageStore } from '@/store/mageStore';
 import { useSwipeGesture } from '@/hooks/useSwipeGesture';
-import { useSendMessage, useTranscribeAudio } from '@/hooks/useApi';
+import { useSendMessage, useTranscribeAudio, useConversationHistory, useFaqFeedback } from '@/hooks/useApi';
+import { Message } from '@/types';
 import { MessageBubble, TypingIndicator } from '@/components/MessageBubble';
 import { ChatInput } from '@/components/ChatInput';
 import { RecordingToast } from '@/components/Toast';
@@ -55,9 +56,11 @@ export function ChatScreen() {
     context,
     recording,
     addMessage,
+    setMessages,
     setInputText,
     addToast,
     setRecording,
+    guestProfile,
   } = useMageStore();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -72,7 +75,35 @@ export function ChatScreen() {
   }, []);
 
   const sendMessageMutation = useSendMessage();
+  const faqFeedbackMutation = useFaqFeedback();
   const transcribeMutation = useTranscribeAudio();
+  const { data: historyData, isSuccess: historyLoaded } = useConversationHistory(
+    guestProfile?.id
+  );
+  const historyHydratedRef = useRef(false);
+
+  useEffect(() => {
+    historyHydratedRef.current = false;
+  }, [guestProfile?.id]);
+
+  useEffect(() => {
+    if (
+      historyLoaded &&
+      historyData &&
+      !historyHydratedRef.current &&
+      !sendMessageMutation.isPending &&
+      !faqFeedbackMutation.isPending
+    ) {
+      setMessages(historyData);
+      historyHydratedRef.current = true;
+    }
+  }, [
+    historyLoaded,
+    historyData,
+    setMessages,
+    sendMessageMutation.isPending,
+    faqFeedbackMutation.isPending,
+  ]);
 
   // Determine current sub-state
   const isIdle = currentState === 'S-G-003';
@@ -192,15 +223,49 @@ export function ChatScreen() {
     };
   }, []);
 
+  const [frontDeskPhone, setFrontDeskPhone] = useState(
+    () => process.env.NEXT_PUBLIC_HOTEL_FRONT_DESK_PHONE?.trim() || ''
+  );
+
+  useEffect(() => {
+    if (frontDeskPhone) return;
+    let cancelled = false;
+    (async () => {
+      const { apiClient } = await import('@/lib/api');
+      const res = await apiClient.getPublicConfig();
+      if (!cancelled && res.success && res.data?.frontDeskPhone) {
+        setFrontDeskPhone(res.data.frontDeskPhone);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [frontDeskPhone]);
+
   // Send message handler
-  const handleSendMessage = async (text: string, images?: string[]) => {
+  const handleSendMessage = async (
+    text: string,
+    images?: string[],
+    options?: { skipUserBubble?: boolean }
+  ) => {
     if (!text.trim() && (!images || images.length === 0)) return;
 
     setIsAiTyping(true);
     setStreamingMessage('');
 
     try {
-      await sendMessageMutation.mutateAsync({ content: text, images });
+      const result = await sendMessageMutation.mutateAsync({
+        content: text,
+        images,
+        skipUserBubble: options?.skipUserBubble,
+      });
+      if (result.continueTask && result.taskMessage?.trim()) {
+        await sendMessageMutation.mutateAsync({
+          content: result.taskMessage.trim(),
+          skipUserBubble: true,
+          taskContinuation: true,
+        });
+      }
     } catch (error) {
       addToast({
         type: 'error',
@@ -211,6 +276,13 @@ export function ChatScreen() {
       setStreamingMessage('');
     }
   };
+
+  const handleContactYes = useCallback(() => {
+    if (frontDeskPhone) {
+      window.location.href = `tel:${frontDeskPhone.replace(/\s/g, '')}`;
+    }
+    transition('CONTACT_FRONT_DESK');
+  }, [frontDeskPhone, transition]);
 
   // Upload handler
   const handleUpload = () => {
@@ -229,17 +301,41 @@ export function ChatScreen() {
 
   const contextIndicator = getContextIndicator();
 
-  // Show Yes/No buttons when last assistant message asks for satisfaction (required by backend)
   const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
-  const askedSatisfaction =
-    lastMessage?.content?.includes('Was that helpful?') ||
-    lastMessage?.content?.includes('Do you require any further assistance?') ||
-    lastMessage?.content?.includes('(Yes / No)');
-  const showSatisfactionButtons =
-    !isAiTyping &&
-    !streamingMessage &&
-    lastMessage?.role === 'assistant' &&
-    askedSatisfaction;
+
+  const handleFaqHelpful = useCallback(
+    (msg: Message) => {
+      if (!msg.triggerContent || msg.faqResolved != null) return;
+      faqFeedbackMutation.mutate({
+        helpful: true,
+        triggerContent: msg.triggerContent,
+        faqTitles: msg.faqItems?.map((i) => i.title),
+        faqMessageId: msg.id,
+        faqPanelMessageId: msg.id,
+      });
+    },
+    [faqFeedbackMutation]
+  );
+
+  const handleFaqNeedHelp = useCallback(
+    (msg: Message) => {
+      if (!msg.triggerContent || msg.faqResolved != null) return;
+      setIsAiTyping(true);
+      faqFeedbackMutation.mutate(
+        {
+          helpful: false,
+          triggerContent: msg.triggerContent,
+          faqTitles: msg.faqItems?.map((i) => i.title),
+          faqMessageId: msg.id,
+          faqPanelMessageId: msg.id,
+        },
+        {
+          onSettled: () => setIsAiTyping(false),
+        }
+      );
+    },
+    [faqFeedbackMutation]
+  );
 
   const showContactConfirmation =
     !isAiTyping &&
@@ -334,7 +430,13 @@ export function ChatScreen() {
         {/* Messages */}
         <AnimatePresence mode="popLayout">
           {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
+            <MessageBubble
+              key={message.id}
+              message={message}
+              onFaqHelpful={handleFaqHelpful}
+              onFaqNeedHelp={handleFaqNeedHelp}
+              faqFeedbackPending={faqFeedbackMutation.isPending}
+            />
           ))}
         </AnimatePresence>
 
@@ -350,34 +452,10 @@ export function ChatScreen() {
           />
         )}
 
-        {/* Typing indicator */}
+        {/* Typing indicator — inline with assistant messages */}
         <AnimatePresence>
           {isAiTyping && !streamingMessage && <TypingIndicator />}
         </AnimatePresence>
-
-        {/* Yes/No quick replies when assistant asked if the answer helped */}
-        {showSatisfactionButtons && !showContactConfirmation && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="px-4 py-5 flex gap-3 justify-center border-t border-mage-gray-100 dark:border-mage-gray-700 bg-white dark:bg-mage-gray-900 -mx-4 mt-4"
-          >
-            <button
-              type="button"
-              onClick={() => handleSendMessage('Yes')}
-              className="px-5 py-2.5 rounded-uber-full font-medium bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black hover:opacity-90 active:scale-[0.98] transition-all"
-            >
-              Yes
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSendMessage('No')}
-              className="px-5 py-2.5 rounded-uber-full font-medium bg-mage-gray-100 dark:bg-mage-gray-700 text-mage-black dark:text-white hover:bg-mage-gray-200 dark:hover:bg-mage-gray-600 active:scale-[0.98] transition-all"
-            >
-              No
-            </button>
-          </motion.div>
-        )}
 
         {/* Contact Prompt */}
         {showContactConfirmation && (
@@ -392,7 +470,7 @@ export function ChatScreen() {
             <div className="flex gap-3 justify-center">
               <button
                 type="button"
-                onClick={() => transition('CONTACT_FRONT_DESK')}
+                onClick={handleContactYes}
                 className="px-5 py-2.5 rounded-uber-full font-medium bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black hover:opacity-90 active:scale-[0.98] transition-all"
               >
                 Yes

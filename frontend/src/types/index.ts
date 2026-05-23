@@ -88,6 +88,13 @@ export interface Transition {
 
 // Message types
 export type MessageRole = 'user' | 'assistant' | 'system';
+export type MessageKind = 'text' | 'faq';
+
+export interface FaqItem {
+  id: string;
+  title: string;
+  body: string;
+}
 
 export interface Message {
   id: string;
@@ -97,6 +104,11 @@ export interface Message {
   images?: string[];
   isTyping?: boolean;
   requireContactConfirmation?: boolean;
+  kind?: MessageKind;
+  intro?: string;
+  faqItems?: FaqItem[];
+  triggerContent?: string;
+  faqResolved?: boolean | null;
 }
 
 // Ticket types
@@ -165,6 +177,20 @@ export interface ChatResponse {
 
 export interface ChatMessageResponse {
   messages: Message[];
+  continueTask?: boolean;
+  taskMessage?: string | null;
+}
+
+export interface ConversationHistoryResponse {
+  messages: Message[];
+}
+
+export interface FaqFeedbackRequest {
+  guestId: string;
+  helpful: boolean;
+  triggerContent: string;
+  faqTitles?: string[];
+  faqMessageId?: string;
 }
 
 export interface TranscriptionResponse {

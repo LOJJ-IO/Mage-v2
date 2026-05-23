@@ -8,7 +8,7 @@ const HYDRATION_TIPS = [
   'Setting up your experience...',
   'First time running the backend? The transcription model can take ~15 minutes to download.',
   'If the app is stuck, try refreshing the page.',
-  'Hold the mic to record; tap Cancel or Send when you’re done.',
+  "Hold the mic to record; tap Cancel or Send when you're done.",
   'Swipe left for your profile and room details.',
 ];
 
@@ -25,14 +25,12 @@ export function HydrationGate({ children }: { children: React.ReactNode }) {
     setHasMounted(true);
   }, []);
 
-  // Fallback: if rehydration never fires (e.g. storage unavailable), show app after 3s
   const [fallbackReady, setFallbackReady] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setFallbackReady(true), 3000);
     return () => clearTimeout(t);
   }, []);
 
-  // Permanent fix: if still not ready after 15s (e.g. chunk load timeout), show app anyway
   const [forceReady, setForceReady] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setForceReady(true), 15000);
@@ -40,8 +38,8 @@ export function HydrationGate({ children }: { children: React.ReactNode }) {
   }, []);
 
   const ready = hasMounted && (hasHydrated || fallbackReady || forceReady);
+  const [showLoader, setShowLoader] = useState(true);
 
-  // When we become ready, sync currentState so returning users (hasSeenWelcome) go straight to chat
   useEffect(() => {
     if (!ready) return;
     const state = useMageStore.getState();
@@ -49,27 +47,38 @@ export function HydrationGate({ children }: { children: React.ReactNode }) {
     if (state.currentState !== entryState) {
       useMageStore.setState({ currentState: entryState });
     }
+    const t = setTimeout(() => setShowLoader(false), 350);
+    return () => clearTimeout(t);
   }, [ready]);
 
-  if (!ready) {
-    return <LoadingShell />;
+  if (!ready || showLoader) {
+    return <LoadingShell finishing={ready} />;
   }
 
   return <>{children}</>;
 }
 
-/** Loader look-alike in mobile view until hydration completes (same as LoadingScreen, not fullscreen). */
-function LoadingShell() {
+function LoadingShell({ finishing }: { finishing?: boolean }) {
   const [tipIndex, setTipIndex] = useState(0);
+  const [progress, setProgress] = useState(40);
+
   useEffect(() => {
     const t = setInterval(() => setTipIndex((i) => (i + 1) % HYDRATION_TIPS.length), 4000);
     return () => clearInterval(t);
   }, []);
 
+  useEffect(() => {
+    if (finishing) {
+      setProgress(100);
+      return;
+    }
+    const t = setTimeout(() => setProgress(72), 120);
+    return () => clearTimeout(t);
+  }, [finishing]);
+
   return (
     <div className="min-h-screen bg-mage-gray-50">
       <div className="mage-container min-h-screen bg-mage-black flex flex-col items-center justify-center p-8">
-        {/* Logo */}
         <div className="mb-12">
           <div className="relative">
             <div className="absolute inset-0 bg-white/20 rounded-full blur-xl animate-pulse" />
@@ -107,8 +116,8 @@ function LoadingShell() {
         <p className="text-white/60 text-lg mb-12">Your hotel assistant</p>
         <div className="h-1 w-[200px] bg-white/20 rounded-full overflow-hidden">
           <div
-            className="h-full bg-white rounded-full animate-pulse"
-            style={{ width: '40%' }}
+            className="h-full bg-white rounded-full transition-all duration-500 ease-out"
+            style={{ width: `${progress}%` }}
           />
         </div>
         <p className="text-white/40 text-sm mt-4 max-w-[280px] text-center min-h-[2.5rem] flex items-center justify-center">

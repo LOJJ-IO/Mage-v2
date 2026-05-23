@@ -1,6 +1,9 @@
 import { ActionType } from '@/types';
 
 export function actionTypeLabel(type: ActionType): string {
+  if (type === 'HANDOFF') {
+    return 'Front Desk';
+  }
   return type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
@@ -15,7 +18,7 @@ export function actionTypeBadgeClass(type: ActionType): string {
     case 'CONTACT_FRONT_DESK':
       return 'bg-mage-red/15 text-mage-red';
     case 'HANDOFF':
-      return 'bg-mage-gray-200 dark:bg-mage-gray-700 text-mage-gray-700 dark:text-mage-gray-200';
+      return 'bg-mage-red/15 text-mage-red';
     default:
       return 'bg-mage-gray-100 text-mage-gray-600';
   }

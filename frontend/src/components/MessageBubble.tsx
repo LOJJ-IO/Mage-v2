@@ -3,15 +3,26 @@
 import { motion } from 'framer-motion';
 import { Message } from '@/types';
 import Image from 'next/image';
+import { FaqPanel } from '@/components/FaqPanel';
 
 interface MessageBubbleProps {
   message: Message;
   isLast?: boolean;
+  onFaqHelpful?: (message: Message) => void;
+  onFaqNeedHelp?: (message: Message) => void;
+  faqFeedbackPending?: boolean;
 }
 
-export function MessageBubble({ message, isLast = false }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  isLast = false,
+  onFaqHelpful,
+  onFaqNeedHelp,
+  faqFeedbackPending = false,
+}: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
+  const isFaq = message.kind === 'faq' && message.faqItems && message.faqItems.length > 0;
 
   if (isSystem) {
     return (
@@ -22,6 +33,31 @@ export function MessageBubble({ message, isLast = false }: MessageBubbleProps) {
       >
         <div className="bg-mage-gray-100 dark:bg-mage-gray-800 text-mage-gray-500 dark:text-mage-gray-400 px-4 py-2 rounded-uber-full text-sm">
           {message.content}
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (isFaq && !isUser) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.2 }}
+        className="flex justify-start mb-4"
+      >
+        <div className="min-w-0">
+          <FaqPanel
+            intro={message.intro || message.content}
+            items={message.faqItems!}
+            resolved={message.faqResolved}
+            disabled={faqFeedbackPending}
+            onHelpful={() => onFaqHelpful?.(message)}
+            onNeedHelp={() => onFaqNeedHelp?.(message)}
+          />
+          <div className="text-xs mt-2 text-mage-gray-400 dark:text-mage-gray-500 pl-1">
+            {formatTime(message.timestamp)}
+          </div>
         </div>
       </motion.div>
     );
@@ -43,7 +79,6 @@ export function MessageBubble({ message, isLast = false }: MessageBubbleProps) {
           }
         `}
       >
-        {/* Images if present */}
         {message.images && message.images.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2">
             {message.images.map((img, idx) => (
@@ -62,12 +97,10 @@ export function MessageBubble({ message, isLast = false }: MessageBubbleProps) {
           </div>
         )}
 
-        {/* Message content - wrap long words so no horizontal scroll */}
         <p className="text-base leading-relaxed whitespace-pre-wrap break-words">
           {message.content}
         </p>
 
-        {/* Typing indicator */}
         {message.isTyping && (
           <div className="flex gap-1 mt-1">
             <motion.span
@@ -88,7 +121,6 @@ export function MessageBubble({ message, isLast = false }: MessageBubbleProps) {
           </div>
         )}
 
-        {/* Timestamp */}
         <div
           className={`
             text-xs mt-1
@@ -110,7 +142,6 @@ function formatTime(date: Date): string {
   }).format(new Date(date));
 }
 
-// Typing indicator component (shown when AI is responding)
 export function TypingIndicator() {
   return (
     <motion.div

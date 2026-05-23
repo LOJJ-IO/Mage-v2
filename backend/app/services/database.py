@@ -90,6 +90,15 @@ class DatabaseProtocol(Protocol):
         ...
 
     # Staff action inbox
+    def append_pending_staff_action(
+        self,
+        guest_id: str,
+        action_type: ActionType,
+        append_note: str,
+    ) -> Optional[StaffAction]:
+        """Append detail to the newest pending action of the same type for this guest."""
+        ...
+
     def log_staff_action(
         self,
         guest_id: str,
@@ -118,6 +127,14 @@ class DatabaseProtocol(Protocol):
         status: StaffActionStatus,
     ) -> Optional[StaffAction]:
         """Update staff action status."""
+        ...
+
+    def update_staff_action_summary(
+        self,
+        action_id: str,
+        summary: str,
+    ) -> Optional[StaffAction]:
+        """Update staff action summary text."""
         ...
 
 
@@ -263,7 +280,8 @@ class MockDatabase:
         
         self.conversations[guest_id].append({
             "role": role,
-            "content": content
+            "content": content,
+            "created_at": datetime.utcnow().isoformat(),
         })
         
         # Keep last 50 messages
@@ -273,6 +291,31 @@ class MockDatabase:
     def clear_conversation(self, guest_id: str):
         """Clear conversation history for a guest."""
         self.conversations[guest_id] = []
+
+    def append_pending_staff_action(
+        self,
+        guest_id: str,
+        action_type: ActionType,
+        append_note: str,
+    ) -> Optional[StaffAction]:
+        note = (append_note or "").strip()
+        if not note:
+            return None
+        cutoff = datetime.utcnow() - timedelta(minutes=45)
+        pending = [
+            a
+            for a in self.staff_actions.values()
+            if a.guest_id == guest_id
+            and a.action_type == action_type
+            and a.status == StaffActionStatus.PENDING
+            and a.created_at >= cutoff
+        ]
+        if not pending:
+            return None
+        pending.sort(key=lambda a: a.created_at, reverse=True)
+        action = pending[0]
+        action.summary = f"{action.summary.rstrip('.')}; {note}"[:500]
+        return action
 
     def log_staff_action(
         self,
@@ -320,6 +363,17 @@ class MockDatabase:
         if not action:
             return None
         action.status = status
+        return action
+
+    def update_staff_action_summary(
+        self,
+        action_id: str,
+        summary: str,
+    ) -> Optional[StaffAction]:
+        action = self.staff_actions.get(action_id)
+        if not action:
+            return None
+        action.summary = (summary or "")[:500]
         return action
 
 
@@ -558,6 +612,44 @@ class SupabaseDatabase:
             logger.error(f"Error clearing conversation for guest {guest_id}: {e}")
             raise
 
+    def append_pending_staff_action(
+        self,
+        guest_id: str,
+        action_type: ActionType,
+        append_note: str,
+    ) -> Optional[StaffAction]:
+        note = (append_note or "").strip()
+        if not note:
+            return None
+        try:
+            response = (
+                self.client.table("staff_actions")
+                .select("*")
+                .eq("guest_id", guest_id)
+                .eq("action_type", action_type.value)
+                .eq("status", StaffActionStatus.PENDING.value)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if not response.data:
+                return None
+            action = StaffAction(**response.data[0])
+            new_summary = f"{action.summary.rstrip('.')}; {note}"[:500]
+            updated = (
+                self.client.table("staff_actions")
+                .update({"summary": new_summary})
+                .eq("id", action.id)
+                .execute()
+            )
+            if updated.data:
+                return StaffAction(**updated.data[0])
+            action.summary = new_summary
+            return action
+        except Exception as e:
+            logger.error(f"Error appending staff action: {e}")
+            return None
+
     def log_staff_action(
         self,
         guest_id: str,
@@ -628,6 +720,25 @@ class SupabaseDatabase:
             return None
         except Exception as e:
             logger.error(f"Error updating staff action {action_id}: {e}")
+            return None
+
+    def update_staff_action_summary(
+        self,
+        action_id: str,
+        summary: str,
+    ) -> Optional[StaffAction]:
+        try:
+            response = (
+                self.client.table("staff_actions")
+                .update({"summary": (summary or "")[:500]})
+                .eq("id", action_id)
+                .execute()
+            )
+            if response.data:
+                return StaffAction(**response.data[0])
+            return None
+        except Exception as e:
+            logger.error(f"Error updating staff action summary {action_id}: {e}")
             return None
 
 

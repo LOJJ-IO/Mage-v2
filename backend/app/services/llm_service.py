@@ -5,13 +5,63 @@ import time
 from datetime import datetime
 import httpx
 from pathlib import Path
-from typing import AsyncGenerator, Optional, List, Dict, Any, Literal, Tuple
+from typing import AsyncGenerator, Optional, List, Dict, Any, Literal, Tuple, Set
 from collections import deque
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 from app.core.config import get_settings
-from app.models.schemas import ConversationContext, ActionType
+from app.models.schemas import ConversationContext, ActionType, MessageKind
 from app.services.database import get_database
+from app.services.conversation_helpers import (
+    trim_history,
+    resolve_substantive_user_message,
+    is_follow_up_detail,
+    build_faq_llm_context,
+)
+from app.services.faq_intents import (
+    collect_faq_matches,
+    is_task_request,
+    pick_faq_intro,
+    is_conversation_closing,
+    should_show_faq_with_task,
+    _words as faq_words,
+)
+from app.services.service_routing import (
+    classify_service,
+    build_staff_summary,
+    infer_summary_from_context,
+    is_in_room_issue,
+    detect_utility_action,
+    service_display_name,
+    merge_classified_action,
+    normalize_action_type_for_staff,
+)
+from app.services.request_consolidation import append_to_best_pending, list_pending_actions_for_guest
+from app.services.intent_llm import (
+    call_classifier,
+    ClassifierError,
+    ClassifierResult,
+    format_classifier_routing_json,
+    build_copy_writer_user_content,
+    is_disqualified_classifier_model,
+)
+
+STAFF_LOG_TYPES = frozenset({
+    "MAINTENANCE",
+    "ROOM_SERVICE",
+    "HOUSEKEEPING",
+    "CONTACT_FRONT_DESK",
+})
+
+_PROMISE_PHRASES = re.compile(
+    r"\b(?:logged|submitted|notified|request\s+received|sent\s+your\s+request|i'?ve\s+sent|team\s+will)\b",
+    re.I,
+)
+
+_LEAKED_ENUM_LINE = re.compile(
+    r"^(?:MAINTENANCE|ROOM_SERVICE|HOUSEKEEPING|HANDOFF|CONTACT_FRONT_DESK)\s*$",
+    re.I,
+)
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -24,24 +74,220 @@ STAFF_INBOX_ACTION_TYPES = frozenset({
     "HANDOFF",
 })
 
+_GREETING_SHORT_CIRCUIT = frozenset({
+    "hello", "hi", "hey", "ok", "okay", "thanks", "thx",
+})
+
+_LOGGED_TASK_PHRASES = (
+    "maintenance on the way",
+    "maintenance will",
+    "room service",
+    "housekeeping",
+    "bringing up",
+    "logged",
+    "confirmed",
+)
+
+
+def _extract_logged_tasks_from_history(
+    conversation_history: Optional[List[Dict[str, str]]],
+) -> List[Dict[str, str]]:
+    """Scan assistant messages for logged task confirmations."""
+    logged: List[Dict[str, str]] = []
+    if not conversation_history:
+        return logged
+    for msg in conversation_history:
+        if msg.get("role") != "assistant":
+            continue
+        content = (msg.get("content") or "").lower()
+        if not any(phrase in content for phrase in _LOGGED_TASK_PHRASES):
+            continue
+        if "maintenance" in content:
+            service = "MAINTENANCE"
+        elif "room service" in content:
+            service = "ROOM_SERVICE"
+        elif "housekeeping" in content:
+            service = "HOUSEKEEPING"
+        else:
+            continue
+        logged.append({"service": service, "summary": content[:100]})
+    return logged
+
+
+def _build_logged_tasks_summary(
+    guest_id: Optional[str],
+    conversation_history: Optional[List[Dict[str, str]]],
+) -> List[Dict[str, str]]:
+    """Pending staff inbox rows plus heuristic extractions from chat."""
+    seen_services: Set[str] = set()
+    out: List[Dict[str, str]] = []
+    if guest_id:
+        for action in list_pending_actions_for_guest(guest_id):
+            svc = action.action_type.value if hasattr(action.action_type, "value") else str(action.action_type)
+            if svc in seen_services:
+                continue
+            seen_services.add(svc)
+            out.append({"service": svc, "summary": (action.summary or "")[:100]})
+    for item in _extract_logged_tasks_from_history(conversation_history):
+        svc = item["service"]
+        if svc not in seen_services:
+            seen_services.add(svc)
+            out.append(item)
+    return out
+
+
+def _is_hotel_docs_source(info_source: Optional[str]) -> bool:
+    return (info_source or "").upper().strip() == "HOTEL_DOCS"
+
 
 def _try_log_staff_action(
     guest_id: Optional[str],
     action_type: str,
     summary: str,
     source_message: str,
-) -> None:
-    if not guest_id or action_type not in STAFF_INBOX_ACTION_TYPES:
-        return
+    conversation_history: Optional[List[Dict[str, str]]] = None,
+    user_message: Optional[str] = None,
+) -> Optional[Any]:
+    """Log or append staff action. Returns StaffAction on success."""
+    if not guest_id:
+        return None
+    if user_message and is_follow_up_detail(user_message):
+        try:
+            appended = append_to_best_pending(guest_id, user_message)
+            if appended:
+                return appended
+        except Exception as e:
+            logger.exception("Staff action append error: %s", e)
+    resolved_type = normalize_action_type_for_staff(action_type)
+    if resolved_type == ActionType.HANDOFF:
+        resolved_type = classify_service(
+            user_message or source_message or "",
+            conversation_history,
+        )
+    if resolved_type.value not in STAFF_LOG_TYPES:
+        return None
+    substantive = resolve_substantive_user_message(
+        source_message or user_message or "",
+        conversation_history,
+    )
+    summary_text = (summary or "").strip()
+    if not summary_text or summary_text.lower() in {"yes", "no", "ok", "okay"}:
+        summary_text = build_staff_summary(
+            resolved_type,
+            substantive,
+            conversation_history,
+        )
     try:
-        get_database().log_staff_action(
+        return get_database().log_staff_action(
             guest_id=guest_id,
-            action_type=ActionType(action_type),
-            summary=summary,
-            source_message=source_message,
+            action_type=resolved_type,
+            summary=summary_text,
+            source_message=substantive,
         )
     except Exception as e:
         logger.exception("Staff action log error: %s", e)
+        return None
+
+
+def _contains_promise_language(text: str) -> bool:
+    return bool(_PROMISE_PHRASES.search(text or ""))
+
+
+def _ensure_logged_for_promise(
+    guest_id: Optional[str],
+    user_message: str,
+    conversation_history: Optional[List[Dict[str, str]]],
+    segments: List[Dict[str, Any]],
+    logged_action: Optional[Any],
+) -> Optional[Any]:
+    """Fallback log when model promised action but nothing was stored."""
+    if logged_action or not guest_id:
+        return logged_action
+    combined = " ".join((s.get("content") or "") for s in segments)
+    if not _contains_promise_language(combined):
+        return None
+    action_type = classify_service(user_message, conversation_history)
+    summary = build_staff_summary(action_type, user_message, conversation_history)
+    return _try_log_staff_action(
+        guest_id,
+        action_type.value,
+        summary,
+        user_message,
+        conversation_history=conversation_history,
+        user_message=user_message,
+    )
+
+
+def _finalize_segments(segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Final guest-text pass on all assistant segments before API response."""
+    out: List[Dict[str, Any]] = []
+    for seg in segments:
+        copy = dict(seg)
+        if copy.get("kind") == MessageKind.FAQ.value:
+            if copy.get("intro"):
+                copy["intro"] = LLMService._sanitize_guest_text(copy["intro"])
+            if copy.get("content"):
+                copy["content"] = LLMService._sanitize_guest_text(copy["content"])
+        elif copy.get("content"):
+            copy["content"] = LLMService._sanitize_guest_text(copy["content"])
+        out.append(copy)
+    return out
+
+
+_STAFF_CONFIRM_MSG = (
+    "I can confirm your request is with our team—they'll follow up shortly."
+)
+
+
+def _staff_confirm_already_in_segments(segments: List[Dict[str, Any]]) -> bool:
+    """True if guest already has our standard confirmation bubble."""
+    needle = "confirm your request is with our team"
+    confirm_lower = _STAFF_CONFIRM_MSG.lower()
+    for seg in segments:
+        c = (seg.get("content") or "").lower().strip()
+        if needle in c or c == confirm_lower:
+            return True
+    return False
+
+
+def _wrap_staff_task_segments(
+    _action_type: ActionType,
+    model_text: str,
+    logged: bool,
+) -> List[Dict[str, Any]]:
+    """Guest reply when a task was logged: model text plus confirmation when staff inbox updated."""
+    segments: List[Dict[str, Any]] = []
+    clean = LLMService._sanitize_guest_text(model_text) if model_text else ""
+    confirm_lower = _STAFF_CONFIRM_MSG.lower()
+    # Show copy unless it is essentially the same as the confirm bubble (avoid duplicate).
+    if clean and clean.lower() != confirm_lower and not _staff_confirm_already_in_segments(
+        [{"content": clean}]
+    ):
+        segments.append(
+            {"content": clean, "kind": MessageKind.TEXT.value, "require_contact_confirmation": False}
+        )
+    if logged:
+        if not _staff_confirm_already_in_segments(segments):
+            segments.append(
+                {
+                    "content": _STAFF_CONFIRM_MSG,
+                    "kind": MessageKind.TEXT.value,
+                    "require_contact_confirmation": False,
+                }
+            )
+    elif clean:
+        return segments if segments else [
+            {"content": clean, "kind": MessageKind.TEXT.value, "require_contact_confirmation": False}
+        ]
+    else:
+        segments.append(
+            {
+                "content": "I'm sorry, I didn't catch that. Could you rephrase that for me?",
+                "kind": MessageKind.TEXT.value,
+                "require_contact_confirmation": False,
+            }
+        )
+    return segments
 
 
 class RateLimiter:
@@ -100,10 +346,11 @@ Use natural language and occasional small talk appropriate for hospitality."""
 
 # Used only by small model when it classifies message as not relevant (Python intent never returns this)
 NON_ANSWER = "I'm here to help with your stay—amenities, room, dining, and local tips. For anything else, the front desk is happy to help!"
-# Appended to every Python generic answer (required)
+# Legacy; FAQ panels use dedicated helpfulness buttons instead
 SATISFACTION_SUFFIX = "\n\nDo you require any further assistance? (Yes / No)"
-# When user replies No to the above: end the turn (no small model); conversation resumes on next prompt
-CLOSING_AFTER_NO = "No problem. Feel free to ask if you need anything else."
+CLOSING_AFTER_NO = "Glad I could help! Let me know if you need anything else during your stay."
+FAQ_HELPFUL_ACK = "Glad that helped! Let me know if you need anything else."
+FAQ_ESCALATION_BRIDGE = "No problem — I'll help you directly."
 HELLO_RESPONSE = "Hello! I'm Mage, your hotel assistant. I can help with room service, amenities, local recommendations, or any questions about your stay. What can I do for you?"
 ACKNOWLEDGMENT_RESPONSE = "I understand. I'm here if you'd like more help with anything about your stay."
 THANKS_RESPONSE = "You're welcome! Let me know if you need anything else during your stay."
@@ -149,22 +396,77 @@ def _load_hotel_knowledge() -> str:
         return ""
 
 
-def _models_to_try(primary: str) -> List[str]:
+# OpenRouter free/auto routers often pick slow "thinking" models that exhaust max_tokens.
+_OPENROUTER_BROAD_ROUTERS = frozenset({"openrouter/free", "openrouter/auto"})
+
+# Substrings that indicate reasoning-heavy models to skip when fallbacks are available.
+_THINKING_MODEL_MARKERS = ("thinking", "reason", "ring-", "r1", "deepseek-r1")
+
+
+def _is_thinking_model_id(model_id: str) -> bool:
+    lower = (model_id or "").lower()
+    return any(m in lower for m in _THINKING_MODEL_MARKERS)
+
+
+def _models_to_try(primary: str, *, prefer_fast: bool = True) -> List[str]:
     """Build list of model IDs to try: primary first, then fallbacks (no duplicates)."""
+    primary = (primary or "").strip()
     fallbacks = [m.strip() for m in (settings.llm_model_fallbacks or "").split(",") if m.strip()]
-    seen = {primary}
-    out = [primary]
-    for m in fallbacks:
-        if m not in seen:
-            seen.add(m)
-            out.append(m)
+    use_router = primary in _OPENROUTER_BROAD_ROUTERS
+    if use_router:
+        # Honor openrouter/free and openrouter/auto as first choice (user-configured routers).
+        prefer_fast = False
+        candidates = [primary]
+        for fb in fallbacks:
+            if fb not in candidates:
+                candidates.append(fb)
+    else:
+        candidates = [primary] + fallbacks if primary else fallbacks
+    out: List[str] = []
+    seen: Set[str] = set()
+    for m in candidates:
+        if not m or m in seen:
+            continue
+        if prefer_fast and _is_thinking_model_id(m) and len(candidates) > 1:
+            continue
+        seen.add(m)
+        out.append(m)
+    if not out and primary:
+        out = [primary]
     return out
 
 
-def _get_small_model_system(hotel_context: str = "") -> str:
-    """Build the small model system prompt with hotel name and optional hotel knowledge."""
-    hotel_name = settings.hotel_name or "the hotel"
-    base = f"""You are the hotel assistant for {hotel_name}. Only answer questions about the guest's stay, the hotel, or hotel services. For anything else, respond NOT_RELEVANT.
+def _format_guest_context(guest_id: Optional[str]) -> str:
+    """Inject signed-in guest details so the model does not ask for room/booking."""
+    if not guest_id:
+        return ""
+    guest = get_database().get_guest(guest_id)
+    if not guest:
+        return (
+            "\nGuest session: This chat is linked to a checked-in guest. "
+            "Do not ask for room number or booking ID.\n"
+        )
+    parts = [
+        "\nCurrent guest (already signed in — never ask for room number or booking ID):",
+        f"- Name: {guest.name}",
+        f"- Room: {guest.room_number}",
+    ]
+    if guest.booking_id:
+        parts.append(f"- Booking: {guest.booking_id}")
+    if guest.membership_tier:
+        parts.append(f"- Membership: {guest.membership_tier}")
+    parts.append(
+        "For in-room requests (towels, housekeeping, maintenance, room service), "
+        "confirm you are sending the request to their room and use the correct ACTION line. "
+        "Staff already receive this guest's room with the request."
+    )
+    return "\n".join(parts) + "\n"
+
+
+# Set False (or say "revert the system prompt") to restore _SMALL_MODEL_SYSTEM_LEGACY.
+_SMALL_MODEL_SYSTEM_SHORT = True
+
+_SMALL_MODEL_SYSTEM_LEGACY = """You are the hotel assistant for {hotel_name}. Only answer questions about the guest's stay, the hotel, or hotel services. For anything else, respond NOT_RELEVANT.
 
 Output format (strict):
 - First line must be exactly one of: NOT_RELEVANT, HANDOFF, or ANSWER.
@@ -183,10 +485,33 @@ Rules:
 - Only use service ACTIONs (MAINTENANCE, ROOM_SERVICE, HOUSEKEEPING) when the guest is asking to create or route a service request.
 - For informational questions (amenities, directions, explanations), do not add service ACTIONs.
 - Short follow-ups like "okay", "i see", "got it", and "thanks" should stay relevant and never be classified as NOT_RELEVANT when they refer to the ongoing hotel conversation.
-"""
-    if hotel_context:
-        base += f"\nHotel knowledge:\n{hotel_context}\n"
-    base += "\nPut NOT_RELEVANT or HANDOFF on the first line by itself when applicable. For ANSWER, use exactly: line 1 ANSWER, line 2 reply, optional line 3 ACTION."
+- Broken fixtures, plumbing, climate, showers, toilets, and in-room equipment are always hotel-related; NEVER use NOT_RELEVANT for them.
+- ROOM_SERVICE is only for in-room food and beverages. Towels, linens, baby beds, and supplies are HOUSEKEEPING. Repairs are MAINTENANCE.
+- Do not tell guests to call or visit the front desk for requests you can handle; you represent the hotel operations team.
+- Never put MAINTENANCE, ROOM_SERVICE, HOUSEKEEPING, HANDOFF, CONTACT_FRONT_DESK, or the word ACTION in the guest-visible reply line.
+- If the guest adds timing or details (e.g. "in 15 minutes") to a request already discussed, confirm the detail in your reply and do NOT add a new ACTION line.
+- When guest context (name/room) is provided below, never ask for room number, booking ID, or check-in details—they are already known.
+- Never output XML, JSON, or tags such as tool_call in guest-visible text.
+
+Put NOT_RELEVANT or HANDOFF on the first line by itself when applicable. For ANSWER, use exactly: line 1 ANSWER, line 2 reply, optional line 3 ACTION."""
+
+_SMALL_MODEL_SYSTEM_SHORT_TEXT = """You are the hotel assistant for {hotel_name}. Stay/hotel topics only; else NOT_RELEVANT.
+
+Line 1: NOT_RELEVANT | HANDOFF | ANSWER
+ANSWER → line 2: short guest reply (no protocol words). Optional line 3: ACTION: MAINTENANCE|ROOM_SERVICE|HOUSEKEEPING|CONTACT_FRONT_DESK|GET_TIME|GET_WEATHER|GET_GUEST_INFO
+
+Towels/supplies=HOUSEKEEPING; in-room food/drink=ROOM_SERVICE; repairs=MAINTENANCE. Broken fixtures are never NOT_RELEVANT. Service ACTION only when guest wants something done, not for pure info. Timing-only follow-ups: no new ACTION. If guest name/room is below, never ask for room or booking. No XML/tags in reply."""
+
+
+def _get_small_model_system(hotel_context: str = "") -> str:
+    """Build the small model system prompt with hotel name and optional hotel knowledge."""
+    hotel_name = settings.hotel_name or "the hotel"
+    if _SMALL_MODEL_SYSTEM_SHORT:
+        base = _SMALL_MODEL_SYSTEM_SHORT_TEXT.format(hotel_name=hotel_name)
+    else:
+        base = _SMALL_MODEL_SYSTEM_LEGACY.format(hotel_name=hotel_name)
+        if hotel_context:
+            base += f"\nHotel knowledge:\n{hotel_context}\n"
     return base
 
 
@@ -219,35 +544,57 @@ class LLMService:
         model: str,
         messages: List[Dict[str, Any]],
         temperature: float,
+        *,
+        max_tokens: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Build JSON body for chat/completions; add plugins for openrouter/auto when LLM_AUTO_ALLOWED_MODELS is set."""
+        cap = max_tokens if max_tokens is not None else settings.llm_max_tokens
         body: Dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "max_tokens": settings.llm_max_tokens,
+            "max_tokens": cap,
             "temperature": temperature,
         }
-        if model == "openrouter/auto" and (settings.llm_auto_allowed_models or "").strip():
+        if model in _OPENROUTER_BROAD_ROUTERS and (settings.llm_auto_allowed_models or "").strip():
             patterns = [p.strip() for p in settings.llm_auto_allowed_models.split(",") if p.strip()]
             if patterns:
                 body["plugins"] = [{"id": "auto-router", "allowed_models": patterns}]
         return body
+
+    @staticmethod
+    def _extract_usable_content(raw: str, finish_reason: str) -> str:
+        """Use model output; recover ANSWER/ACTION block if a thinking model hit length."""
+        text = (raw or "").strip()
+        if not text:
+            return ""
+        if finish_reason != "length":
+            return text
+        for marker in ("ANSWER\n", "ANSWER\r\n", "\nANSWER\n"):
+            idx = text.rfind(marker)
+            if idx >= 0:
+                return text[idx:].strip()
+        lines = text.splitlines()
+        tail = "\n".join(lines[-8:]).strip()
+        return tail or text[:500]
     
     def _build_messages(
         self,
         user_message: str,
         context: ConversationContext,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        images: Optional[List[str]] = None
+        images: Optional[List[str]] = None,
+        guest_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Build message array for the API."""
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPTS.get(context, SYSTEM_PROMPTS[ConversationContext.BOT])}
-        ]
+        system = SYSTEM_PROMPTS.get(context, SYSTEM_PROMPTS[ConversationContext.BOT])
+        guest_block = _format_guest_context(guest_id)
+        if guest_block:
+            system = system + guest_block
+        messages = [{"role": "system", "content": system}]
         
         # Add conversation history
         if conversation_history:
-            messages.extend(conversation_history[-10:])  # Last 10 messages for context
+            messages.extend(trim_history(conversation_history))
         
         # Build user message content
         if images:
@@ -268,13 +615,14 @@ class LLMService:
         user_message: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         images: Optional[List[str]] = None,
+        guest_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Build message array for the small model (relevance + answer/handoff)."""
         hotel_context = _load_hotel_knowledge()
-        system_content = _get_small_model_system(hotel_context)
+        system_content = _get_small_model_system(hotel_context) + _format_guest_context(guest_id)
         messages = [{"role": "system", "content": system_content}]
         if conversation_history:
-            messages.extend(conversation_history[-10:])
+            messages.extend(trim_history(conversation_history))
         if images:
             content = [{"type": "text", "text": user_message}]
             for img in images[:4]:
@@ -346,6 +694,7 @@ class LLMService:
         cleaned = (text or "").strip()
         if not cleaned:
             return ""
+        cleaned = re.sub(r"<\s*/?\s*tool_call\s*/?\s*>", "", cleaned, flags=re.I)
         cleaned = re.sub(r"^\s*(?:ANSWER|HANDOFF|NOT_RELEVANT)\s*:?\s*", "", cleaned, flags=re.I)
         lines: List[str] = []
         for line in cleaned.splitlines():
@@ -357,6 +706,8 @@ class LLMService:
             if re.match(r"^(?:ANSWER|HANDOFF|NOT_RELEVANT)\b", stripped, flags=re.I):
                 continue
             if re.match(r"^ACTION\s*:", stripped, flags=re.I):
+                continue
+            if _LEAKED_ENUM_LINE.match(stripped):
                 continue
             lines.append(stripped)
         return "\n".join(lines).strip()
@@ -403,22 +754,52 @@ class LLMService:
         guest_id: Optional[str] = None,
     ) -> Tuple[str, Literal["non_answer", "handoff", "answer"], Optional[Tuple[str, str]]]:
         """Call small model via OpenRouter; on 404/unavailable try fallback models. Returns (response_text, outcome, optional_action)."""
-        messages = self._build_small_model_messages(user_message, conversation_history, images)
-        models = _models_to_try(settings.llm_model_small)
+        messages = self._build_small_model_messages(
+            user_message, conversation_history, images, guest_id
+        )
+        models = _models_to_try(settings.llm_model_small, prefer_fast=True)
         last_http_error: Optional[httpx.HTTPStatusError] = None
         for model in models:
             try:
-                async with httpx.AsyncClient(timeout=30.0) as client:
+                async with httpx.AsyncClient(timeout=settings.llm_request_timeout_small) as client:
                     response = await client.post(
                         f"{self.base_url}/chat/completions",
                         headers=self._get_headers(),
-                        json=self._build_request_body(model, messages, 0.3),
+                        json=self._build_request_body(
+                            model,
+                            messages,
+                            0.3,
+                            max_tokens=settings.llm_max_tokens_small,
+                        ),
                     )
                     response.raise_for_status()
                     data = response.json()
-                    content = (data["choices"][0]["message"]["content"] or "").strip()
+                    choice = data["choices"][0]
+                    finish = choice.get("finish_reason") or ""
+                    raw_content = choice.get("message", {}).get("content") or ""
+                    content = self._extract_usable_content(raw_content, finish)
+                    if finish == "length" and not content:
+                        logger.warning(
+                            "Small model %s returned length-truncated empty content; trying next.",
+                            model,
+                        )
+                        continue
+                    if finish == "length":
+                        logger.warning(
+                            "Small model %s hit max_tokens=%s; using extracted tail.",
+                            model,
+                            settings.llm_max_tokens_small,
+                        )
                     first_line = content.split("\n")[0].strip().upper() if content else ""
                     if "NOT_RELEVANT" in first_line or content.upper().startswith("NOT_RELEVANT"):
+                        if is_in_room_issue(user_message) or is_task_request(
+                            user_message.lower(), faq_words(user_message.lower())
+                        ):
+                            clean_text, action = self._parse_action_from_content(
+                                "ANSWER\nI'll make sure the right team helps you with that.\n"
+                                f"ACTION: {classify_service(user_message, conversation_history).value}"
+                            )
+                            return (clean_text, "answer", action)
                         return (NON_ANSWER, "non_answer", None)
                     if "HANDOFF" in first_line or content.upper().startswith("HANDOFF"):
                         return ("", "handoff", None)
@@ -446,6 +827,15 @@ class LLMService:
                 last_http_error.response.reason_phrase or "",
                 body,
             )
+        msg_lower = user_message.lower()
+        words = faq_words(msg_lower)
+        if is_task_request(msg_lower, words) or is_in_room_issue(user_message):
+            classified = classify_service(user_message, conversation_history)
+            clean, action = self._parse_action_from_content(
+                "ANSWER\nI'll make sure the right team is notified to help you.\n"
+                f"ACTION: {classified.value}"
+            )
+            return (clean, "answer", action)
         return ("I'm having trouble connecting right now. Please try again.", "answer", None)
     
     async def _call_large_model(
@@ -453,24 +843,53 @@ class LLMService:
         user_message: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         images: Optional[List[str]] = None,
+        *,
+        use_task_model: bool = False,
+        guest_id: Optional[str] = None,
     ) -> str:
-        """Call large model via OpenRouter for complex relevant questions; on 404/unavailable try fallback models."""
+        """Call large/thinking model via OpenRouter; on 404/unavailable try fallback models."""
         messages = self._build_messages(
-            user_message, ConversationContext.BOT, conversation_history, images
+            user_message,
+            ConversationContext.BOT,
+            conversation_history,
+            images,
+            guest_id,
         )
-        models = _models_to_try(settings.llm_model_large)
+        primary = (
+            (settings.llm_model_thinking or "").strip()
+            if use_task_model
+            else settings.llm_model_large
+        )
+        models = _models_to_try(primary or settings.llm_model_large, prefer_fast=not use_task_model)
         last_http_error: Optional[httpx.HTTPStatusError] = None
         for model in models:
             try:
-                async with httpx.AsyncClient(timeout=60.0) as client:
+                cap = (
+                    settings.llm_max_tokens_large
+                    if use_task_model and (settings.llm_model_thinking or "").strip()
+                    else min(settings.llm_max_tokens_large, 512)
+                )
+                async with httpx.AsyncClient(timeout=settings.llm_request_timeout_large) as client:
                     response = await client.post(
                         f"{self.base_url}/chat/completions",
                         headers=self._get_headers(),
-                        json=self._build_request_body(model, messages, settings.llm_temperature),
+                        json=self._build_request_body(
+                            model,
+                            messages,
+                            settings.llm_temperature,
+                            max_tokens=cap,
+                        ),
                     )
                     response.raise_for_status()
                     data = response.json()
-                    return data["choices"][0]["message"]["content"] or "I'm sorry, I couldn't generate a response."
+                    choice = data["choices"][0]
+                    finish = choice.get("finish_reason") or ""
+                    raw = choice.get("message", {}).get("content") or ""
+                    content = self._extract_usable_content(raw, finish)
+                    if finish == "length" and not content.strip():
+                        logger.warning("Large model %s length-truncated; trying next.", model)
+                        continue
+                    return content or "I'm sorry, I couldn't generate a response."
             except httpx.HTTPStatusError as e:
                 last_http_error = e
                 body = (e.response.text or "")[:300]
@@ -495,12 +914,552 @@ class LLMService:
             )
         return "Something went wrong. Please try again or contact the front desk directly."
 
+    def _build_faq_segment(
+        self,
+        user_message: str,
+        guest_id: Optional[str],
+    ) -> Dict[str, Any]:
+        message_lower = user_message.lower().strip()
+        words = faq_words(message_lower)
+        matched = collect_faq_matches(message_lower, words)
+        items = [{"id": f.id, "title": f.title, "body": f.body} for f in matched]
+        bundle_key = ",".join(i["id"] for i in items)
+        intro = pick_faq_intro(guest_id, bundle_key)
+        return {
+            "kind": MessageKind.FAQ.value,
+            "intro": intro,
+            "content": intro,
+            "faq_items": items,
+            "trigger_content": user_message.strip(),
+            "faq_resolved": None,
+            "require_contact_confirmation": False,
+        }
+
+    def _get_simple_response(
+        self, user_message: str, conversation_history: Optional[List[Dict[str, str]]] = None
+    ) -> Optional[str]:
+        """Short-circuit greetings, thanks, closings, and acks — not FAQ or LLM."""
+        message_lower = user_message.lower().strip()
+        words = faq_words(message_lower)
+        if message_lower in {"ok", "okay", "i see", "got it", "understood", "alright"} and conversation_history:
+            return ACKNOWLEDGMENT_RESPONSE
+        if conversation_history and is_conversation_closing(message_lower, words):
+            return CLOSING_AFTER_NO
+        if re.fullmatch(r"(?:hi[\W_]*){2,}", message_lower):
+            return HELLO_RESPONSE
+        if words & {"help", "hi", "hello", "hey", "greetings"} and len(words) <= 3:
+            return HELLO_RESPONSE
+        if re.search(r"\bthanks?\b", message_lower) or re.search(r"\bthx\b", message_lower):
+            if "thanksgiving" not in message_lower:
+                return THANKS_RESPONSE
+        return None
+
+    def _copy_models_to_try(self) -> List[str]:
+        primary = (settings.llm_copy_model or "openrouter/free").strip()
+        return _models_to_try(primary, prefer_fast=False)
+
+    def _build_copy_writer_operational_context(
+        self,
+        intent: str,
+        guest_id: Optional[str],
+        classified: Optional[ClassifierResult],
+        conversation_history: Optional[List[Dict[str, str]]],
+        *,
+        routing_json: str = "",
+    ) -> str:
+        lines = [
+            "",
+            "--- OPERATIONAL CONTEXT (internal, do not mention to guest) ---",
+            f"Intent: {intent}",
+        ]
+        if routing_json:
+            lines.append(f"Classifier routing: {routing_json}")
+        if guest_id:
+            guest = get_database().get_guest(guest_id)
+            if guest:
+                lines.append(f"Guest: {guest.name}, Room {guest.room_number}")
+        logged_tasks = _build_logged_tasks_summary(guest_id, conversation_history)
+        if logged_tasks:
+            lines.append("Already confirmed in this conversation:")
+            for task in logged_tasks:
+                lines.append(f"  - {task['service']}: {task['summary']}")
+            lines.append("Do not re-confirm or re-address these.")
+        lines.append("Address ONLY the current message.")
+        lines.append(
+            "Answer using hotel knowledge (2–3 sentences). "
+            "Do not mention staff routing or internal systems."
+        )
+        lines.append("---")
+        return "\n".join(lines)
+
+    def _build_copy_writer_system(
+        self,
+        intent: str,
+        guest_id: Optional[str],
+        user_message: str,
+        conversation_history: Optional[List[Dict[str, str]]],
+        *,
+        classified: Optional[ClassifierResult] = None,
+        routing_json: str = "",
+    ) -> str:
+        hotel_name = settings.hotel_name or "the hotel"
+        base = (
+            f"You are Mage, the hotel assistant for {hotel_name}. "
+            "Write warm, brief, mobile-friendly replies (2–3 sentences max)."
+        )
+        knowledge = _load_hotel_knowledge()
+        if knowledge:
+            base += f"\n\nHotel knowledge:\n{knowledge}"
+        base += (
+            "\n\nIf specific details (hours, passwords, prices) are not in the hotel "
+            "knowledge block, do not invent them. Say in one sentence that you don't "
+            "have that detail and suggest dialing 0 for the front desk."
+        )
+        base += self._build_copy_writer_operational_context(
+            intent,
+            guest_id,
+            classified,
+            conversation_history,
+            routing_json=routing_json,
+        )
+        base += (
+            "\n\nOutput only the guest-facing reply text. "
+            "No ANSWER line, no ACTION line, no JSON, no markdown headers."
+        )
+        return base
+
+    def _routing_json_for_copy(self, classified: ClassifierResult) -> str:
+        return format_classifier_routing_json(classified)
+
+    async def _call_copy_writer(
+        self,
+        intent: str,
+        user_message: str,
+        conversation_history: Optional[List[Dict[str, str]]],
+        guest_id: Optional[str],
+        *,
+        images: Optional[List[str]] = None,
+        classified: Optional[ClassifierResult] = None,
+    ) -> str:
+        """Prose-only guest reply for HOTEL_DOCS info; classifier JSON + gist."""
+        routing_json = (
+            self._routing_json_for_copy(classified)
+            if classified
+            else format_classifier_routing_json(
+                ClassifierResult(confidence=0.9, raw="")
+            )
+        )
+        gist = infer_summary_from_context(user_message, conversation_history)
+        system = self._build_copy_writer_system(
+            intent,
+            guest_id,
+            user_message,
+            conversation_history,
+            classified=classified,
+            routing_json=routing_json,
+        )
+        messages: List[Dict[str, Any]] = [{"role": "system", "content": system}]
+        use_full_history = settings.llm_copy_include_full_history
+        if use_full_history:
+            history = trim_history(conversation_history)
+            if history:
+                messages.extend(history)
+            user_content = user_message
+        else:
+            user_content = build_copy_writer_user_content(
+                routing_json=routing_json,
+                user_message=user_message,
+                conversation_gist=gist,
+            )
+        if images:
+            content: List[Dict[str, Any]] = [{"type": "text", "text": user_content}]
+            for img in images[:4]:
+                content.append({"type": "image_url", "image_url": {"url": img}})
+            messages.append({"role": "user", "content": content})
+        else:
+            messages.append({"role": "user", "content": user_content})
+
+        models = self._copy_models_to_try()
+        last_http_error: Optional[httpx.HTTPStatusError] = None
+        for model in models:
+            try:
+                async with httpx.AsyncClient(timeout=settings.llm_request_timeout_large) as client:
+                    response = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers=self._get_headers(),
+                        json=self._build_request_body(
+                            model,
+                            messages,
+                            settings.llm_temperature,
+                            max_tokens=settings.llm_max_tokens_copy,
+                        ),
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    resolved_model = (data.get("model") or model) or ""
+                    if is_disqualified_classifier_model(resolved_model):
+                        logger.warning(
+                            "Copy writer resolved to disqualified model %s; trying next.",
+                            resolved_model,
+                        )
+                        continue
+                    raw = (data["choices"][0].get("message", {}).get("content") or "").strip()
+                    if raw:
+                        return self._sanitize_guest_text(raw)
+            except httpx.HTTPStatusError as e:
+                last_http_error = e
+                logger.warning("Copy writer %s failed: %s", model, e.response.status_code)
+                continue
+            except Exception as e:
+                logger.exception("Copy writer error: %s", e)
+                continue
+        if last_http_error:
+            logger.error("Copy writer all models failed.")
+        return "I'm having trouble connecting right now. Please try again in a moment."
+
+    def _classifier_passes_confidence(self, result: ClassifierResult) -> bool:
+        """True when classifier confidence meets threshold (no keyword bypass)."""
+        threshold = settings.llm_classifier_min_confidence
+        confidence = result.confidence
+        if result.salvaged:
+            confidence = max(confidence, 0.5)
+        return confidence >= threshold
+
+    def _apply_classifier_confidence_gate(
+        self,
+        classified: ClassifierResult,
+        user_message: str,
+        conversation_history: Optional[List[Dict[str, str]]],
+    ) -> ClassifierResult:
+        """On low confidence: safety-net D for in-room issues, else empty abilities."""
+        if self._classifier_passes_confidence(classified):
+            return classified
+        if is_in_room_issue(user_message):
+            logger.info(
+                "Classifier low confidence (%.2f); in-room safety net → ability D",
+                classified.confidence,
+            )
+            service = classify_service(user_message, conversation_history).value
+            return ClassifierResult(
+                abilities=["D"],
+                tasks=[{
+                    "service": service,
+                    "title": classified.title or "In-room issue reported",
+                }],
+                confidence=max(classified.confidence, settings.llm_classifier_min_confidence),
+                raw=classified.raw,
+                salvaged=True,
+                request_type="new",
+                message=classified.message or "I've alerted our team about that right away.",
+                info_source=classified.info_source,
+            )
+        return ClassifierResult(
+            abilities=[],
+            tasks=[],
+            confidence=classified.confidence,
+            raw=classified.raw,
+            salvaged=True,
+            message="",
+            request_type="status_check",
+            info_source=classified.info_source,
+        )
+
+    def _python_action_from_classifier(
+        self,
+        result: ClassifierResult,
+        user_message: str,
+        conversation_history: Optional[List[Dict[str, str]]],
+    ) -> Tuple[str, str]:
+        """Merge classifier service hint with Python classify_service (single pass)."""
+        hint = (result.service or "").upper() if result.service else None
+        model_action = (hint, "") if hint else None
+        return merge_classified_action(model_action, user_message, conversation_history)
+
+    def _log_staff_task(
+        self,
+        guest_id: Optional[str],
+        action_type_str: str,
+        user_message: str,
+        conversation_history: Optional[List[Dict[str, str]]],
+        issue_summary: str = "",
+        *,
+        staff_title: Optional[str] = None,
+    ) -> bool:
+        """Log one staff inbox row; returns whether logging succeeded."""
+        if not guest_id or action_type_str not in STAFF_LOG_TYPES:
+            return False
+        substantive = resolve_substantive_user_message(user_message, conversation_history)
+        if staff_title and staff_title.strip():
+            summary = staff_title.strip()[:500]
+        else:
+            summary = build_staff_summary(
+                ActionType(action_type_str),
+                substantive,
+                conversation_history,
+                issue_summary,
+            )
+        return (
+            _try_log_staff_action(
+                guest_id,
+                action_type_str,
+                summary,
+                substantive,
+                conversation_history=conversation_history,
+                user_message=user_message,
+            )
+            is not None
+        )
+
+    def _log_staff_tasks_from_classifier(
+        self,
+        classified: ClassifierResult,
+        user_message: str,
+        conversation_history: Optional[List[Dict[str, str]]],
+        guest_id: Optional[str],
+    ) -> bool:
+        """Create staff ticket(s) from classifier tasks. Returns True if any logged."""
+        if not guest_id:
+            return False
+        if classified.request_type == "repetition":
+            for task in classified.tasks:
+                logger.info(
+                    "Duplicate task detected: %s '%s'",
+                    task.get("service"),
+                    task.get("title"),
+                )
+            return False
+
+        logged_any = False
+        if classified.tasks:
+            for task in classified.tasks:
+                service = task.get("service")
+                if not service or service not in STAFF_LOG_TYPES:
+                    continue
+                title = (task.get("title") or "").strip()
+                if (
+                    classified.request_type == "follow_up_escalation"
+                    and title
+                    and not title.lower().startswith("follow-up")
+                ):
+                    title = f"Follow-up: {title}"
+                logged_any |= self._log_staff_task(
+                    guest_id,
+                    service,
+                    user_message,
+                    conversation_history,
+                    staff_title=title or None,
+                )
+            return logged_any
+
+        action_type_str, issue_summary = self._python_action_from_classifier(
+            classified, user_message, conversation_history
+        )
+        return self._log_staff_task(
+            guest_id,
+            action_type_str,
+            user_message,
+            conversation_history,
+            issue_summary,
+            staff_title=classified.title,
+        )
+
+    async def _build_staff_task_segments_from_copy(
+        self,
+        user_message: str,
+        copy_text: str,
+        action_type_str: str,
+        guest_id: Optional[str],
+        conversation_history: Optional[List[Dict[str, str]]],
+        *,
+        staff_already_logged: bool,
+        issue_summary: str = "",
+    ) -> List[Dict[str, Any]]:
+        """Wrap copy-writer prose for staff tasks without re-running classify_service."""
+        text = self._sanitize_guest_text(copy_text)
+        action_enum = ActionType(action_type_str)
+        require_contact = action_type_str == "CONTACT_FRONT_DESK"
+        logged_ok = staff_already_logged
+        if not logged_ok:
+            logged_ok = self._log_staff_task(
+                guest_id,
+                action_type_str,
+                user_message,
+                conversation_history,
+                issue_summary,
+            )
+        segments = _wrap_staff_task_segments(action_enum, text, logged_ok)
+        logged_action = True if logged_ok else None
+        logged_action = _ensure_logged_for_promise(
+            guest_id,
+            user_message,
+            conversation_history,
+            segments,
+            logged_action,
+        )
+        if logged_action and not _staff_confirm_already_in_segments(segments):
+            segments = _wrap_staff_task_segments(action_enum, text, True)
+        for seg in segments:
+            seg.setdefault("kind", MessageKind.TEXT.value)
+            seg["require_contact_confirmation"] = require_contact
+        return segments
+
+    def _classifier_guest_reply(
+        self,
+        classified: ClassifierResult,
+        fallback: str,
+    ) -> str:
+        msg = (classified.message or "").strip()
+        return self._sanitize_guest_text(msg) if msg else fallback
+
+    def _text_segment(self, content: str, *, require_contact: bool = False) -> Dict[str, Any]:
+        return {
+            "content": content,
+            "kind": MessageKind.TEXT.value,
+            "require_contact_confirmation": require_contact,
+        }
+
+    async def _route_by_abilities(
+        self,
+        classified: ClassifierResult,
+        user_message: str,
+        conversation_history: Optional[List[Dict[str, str]]],
+        guest_id: Optional[str],
+        images: Optional[List[str]],
+    ) -> List[Dict[str, Any]]:
+        """Route by classifier abilities only; stack segments independently."""
+        history = trim_history(conversation_history)
+        abilities = classified.abilities or []
+        segments: List[Dict[str, Any]] = []
+        latest_lower = (user_message or "").lower().strip()
+
+        if not abilities:
+            if latest_lower in _GREETING_SHORT_CIRCUIT:
+                simple = self._get_simple_response(user_message, history)
+                content = (
+                    simple
+                    or self._classifier_guest_reply(
+                        classified, ACKNOWLEDGMENT_RESPONSE
+                    )
+                )
+                return [self._text_segment(content)]
+            return [self._text_segment(NON_ANSWER)]
+
+        if "D" in abilities:
+            self._log_staff_tasks_from_classifier(
+                classified, user_message, history, guest_id
+            )
+            if classified.message:
+                require_contact = any(
+                    t.get("service") == "CONTACT_FRONT_DESK" for t in classified.tasks
+                )
+                segments.append(
+                    self._text_segment(
+                        self._classifier_guest_reply(
+                            classified,
+                            "I have that noted for you."
+                            if classified.request_type == "repetition"
+                            else "I've passed that along to our team.",
+                        ),
+                        require_contact=require_contact,
+                    )
+                )
+
+        if "A" in abilities:
+            location = self._extract_weather_location(user_message)
+            weather = await self._fetch_weather(location)
+            segments.append(
+                self._text_segment(f"The weather in {location} is {weather}.")
+            )
+
+        if "B" in abilities:
+            segments.append(self._text_segment(self._build_time_message()))
+
+        if "C" in abilities:
+            if guest_id:
+                guest = get_database().get_guest(guest_id)
+                if guest:
+                    info = (
+                        f"Your profile: {guest.name}, Room {guest.room_number}, "
+                        f"Membership {guest.membership_tier or 'Standard'}."
+                    )
+                else:
+                    info = "I couldn't find your guest profile details right now."
+            else:
+                info = "I can share your guest details once your profile is linked."
+            segments.append(self._text_segment(info))
+
+        if "E" in abilities or "F" in abilities:
+            if _is_hotel_docs_source(classified.info_source):
+                copy_text = await self._call_copy_writer(
+                    "INFO",
+                    user_message,
+                    history,
+                    guest_id,
+                    images=images,
+                    classified=classified,
+                )
+                segments.append(self._text_segment(copy_text))
+            elif "D" not in abilities and classified.message:
+                segments.append(
+                    self._text_segment(
+                        self._classifier_guest_reply(
+                            classified,
+                            "The front desk can help with that — please dial 0 from your room phone.",
+                        )
+                    )
+                )
+
+        if not segments:
+            segments.append(
+                self._text_segment(
+                    self._classifier_guest_reply(
+                        classified,
+                        "Let me know if there's anything else I can help with.",
+                    )
+                )
+            )
+        return segments
+
+    async def _route_via_two_layer(
+        self,
+        user_message: str,
+        conversation_history: Optional[List[Dict[str, str]]],
+        images: Optional[List[str]],
+        guest_id: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        history = trim_history(conversation_history)
+        try:
+            classified = await call_classifier(user_message, history, api_key=self.api_key)
+        except ClassifierError as e:
+            logger.error("Classifier failed: %s", e)
+            return [
+                {
+                    "content": "I'm having trouble connecting right now. Please try again in a moment.",
+                    "kind": MessageKind.TEXT.value,
+                    "require_contact_confirmation": False,
+                }
+            ]
+
+        classified = self._apply_classifier_confidence_gate(
+            classified, user_message, history
+        )
+        return await self._route_by_abilities(
+            classified,
+            user_message,
+            history,
+            guest_id,
+            images,
+        )
+
     async def _build_small_model_segments(
         self,
         user_message: str,
         clean_text: str,
         action: Optional[Tuple[str, str]],
         guest_id: Optional[str],
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        *,
+        pre_logged_action: Optional[Any] = None,
     ) -> List[Dict[str, Any]]:
         """Build one or more guest-facing assistant messages from parsed model output."""
         segments: List[Dict[str, Any]] = []
@@ -508,13 +1467,14 @@ class LLMService:
         if action is None:
             fallback = text or "I'm sorry, I didn't catch that. Could you rephrase that for me?"
             if self._contains_deferral_phrase(fallback):
-                return [
-                    {"content": fallback, "require_contact_confirmation": False},
-                    {"content": "Thanks for waiting. Could you share a little more detail so I can help right away?", "require_contact_confirmation": False},
-                ]
+                logger.info("Guest text had deferral phrasing but no staff action; single reply only.")
             return [{"content": fallback, "require_contact_confirmation": False}]
 
-        action_type, issue_summary = action
+        action_type_str, issue_summary = merge_classified_action(
+            action, user_message, conversation_history
+        )
+        action_type = action_type_str
+        action_enum = ActionType(action_type_str)
         require_contact = action_type == "CONTACT_FRONT_DESK"
 
         follow_up: Optional[str] = None
@@ -549,14 +1509,39 @@ class LLMService:
             segments.append({"content": follow_up, "require_contact_confirmation": False})
             return segments
 
-        if guest_id and action_type in STAFF_INBOX_ACTION_TYPES:
-            summary = self._build_ticket_summary(action_type, issue_summary, user_message)
-            _try_log_staff_action(guest_id, action_type, summary, user_message)
+        logged_action = pre_logged_action
+        if logged_action is None and guest_id and action_type in STAFF_LOG_TYPES:
+            substantive = resolve_substantive_user_message(user_message, conversation_history)
+            summary = build_staff_summary(action_enum, substantive, conversation_history, issue_summary)
+            logged_action = _try_log_staff_action(
+                guest_id,
+                action_type,
+                summary,
+                substantive,
+                conversation_history=conversation_history,
+                user_message=user_message,
+            )
+
+        if action_type in STAFF_LOG_TYPES:
+            segments = _wrap_staff_task_segments(action_enum, text, logged_action is not None)
+            logged_action = _ensure_logged_for_promise(
+                guest_id, user_message, conversation_history, segments, logged_action
+            )
+            if logged_action and not _staff_confirm_already_in_segments(segments):
+                segments = _wrap_staff_task_segments(action_enum, text, True)
+            for seg in segments:
+                seg.setdefault("kind", MessageKind.TEXT.value)
+                seg["require_contact_confirmation"] = require_contact
+            return segments
 
         if not text:
             text = "I've logged your request. Our team will follow up shortly."
 
-        segments.append({"content": text, "require_contact_confirmation": require_contact})
+        segments.append({
+            "content": text,
+            "kind": MessageKind.TEXT.value,
+            "require_contact_confirmation": require_contact,
+        })
         if self._contains_deferral_phrase(text):
             issue_label = issue_summary.strip() or user_message.strip()[:120]
             confirmation = f"I've logged your {action_type.replace('_', ' ').lower()} request"
@@ -565,9 +1550,216 @@ class LLMService:
             else:
                 confirmation += "."
             if confirmation.lower() != text.lower():
-                segments.append({"content": confirmation, "require_contact_confirmation": require_contact})
+                segments.append({
+                    "content": confirmation,
+                    "kind": MessageKind.TEXT.value,
+                    "require_contact_confirmation": require_contact,
+                })
         return segments
     
+    async def generate_faq_feedback(
+        self,
+        helpful: bool,
+        trigger_content: str,
+        conversation_history: Optional[List[Dict[str, str]]],
+        guest_id: Optional[str],
+        faq_titles: Optional[List[str]] = None,
+        images: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        if helpful:
+            return [{"content": FAQ_HELPFUL_ACK, "kind": MessageKind.TEXT.value, "require_contact_confirmation": False}]
+        bridge = FAQ_ESCALATION_BRIDGE
+        llm_prompt = build_faq_llm_context(trigger_content, faq_titles)
+        if not self.api_key:
+            return [
+                {"content": bridge, "kind": MessageKind.TEXT.value, "require_contact_confirmation": False},
+                {"content": self._no_api_key_fallback_text(trigger_content), "kind": MessageKind.TEXT.value, "require_contact_confirmation": False},
+            ]
+        segments: List[Dict[str, Any]] = [
+            {"content": bridge, "kind": MessageKind.TEXT.value, "require_contact_confirmation": False},
+        ]
+        if settings.llm_use_two_layer_routing:
+            try:
+                classified = await call_classifier(
+                    llm_prompt, conversation_history, api_key=self.api_key
+                )
+            except ClassifierError:
+                segments.append(
+                    {
+                        "content": "I'm having trouble connecting right now. Please try again in a moment.",
+                        "kind": MessageKind.TEXT.value,
+                        "require_contact_confirmation": False,
+                    }
+                )
+                return _finalize_segments(segments)
+            classified = self._apply_classifier_confidence_gate(
+                classified, llm_prompt, conversation_history
+            )
+            more = await self._route_by_abilities(
+                classified,
+                llm_prompt,
+                conversation_history,
+                guest_id,
+                images,
+            )
+            segments.extend(more)
+            return _finalize_segments(segments)
+
+        small_text, outcome, action = await self._call_small_model(
+            llm_prompt, conversation_history, images, guest_id
+        )
+        if outcome == "handoff":
+            if guest_id:
+                ht = classify_service(trigger_content, conversation_history)
+                _try_log_staff_action(
+                    guest_id,
+                    ht.value,
+                    build_staff_summary(ht, trigger_content, conversation_history),
+                    trigger_content,
+                    conversation_history=conversation_history,
+                    user_message=trigger_content,
+                )
+            large_text = await self._call_large_model(
+                llm_prompt,
+                conversation_history,
+                images,
+                use_task_model=True,
+                guest_id=guest_id,
+            )
+            segments.append(
+                {"content": self._sanitize_guest_text(large_text), "kind": MessageKind.TEXT.value, "require_contact_confirmation": False}
+            )
+            return _finalize_segments(segments)
+        if outcome == "non_answer":
+            segments.append({"content": small_text, "kind": MessageKind.TEXT.value, "require_contact_confirmation": False})
+            return segments
+        more = await self._build_small_model_segments(
+            trigger_content, small_text, action, guest_id, conversation_history
+        )
+        segments.extend(more)
+        return _finalize_segments(segments)
+
+    async def _route_bot_message(
+        self,
+        user_message: str,
+        conversation_history: Optional[List[Dict[str, str]]],
+        images: Optional[List[str]],
+        guest_id: Optional[str],
+        *,
+        task_continuation: bool = False,
+    ) -> Tuple[List[Dict[str, Any]], bool, Optional[str]]:
+        history = trim_history(conversation_history)
+        simple = self._get_simple_response(user_message, history)
+        if simple is not None:
+            return (
+                _finalize_segments(
+                    [{"content": simple, "kind": MessageKind.TEXT.value, "require_contact_confirmation": False}]
+                ),
+                False,
+                None,
+            )
+        
+        message_lower = user_message.lower().strip()
+        words = faq_words(message_lower)
+        task_like = is_task_request(message_lower, words) or bool(images) or is_in_room_issue(user_message)
+        faq_matches = [] if (images or task_continuation) else collect_faq_matches(message_lower, words)
+
+        if faq_matches and task_like and should_show_faq_with_task(message_lower, words, faq_matches):
+            faq_seg = self._build_faq_segment(user_message, guest_id)
+            return (_finalize_segments([faq_seg]), True, user_message)
+
+        if faq_matches and not task_like:
+            return (_finalize_segments([self._build_faq_segment(user_message, guest_id)]), False, None)
+        
+        if not self.api_key:
+            if guest_id and task_like:
+                msg_lower = message_lower
+                substantive = resolve_substantive_user_message(user_message, history)
+                if any(
+                    k in msg_lower
+                    for k in ("shower", "broken", "leak", "maintenance", "not working", "repair", "plumbing")
+                ):
+                    _try_log_staff_action(
+                        guest_id, "MAINTENANCE",
+                        substantive[:200] or "Maintenance request", substantive,
+                        conversation_history=history, user_message=user_message,
+                    )
+                elif any(k in msg_lower for k in ("room service", "food order", "hungry", "order food")):
+                    _try_log_staff_action(
+                        guest_id, "ROOM_SERVICE",
+                        substantive[:200] or "Room service request", substantive,
+                        conversation_history=history, user_message=user_message,
+                    )
+                elif any(k in msg_lower for k in ("housekeeping", "clean", "towels", "sheets")):
+                    _try_log_staff_action(
+                        guest_id, "HOUSEKEEPING",
+                        substantive[:200] or "Housekeeping request", substantive,
+                        conversation_history=history, user_message=user_message,
+                    )
+            return (
+                _finalize_segments(
+                    [{"content": self._no_api_key_fallback_text(user_message), "kind": MessageKind.TEXT.value, "require_contact_confirmation": False}]
+                ),
+                False,
+                None,
+            )
+        
+        if settings.llm_use_two_layer_routing:
+            segments = await self._route_via_two_layer(
+                user_message, history, images, guest_id
+            )
+            return (_finalize_segments(segments), False, None)
+
+        small_text, outcome, action = await self._call_small_model(user_message, history, images, guest_id)
+        if outcome == "non_answer":
+            if is_in_room_issue(user_message) or task_like:
+                classified = classify_service(user_message, history)
+                synthetic_action = (classified.value, "")
+                segments = await self._build_small_model_segments(
+                    user_message,
+                    "I'll make sure the right team is notified to help you.",
+                    synthetic_action,
+                    guest_id,
+                    history,
+                )
+                return (_finalize_segments(segments), False, None)
+            return (
+                _finalize_segments(
+                    [{"content": small_text, "kind": MessageKind.TEXT.value, "require_contact_confirmation": False}]
+                ),
+                False,
+                None,
+            )
+        if outcome == "handoff":
+            if guest_id:
+                substantive = resolve_substantive_user_message(user_message, history)
+                ht = classify_service(user_message, history)
+                _try_log_staff_action(
+                    guest_id,
+                    ht.value,
+                    build_staff_summary(ht, substantive, history),
+                    substantive,
+                    conversation_history=history,
+                    user_message=user_message,
+                )
+            large_text = await self._call_large_model(
+                user_message,
+                history,
+                images,
+                use_task_model=True,
+                guest_id=guest_id,
+            )
+            return (
+                _finalize_segments(
+                    [{"content": self._sanitize_guest_text(large_text), "kind": MessageKind.TEXT.value, "require_contact_confirmation": False}]
+                ),
+                False,
+                None,
+            )
+
+        segments = await self._build_small_model_segments(user_message, small_text, action, guest_id, history)
+        return (_finalize_segments(segments), False, None)
+
     async def generate_response(
         self,
         user_message: str,
@@ -576,69 +1768,30 @@ class LLMService:
         images: Optional[List[str]] = None,
         guest_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Generate one or more assistant messages for a user prompt."""
-        
         if not await rate_limiter.wait_and_acquire():
             return [{"content": "I'm currently experiencing high demand. Please try again in a moment.", "require_contact_confirmation": False}]
-        
         if context == ConversationContext.FRONT_DESK_AGENT:
             return [{"content": "Your message has been sent to the front desk. They will respond shortly.", "require_contact_confirmation": False}]
-        
-        # 1. Python intent
-        generic = self._get_intent_response(user_message, conversation_history)
-        if generic is not None:
-            if generic == CLOSING_AFTER_NO:
-                return [{"content": generic, "require_contact_confirmation": False}]
-            if generic in (HELLO_RESPONSE, ACKNOWLEDGMENT_RESPONSE, THANKS_RESPONSE):
-                return [{"content": generic, "require_contact_confirmation": False}]
-            return [{"content": generic + SATISFACTION_SUFFIX, "require_contact_confirmation": False}]
-        
-        # 2. No API key: keyword intents only; otherwise rotating offline copy
-        if not self.api_key:
-            if guest_id:
-                msg_lower = user_message.lower()
-                if any(
-                    k in msg_lower
-                    for k in ("shower", "broken", "leak", "maintenance", "not working", "repair", "plumbing")
-                ):
-                    _try_log_staff_action(
-                        guest_id,
-                        "MAINTENANCE",
-                        user_message.strip()[:200] or "Maintenance request",
-                        user_message,
-                    )
-                elif any(k in msg_lower for k in ("room service", "food order", "hungry", "order food")):
-                    _try_log_staff_action(
-                        guest_id,
-                        "ROOM_SERVICE",
-                        user_message.strip()[:200] or "Room service request",
-                        user_message,
-                    )
-                elif any(k in msg_lower for k in ("housekeeping", "clean", "towels", "sheets")):
-                    _try_log_staff_action(
-                        guest_id,
-                        "HOUSEKEEPING",
-                        user_message.strip()[:200] or "Housekeeping request",
-                        user_message,
-                    )
-            return [{"content": self._no_api_key_fallback_text(user_message), "require_contact_confirmation": False}]
-        
-        # 3. Small model
-        small_text, outcome, action = await self._call_small_model(user_message, conversation_history, images, guest_id)
-        if outcome == "non_answer":
-            return [{"content": small_text, "require_contact_confirmation": False}]
-        if outcome == "handoff":
-            if guest_id:
-                _try_log_staff_action(
-                    guest_id,
-                    "HANDOFF",
-                    user_message.strip()[:200] or "Guest request requires staff follow-up",
-                    user_message,
-                )
-            large_text = await self._call_large_model(user_message, conversation_history, images)
-            return [{"content": self._sanitize_guest_text(large_text), "require_contact_confirmation": False}]
+        segments, _, _ = await self._route_bot_message(user_message, conversation_history, images, guest_id)
+        return segments
 
-        return await self._build_small_model_segments(user_message, small_text, action, guest_id)
+    async def route_message(
+        self,
+        user_message: str,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        images: Optional[List[str]] = None,
+        guest_id: Optional[str] = None,
+        *,
+        task_continuation: bool = False,
+    ) -> Tuple[List[Dict[str, Any]], bool, Optional[str]]:
+        """Route message; returns (segments, continue_task, task_message)."""
+        return await self._route_bot_message(
+            user_message,
+            conversation_history,
+            images,
+            guest_id,
+            task_continuation=task_continuation,
+        )
     
     async def generate_stream(
         self,
@@ -660,175 +1813,26 @@ class LLMService:
                 yield word + " "
             return
         
-        generic = self._get_intent_response(user_message, conversation_history)
-        if generic is not None:
-            if generic in (CLOSING_AFTER_NO, HELLO_RESPONSE, ACKNOWLEDGMENT_RESPONSE, THANKS_RESPONSE):
-                full = generic
-            else:
-                full = generic + SATISFACTION_SUFFIX
-            for word in full.split():
-                yield word + " "
-                await asyncio.sleep(0.05)
-            return
-        
-        if not self.api_key:
-            fallback = self._no_api_key_fallback_text(user_message)
-            for word in fallback.split():
-                yield word + " "
-                await asyncio.sleep(0.05)
-            return
-        
-        small_text, outcome, action = await self._call_small_model(user_message, conversation_history, images, guest_id)
-        if outcome == "answer" and action:
-            action_type, issue_summary = action
-            if action_type == "GET_WEATHER":
-                small_text = await self._build_weather_message(user_message)
-            elif action_type == "GET_TIME":
-                small_text = self._build_time_message()
-            elif action_type == "GET_GUEST_INFO":
-                if guest_id:
-                    guest = get_database().get_guest(guest_id)
-                    if guest:
-                        small_text = (
-                            f"Your profile shows: Name {guest.name}, Room {guest.room_number}, "
-                            f"Membership {guest.membership_tier or 'Standard'}."
-                        )
-                    else:
-                        small_text = "I couldn't find your guest profile details right now."
-                else:
-                    small_text = "I can share your guest details once your profile is linked in this chat."
-            elif guest_id and action_type in STAFF_INBOX_ACTION_TYPES:
-                summary = self._build_ticket_summary(action_type, issue_summary, user_message)
-                _try_log_staff_action(guest_id, action_type, summary, user_message)
-        if outcome == "handoff" and guest_id:
-            _try_log_staff_action(
-                guest_id,
-                "HANDOFF",
-                user_message.strip()[:200] or "Guest request requires staff follow-up",
-                user_message,
-            )
-        if outcome == "non_answer":
-            for word in small_text.split():
-                yield word + " "
-                await asyncio.sleep(0.05)
-            return
-        if outcome == "handoff":
-            large_text = await self._call_large_model(user_message, conversation_history, images)
-            for word in large_text.split():
-                yield word + " "
-                await asyncio.sleep(0.05)
-            return
-        final_text = self._sanitize_guest_text(small_text) or "I'm sorry, I didn't catch that. Could you rephrase that for me?"
-        for word in final_text.split():
+        segments, _, _ = await self._route_bot_message(user_message, conversation_history, images, guest_id)
+        parts: List[str] = []
+        for seg in segments:
+            if seg.get("kind") == MessageKind.FAQ.value:
+                parts.append(seg.get("intro") or seg.get("content") or "")
+                for item in seg.get("faq_items") or []:
+                    if isinstance(item, dict):
+                        parts.append(f"{item.get('title', '')}: {item.get('body', '')}")
+            elif seg.get("content"):
+                parts.append(str(seg["content"]))
+        full = "\n\n".join(p for p in parts if p).strip() or "Let me know if you need anything else."
+        for word in full.split():
             yield word + " "
             await asyncio.sleep(0.05)
     
-    def _get_intent_response(
-        self, user_message: str, conversation_history: Optional[List[Dict[str, str]]] = None
-    ) -> Optional[str]:
-        """Python intent layer: returns generic answer if a block matches, else None (pass to small model).
-        Does not return non-answer; relevance is decided only by the small model.
-        """
-        message_lower = user_message.lower().strip()
-        words = set(re.findall(r"\b\w+\b", message_lower))
-        if message_lower in {"ok", "okay", "i see", "got it", "understood", "alright"} and conversation_history:
-            return ACKNOWLEDGMENT_RESPONSE
-        # Follow-up "No": last assistant asked satisfaction and user said no → end turn (closing message)
-        if conversation_history:
-            hist = conversation_history[-10:]
-            for m in reversed(hist):
-                if m.get("role") == "assistant":
-                    content = (m.get("content") or "").strip()
-                    asked_satisfaction = (
-                        "Was that helpful?" in content
-                        or "Do you require any further assistance?" in content
-                        or content.endswith("(Yes / No)")
-                    )
-                    if asked_satisfaction:
-                        if words & {"no", "nope", "n", "nah", "negative"}:
-                            return CLOSING_AFTER_NO
-                        if message_lower in ("no", "nope", "n", "not really", "not exactly", "nah"):
-                            return CLOSING_AFTER_NO
-                        if "not" in words and words & {"really", "exactly"}:
-                            return CLOSING_AFTER_NO
-                    break
-        # Phrases first (substring is ok for these)
-        if "room service" in message_lower or ("order" in words and "room" in words):
-            return "For room service, please dial 0 on your room phone, or I can connect you with the front desk to place an order."
-        if "check out" in message_lower or "checkout" in message_lower:
-            return "Checkout is at 11 AM. Would you like a late checkout? I can check availability for you."
-        if "wake up" in message_lower or "wakeup" in message_lower:
-            return "You can request a wake-up call by dialing 0 from your room phone. The front desk will set it up for you."
-        # Word-boundary intents
-        if words & {"wifi", "internet", "password", "wi-fi", "wifi"}:
-            return "The WiFi network is 'HotelGuest' and the password is on the card in your room. Let me know if you have any trouble connecting!"
-        if words & {"breakfast", "restaurant", "food", "eat", "eating", "dining"}:
-            return "Our restaurant is open from 6:30 AM to 10:30 PM. Breakfast is served until 10:30 AM in the main dining room on the ground floor."
-        if words & {"leaving", "leave", "depart"}:
-            return "Checkout is at 11 AM. Would you like a late checkout? I can check availability for you."
-        if words & {"pool", "gym", "fitness", "spa", "swim"}:
-            return "The pool and fitness center are on the 3rd floor, open 6 AM - 10 PM. Towels are provided at the entrance."
-        if re.fullmatch(r"(?:hi[\W_]*){2,}", message_lower):
-            return HELLO_RESPONSE
-        if words & {"help", "hi", "hello", "hey", "greetings"}:
-            return HELLO_RESPONSE
-        if words & {"problem", "issue", "broken", "maintenance"} or ("not" in words and "working" in words):
-            return "I'm sorry to hear that. Can you describe the issue? I'll make sure the right team is notified to help you."
-        if words & {"parking", "park", "car", "valet"}:
-            return "Self-parking is available in the garage on level B1. Valet is available at the main entrance. Would you like the current rates?"
-        if words & {"laundry", "dry", "cleaning", "press"}:
-            return "Laundry and dry-cleaning are available. Place items in the bag in your closet and call the front desk for pickup. Same-day service is available for most items."
-        if words & {"bill", "invoice", "charge", "payment", "pay"}:
-            return "For your bill or to dispute a charge, please visit the front desk or dial 0 from your room. They can print a copy or go through line items with you."
-        if words & {"pet", "pets", "dog", "cat"}:
-            return "Pets are welcome with a small daily fee. Please let the front desk know so they can note your reservation. Pet amenities are available on request."
-        if words & {"lost", "left", "forgot", "missing"}:
-            return "For lost items, please contact the front desk or housekeeping. They keep a lost-and-found log and will follow up if something is found."
-        if words & {"towel", "towels", "pillow", "pillows", "blanket", "blankets"}:
-            return "Extra towels, pillows, or blankets are available through housekeeping—dial 0 from your room, or ask and I can help route your request."
-        if "housekeeping" in message_lower or (words & {"housekeeper"}):
-            return "Housekeeping can refresh your room or bring supplies—dial 0 from your room phone, or tell me what you need."
-        if words & {"elevator", "lift"}:
-            return "Guest elevators are in the lobby and at hallway ends. For accessibility needs, ask the front desk."
-        if words & {"shuttle", "airport"} or "taxi" in message_lower or words & {"uber", "lyft"}:
-            return "For airport shuttles or taxis, the front desk can book or share schedules and rates—dial 0 or stop by the lobby."
-        if "minibar" in message_lower or "mini-bar" in message_lower or "mini bar" in message_lower:
-            return "Minibar items are billed separately. If something looks wrong on your bill, ask the front desk to review it."
-        if any(
-            p in message_lower
-            for p in ("room safe", "in-room safe", "in room safe", "hotel safe", "safe box", "open the safe")
-        ):
-            return "Safe instructions are in your welcome guide. If you need help opening or resetting it, contact the front desk."
-        if words & {"noise", "loud", "noisy"}:
-            return "I'm sorry for the disturbance. I can note a noise concern or connect you with the front desk to help."
-        if words & {"cold", "hot", "temperature", "thermostat", "heating", "cooling"} or "air conditioning" in message_lower or "a/c" in message_lower:
-            return "Try the wall thermostat for room climate. If it's still uncomfortable, dial 0 and maintenance can assist."
-        if words & {"bar", "lounge", "cocktail", "wine", "beer"}:
-            return "Bar and lounge hours are posted in the lobby—the front desk can share specials or help with reservations."
-        if words & {"coffee", "tea"} and not (words & {"breakfast", "restaurant", "dining"}):
-            return "Coffee and tea are available at breakfast in the dining room; ask the front desk for in-room options if you prefer."
-        if words & {"upgrade", "upgrades"}:
-            return "Room upgrades depend on availability—ask the front desk and they can check options and rates."
-        if "ironing" in message_lower or words & {"iron"}:
-            return "An iron and ironing board are typically in the closet. If yours is missing, dial 0 and housekeeping can bring one."
-        if "hair dryer" in message_lower or "hairdryer" in message_lower or "blow dryer" in message_lower:
-            return "A hair dryer is usually in the bathroom drawer. If it's missing, ask housekeeping or dial 0."
-        if words & {"concierge", "directions"} or "nearby" in message_lower:
-            return "Our concierge can help with maps, directions, and local reservations—visit the front desk or dial 0."
-        if "thank" in message_lower or words & {"thanks", "thx"}:
-            return THANKS_RESPONSE
-        if words & {"amenities", "amenity"}:
-            return "Common amenities include Wi-Fi, fitness, pool, dining, parking, and housekeeping—what would you like details on?"
-        # No match → small model (or offline fallback if no API key)
-        return None
-    
     def _get_mock_response(self, user_message: str, context: ConversationContext) -> str:
-        """Legacy: mock response when no API key. Uses intent layer; if no match, single fallback."""
-        generic = self._get_intent_response(user_message, None)
-        if generic is not None:
-            if generic in (CLOSING_AFTER_NO, HELLO_RESPONSE, ACKNOWLEDGMENT_RESPONSE, THANKS_RESPONSE):
-                return generic
-            return generic + SATISFACTION_SUFFIX
+        """Legacy: mock response when no API key."""
+        simple = self._get_simple_response(user_message, None)
+        if simple is not None:
+            return simple
         return self._no_api_key_fallback_text(user_message)
 
 
