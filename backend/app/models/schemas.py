@@ -17,6 +17,12 @@ class MessageRole(str, Enum):
     SYSTEM = "system"
 
 
+class MessageKind(str, Enum):
+    """Assistant message presentation kind."""
+    TEXT = "text"
+    FAQ = "faq"
+
+
 class TicketStatus(str, Enum):
     """Ticket status types."""
     PENDING = "pending"
@@ -48,6 +54,16 @@ class ChatMessageRequest(BaseModel):
     conversation_context: ConversationContext = ConversationContext.BOT
     images: Optional[List[str]] = None
     guest_id: Optional[str] = None
+    task_continuation: bool = False
+
+
+class FaqFeedbackRequest(BaseModel):
+    """Guest feedback on an FAQ panel."""
+    guest_id: str
+    helpful: bool
+    trigger_content: str = Field(..., min_length=1, max_length=4000)
+    faq_titles: Optional[List[str]] = None
+    faq_message_id: Optional[str] = None
 
 
 class CreateTicketRequest(BaseModel):
@@ -70,6 +86,13 @@ class UpdateStaffActionRequest(BaseModel):
 
 
 # Response models
+class FaqItem(BaseModel):
+    """Single FAQ accordion entry."""
+    id: str
+    title: str
+    body: str
+
+
 class Message(BaseModel):
     """Message response model."""
     id: str
@@ -78,10 +101,22 @@ class Message(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     images: Optional[List[str]] = None
     require_contact_confirmation: Optional[bool] = None
+    kind: MessageKind = MessageKind.TEXT
+    intro: Optional[str] = None
+    faq_items: Optional[List[FaqItem]] = None
+    trigger_content: Optional[str] = None
+    faq_resolved: Optional[bool] = None
 
 
 class ChatMessageResponse(BaseModel):
     """Chat response model with one or more assistant messages."""
+    messages: List[Message]
+    continue_task: bool = False
+    task_message: Optional[str] = None
+
+
+class ConversationHistoryResponse(BaseModel):
+    """Stored conversation for a guest."""
     messages: List[Message]
 
 

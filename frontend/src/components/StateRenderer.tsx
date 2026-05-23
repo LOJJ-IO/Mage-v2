@@ -52,9 +52,11 @@ export function StateRenderer() {
 
   return (
     <RecordingProvider>
-      <div className="mage-container bg-white dark:bg-mage-gray-900 relative overflow-x-hidden min-h-screen">
+      <div className="mage-container bg-white dark:bg-mage-gray-900">
         <AnimatePresence mode="wait" initial={false}>
-          <ScreenComponent key={getScreenKey(currentState)} />
+          <div key={getScreenKey(currentState)} className="absolute inset-0 w-full h-full overflow-hidden">
+            <ScreenComponent />
+          </div>
         </AnimatePresence>
       </div>
     </RecordingProvider>

@@ -58,7 +58,7 @@ body {
 
 /* Mobile-first container */
 .mage-container {
-  @apply w-full max-w-md mx-auto min-h-screen relative;
+  @apply w-full max-w-md mx-auto min-h-screen h-screen relative overflow-hidden;
   touch-action: pan-y;
 }
 

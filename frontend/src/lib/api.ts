@@ -6,9 +6,13 @@ import {
   ConversationContext,
   ApiResponse,
   ChatMessageResponse,
+  ConversationHistoryResponse,
+  FaqFeedbackRequest,
   StaffAction,
   StaffActionStatus,
 } from '@/types';
+import { mapApiMessage } from '@/lib/mapMessage';
+import { GUEST_CHAT_ERROR, toGuestFriendlyError } from '@/lib/guestErrors';
 
 function mapStaffAction(raw: Record<string, unknown>): StaffAction {
   return {
@@ -72,20 +76,23 @@ class ApiClient {
       });
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        const error = await response.json().catch(() => ({ detail: '' }));
         const detail = (error as { detail?: unknown }).detail;
         let message: string;
         if (Array.isArray(detail)) {
           message = detail
-            .map((d: { msg?: string }) => d?.msg || JSON.stringify(d))
+            .map((d: { msg?: string }) => d?.msg || '')
             .filter(Boolean)
             .join('; ');
         } else if (typeof detail === 'string') {
           message = detail;
         } else {
-          message = 'Request failed';
+          message = '';
         }
-        return { success: false, error: message || 'Request failed' };
+        return {
+          success: false,
+          error: toGuestFriendlyError(message || GUEST_CHAT_ERROR),
+        };
       }
 
       const data = await response.json();
@@ -93,27 +100,99 @@ class ApiClient {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Network error',
+        error: toGuestFriendlyError(
+          error instanceof Error ? error.message : undefined
+        ),
       };
     }
   }
 
   // Chat endpoints
+  async getPublicConfig(): Promise<ApiResponse<{ frontDeskPhone: string }>> {
+    const res = await this.request<{ front_desk_phone?: string }>('/api/chat/public-config');
+    if (!res.success || !res.data) {
+      return { success: false, error: res.error };
+    }
+    return {
+      success: true,
+      data: { frontDeskPhone: String(res.data.front_desk_phone || '').trim() },
+    };
+  }
+
+  async getConversationHistory(
+    guestId: string
+  ): Promise<ApiResponse<ConversationHistoryResponse>> {
+    const res = await this.request<{ messages: Record<string, unknown>[] }>(
+      `/api/chat/history/${encodeURIComponent(guestId)}`
+    );
+    if (!res.success || !res.data) {
+      return { success: false, error: res.error };
+    }
+    return {
+      success: true,
+      data: {
+        messages: (res.data.messages ?? []).map(mapApiMessage),
+      },
+    };
+  }
+
+  async sendFaqFeedback(
+    payload: FaqFeedbackRequest
+  ): Promise<ApiResponse<ChatMessageResponse>> {
+    const res = await this.request<{ messages: Record<string, unknown>[] }>(
+      '/api/chat/faq-feedback',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          guest_id: payload.guestId,
+          helpful: payload.helpful,
+          trigger_content: payload.triggerContent,
+          faq_titles: payload.faqTitles,
+          faq_message_id: payload.faqMessageId,
+        }),
+      }
+    );
+    if (!res.success || !res.data) {
+      return { success: false, error: res.error };
+    }
+    return {
+      success: true,
+      data: { messages: (res.data.messages ?? []).map(mapApiMessage) },
+    };
+  }
+
   async sendMessage(
     message: string,
     conversationContext: ConversationContext,
     images?: string[],
-    guestId?: string
+    guestId?: string,
+    taskContinuation?: boolean
   ): Promise<ApiResponse<ChatMessageResponse>> {
-    return this.request<ChatMessageResponse>('/api/chat/message', {
-      method: 'POST',
-      body: JSON.stringify({
-        content: message,
-        conversation_context: conversationContext,
-        images,
-        guest_id: guestId,
-      }),
-    });
+    const res = await this.request<{ messages: Record<string, unknown>[] }>(
+      '/api/chat/message',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          content: message,
+          conversation_context: conversationContext,
+          images,
+          guest_id: guestId,
+          task_continuation: Boolean(taskContinuation),
+        }),
+      }
+    );
+    if (!res.success || !res.data) {
+      return { success: false, error: res.error };
+    }
+    const raw = res.data;
+    return {
+      success: true,
+      data: {
+        messages: (raw.messages ?? []).map(mapApiMessage),
+        continueTask: Boolean(raw.continue_task),
+        taskMessage: raw.task_message != null ? String(raw.task_message) : null,
+      },
+    };
   }
 
   async streamMessage(

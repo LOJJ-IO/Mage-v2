@@ -62,6 +62,8 @@ interface MageState {
   setTheme: (theme: 'light' | 'dark') => void;
   setContext: (updates: Partial<AppContext>) => void;
   addMessage: (message: Omit<Message, 'id' | 'timestamp'>) => void;
+  setMessages: (messages: Message[]) => void;
+  updateMessage: (id: string, updates: Partial<Message>) => void;
   setInputText: (text: string) => void;
   addAttachedImage: (image: ImageAttachment) => void;
   removeAttachedImage: (id: string) => void;
@@ -219,6 +221,18 @@ export const useMageStore = create<MageState>()(
               timestamp: new Date(),
             },
           ],
+        }));
+      },
+
+      setMessages: (messages: Message[]) => {
+        set({ messages });
+      },
+
+      updateMessage: (id: string, updates: Partial<Message>) => {
+        set((state) => ({
+          messages: state.messages.map((m) =>
+            m.id === id ? { ...m, ...updates } : m
+          ),
         }));
       },
 

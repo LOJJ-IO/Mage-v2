@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     llm_model: str = os.getenv("LLM_MODEL", "openrouter/auto")
     llm_model_small: str = os.getenv("LLM_MODEL_SMALL", "openrouter/auto")
     llm_model_large: str = os.getenv("LLM_MODEL_LARGE", "openrouter/auto")
+    llm_model_thinking: str = os.getenv("LLM_MODEL_THINKING", "")
     # Optional: restrict Auto Router to these patterns (e.g. google/* for free Geminis). Comma-separated; empty = no restriction.
     llm_auto_allowed_models: str = os.getenv("LLM_AUTO_ALLOWED_MODELS", "")
     # Comma-separated list of model IDs to try when the primary model returns 404/unavailable
@@ -48,8 +49,44 @@ class Settings(BaseSettings):
         "LLM_MODEL_FALLBACKS",
         "google/gemini-2.0-flash-exp:free,google/gemini-flash-1.5:free,google/gemini-flash-1.5-8b:free,qwen/qwen-2.5-7b-instruct:free",
     )
-    llm_max_tokens: int = 2048
+    llm_max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "2048"))
+    llm_max_tokens_small: int = int(os.getenv("LLM_MAX_TOKENS_SMALL", "384"))
+    llm_max_tokens_large: int = int(os.getenv("LLM_MAX_TOKENS_LARGE", "768"))
     llm_temperature: float = 0.7
+    llm_request_timeout_small: float = float(os.getenv("LLM_REQUEST_TIMEOUT_SMALL", "25"))
+    llm_request_timeout_large: float = float(os.getenv("LLM_REQUEST_TIMEOUT_LARGE", "45"))
+    # Two-layer routing: JSON classifier + prose copy writer
+    llm_classifier_models: str = os.getenv(
+        "LLM_CLASSIFIER_MODELS", "openrouter/free,openrouter/auto"
+    )
+    llm_model_classifier: str = os.getenv("LLM_MODEL_CLASSIFIER", "")
+    classifier_prompt_path: str = os.getenv(
+        "CLASSIFIER_PROMPT_PATH", "prompts/classifier.txt"
+    )
+    llm_classifier_prompt_cache: bool = os.getenv(
+        "LLM_CLASSIFIER_PROMPT_CACHE", "false"
+    ).lower() in ("1", "true", "yes")
+    llm_copy_model: str = os.getenv("LLM_COPY_MODEL", "openrouter/free")
+    llm_max_tokens_classifier: int = int(os.getenv("LLM_MAX_TOKENS_CLASSIFIER", "380"))
+    llm_max_tokens_copy: int = int(os.getenv("LLM_MAX_TOKENS_COPY", "400"))
+    llm_classifier_min_confidence: float = float(
+        os.getenv("LLM_CLASSIFIER_MIN_CONFIDENCE", "0.39")
+    )
+    llm_classifier_history_turns: int = int(os.getenv("LLM_CLASSIFIER_HISTORY_TURNS", "2"))
+    # Substrings; resolved classifier models matching these are skipped (retry next tier model).
+    # LFM2.5: bad JSON/schema copy. GPT-5 Nano: 64-tok length. Nemotron Nano 9B V2: truncates tree JSON.
+    llm_classifier_disqualified_models: str = os.getenv(
+        "LLM_CLASSIFIER_DISQUALIFIED_MODELS",
+        "lfm-2.5,lfm2.5,liquid/lfm,gpt-5-nano,openai/gpt-5-nano,"
+        "nemotron-nano-9b-v2,nemotron-nano-9b,nemotron-nano,nvidia/nemotron",
+    )
+    llm_use_two_layer_routing: bool = os.getenv(
+        "LLM_USE_TWO_LAYER_ROUTING", "true"
+    ).lower() in ("1", "true", "yes")
+    # Copy writer: use classifier JSON + gist instead of replaying full chat (faster for thinking models)
+    llm_copy_include_full_history: bool = os.getenv(
+        "LLM_COPY_INCLUDE_FULL_HISTORY", "false"
+    ).lower() in ("1", "true", "yes")
     
     # Rate limiting
     rate_limit_requests: int = 60
@@ -63,6 +100,7 @@ class Settings(BaseSettings):
     hotel_knowledge_path: str = os.getenv("HOTEL_KNOWLEDGE_PATH", "")
     default_weather_location: str = os.getenv("DEFAULT_WEATHER_LOCATION", "Edmonton")
     hotel_timezone: str = os.getenv("HOTEL_TIMEZONE", "America/Edmonton")
+    hotel_front_desk_phone: str = os.getenv("HOTEL_FRONT_DESK_PHONE", "")
 
     staff_access_key: str = os.getenv("STAFF_ACCESS_KEY", "mage-staff-dev")
     
