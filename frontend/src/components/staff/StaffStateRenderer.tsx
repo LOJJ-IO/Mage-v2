@@ -11,8 +11,9 @@ import {
 } from '@/lib/stateMachineStaff';
 import { useStaffActions, useStaffAction, useUpdateStaffAction } from '@/hooks/useStaffApi';
 import { StaffPinScreen } from './StaffPinScreen';
-import { StaffInboxScreen } from './StaffInboxScreen';
-import { StaffDetailScreen } from './StaffDetailScreen';
+import { StaffWorkspace } from './StaffWorkspace';
+import { StaffDetailPanel } from './StaffDetailPanel';
+
 async function verifyStaffKey(key: string): Promise<boolean> {
   const { apiClient } = await import('@/lib/api');
   const res = await apiClient.listStaffActions(key);
@@ -63,7 +64,7 @@ export function StaffStateRenderer() {
     setState(staffTransition('S-S-002', 'SELECT_ACTION') ?? 'S-S-003');
   }, []);
 
-  const handleBack = useCallback(() => {
+  const handleCloseDetail = useCallback(() => {
     setSelectedId(null);
     setState(staffTransition('S-S-003', 'BACK') ?? 'S-S-002');
   }, []);
@@ -82,25 +83,24 @@ export function StaffStateRenderer() {
     return <StaffPinScreen onSubmit={handlePinSubmit} error={pinError} />;
   }
 
-  if (state === 'S-S-003' && selectedAction) {
-    return (
-      <StaffDetailScreen
-        action={selectedAction}
-        staffKey={staffKey!}
-        isUpdating={updateMutation.isPending}
-        onBack={handleBack}
-        onUpdateStatus={handleUpdateStatus}
-      />
-    );
-  }
-
   return (
-    <StaffInboxScreen
-      actions={actions}
-      isLoading={isLoading}
-      pendingCount={pendingCount}
-      onSelect={handleSelect}
-      onLogout={handleLogout}
-    />
+    <>
+      <StaffWorkspace
+        actions={actions}
+        isLoading={isLoading}
+        pendingCount={pendingCount}
+        onSelect={handleSelect}
+        onLogout={handleLogout}
+      />
+      {state === 'S-S-003' && selectedAction && staffKey && (
+        <StaffDetailPanel
+          action={selectedAction}
+          staffKey={staffKey}
+          isUpdating={updateMutation.isPending}
+          onClose={handleCloseDetail}
+          onUpdateStatus={handleUpdateStatus}
+        />
+      )}
+    </>
   );
 }
