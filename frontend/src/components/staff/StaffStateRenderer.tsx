@@ -86,6 +86,7 @@ export function StaffStateRenderer() {
     return (
       <StaffDetailScreen
         action={selectedAction}
+        staffKey={staffKey!}
         isUpdating={updateMutation.isPending}
         onBack={handleBack}
         onUpdateStatus={handleUpdateStatus}

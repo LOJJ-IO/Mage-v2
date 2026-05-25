@@ -43,7 +43,7 @@ export function useAgentAvailability() {
 }
 
 export function useConversationHistory(guestId: string | undefined) {
-  const setMessages = useMageStore((s) => s.setMessages);
+  const conversationContext = useMageStore((s) => s.context.conversationContext);
 
   return useQuery({
     queryKey: queryKeys.conversationHistory(guestId || ''),
@@ -57,6 +57,8 @@ export function useConversationHistory(guestId: string | undefined) {
     enabled: !!guestId,
     staleTime: 0,
     refetchOnWindowFocus: false,
+    refetchInterval:
+      conversationContext === 'FRONT_DESK_AGENT' ? 4000 : false,
   });
 }
 

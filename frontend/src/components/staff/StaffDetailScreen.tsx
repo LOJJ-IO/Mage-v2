@@ -1,11 +1,23 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { StaffAction, StaffActionStatus } from '@/types';
-import { actionTypeBadgeClass, actionTypeLabel } from './actionBadges';
+import {
+  actionTypeBadgeClass,
+  actionTypeLabel,
+  escalationBadgeClass,
+  escalationLabel,
+} from './actionBadges';
+import { MessageBubble } from '@/components/MessageBubble';
+import {
+  useStaffActionConversation,
+  useSendStaffMessage,
+} from '@/hooks/useStaffApi';
 
 interface StaffDetailScreenProps {
   action: StaffAction;
+  staffKey: string;
   isUpdating: boolean;
   onBack: () => void;
   onUpdateStatus: (status: 'acknowledged' | 'resolved') => void;
@@ -29,11 +41,26 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
 
 export function StaffDetailScreen({
   action,
+  staffKey,
   isUpdating,
   onBack,
   onUpdateStatus,
 }: StaffDetailScreenProps) {
   const created = new Date(action.createdAt).toLocaleString();
+  const [reply, setReply] = useState('');
+  const { data: conversation, isLoading: convLoading } = useStaffActionConversation(
+    staffKey,
+    action.id
+  );
+  const sendMutation = useSendStaffMessage();
+  const canReply = action.allowStaffJumpIn !== false && action.status !== 'resolved';
+
+  const handleSend = async () => {
+    const text = reply.trim();
+    if (!text || sendMutation.isPending) return;
+    await sendMutation.mutateAsync({ actionId: action.id, content: text, staffKey });
+    setReply('');
+  };
 
   return (
     <motion.div
@@ -62,11 +89,20 @@ export function StaffDetailScreen({
         >
           {action.summary}
         </motion.h1>
-        <span
-          className={`inline-block mt-2 text-xs px-2 py-0.5 rounded-full ${actionTypeBadgeClass(action.actionType)}`}
-        >
-          {actionTypeLabel(action.actionType)}
-        </span>
+        <div className="flex flex-wrap gap-2 mt-2">
+          <span
+            className={`inline-block text-xs px-2 py-0.5 rounded-full ${actionTypeBadgeClass(action.actionType)}`}
+          >
+            {actionTypeLabel(action.actionType)}
+          </span>
+          {action.escalationType && action.escalationType !== 'normal' && (
+            <span
+              className={`inline-block text-xs px-2 py-0.5 rounded-full ${escalationBadgeClass(action.escalationType)}`}
+            >
+              {escalationLabel(action.escalationType)}
+            </span>
+          )}
+        </div>
       </header>
 
       <main className="flex-1 overflow-y-auto px-4 py-4">
@@ -90,6 +126,52 @@ export function StaffDetailScreen({
           </DetailRow>
           <DetailRow label="Logged at">{created}</DetailRow>
         </dl>
+
+        <section className="mb-6">
+          <h2 className="text-sm font-semibold text-mage-black dark:text-white mb-3">
+            Guest chat
+          </h2>
+          <div className="rounded-uber-xl border border-mage-gray-200 dark:border-mage-gray-700 p-3 min-h-[120px] max-h-64 overflow-y-auto bg-mage-gray-50 dark:bg-mage-gray-800/50">
+            {convLoading ? (
+              <p className="text-sm text-mage-gray-500">Loading conversation…</p>
+            ) : !conversation?.messages.length ? (
+              <p className="text-sm text-mage-gray-500">No messages yet.</p>
+            ) : (
+              conversation.messages.map((msg, i) => (
+                <MessageBubble
+                  key={msg.id || `staff-view-${i}`}
+                  message={msg}
+                  isLast={i === conversation.messages.length - 1}
+                />
+              ))
+            )}
+          </div>
+          {canReply && (
+            <div className="mt-3 flex gap-2">
+              <input
+                type="text"
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                placeholder="Reply to guest…"
+                className="flex-1 px-4 py-2.5 rounded-uber-full border border-mage-gray-200 dark:border-mage-gray-600 bg-white dark:bg-mage-gray-800 text-mage-black dark:text-white text-sm"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void handleSend();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                disabled={!reply.trim() || sendMutation.isPending}
+                onClick={() => void handleSend()}
+                className="px-4 py-2.5 rounded-uber-full bg-mage-blue text-white text-sm font-medium disabled:opacity-50"
+              >
+                Send
+              </button>
+            </div>
+          )}
+        </section>
 
         <div className="flex flex-col gap-3 pb-8">
           {action.status === 'pending' && (

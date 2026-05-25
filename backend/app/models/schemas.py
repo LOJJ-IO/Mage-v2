@@ -15,6 +15,7 @@ class MessageRole(str, Enum):
     USER = "user"
     ASSISTANT = "assistant"
     SYSTEM = "system"
+    STAFF = "staff"
 
 
 class MessageKind(str, Enum):
@@ -45,6 +46,15 @@ class StaffActionStatus(str, Enum):
     PENDING = "pending"
     ACKNOWLEDGED = "acknowledged"
     RESOLVED = "resolved"
+
+
+class StaffActionEscalationType(str, Enum):
+    """How a staff inbox item was created or updated."""
+    NORMAL = "normal"
+    ESCALATED = "escalated"
+    STATUS_CHECK = "status_check"
+    REPETITION = "repetition"
+    CONTACT = "contact"
 
 
 # Request models
@@ -83,6 +93,11 @@ class UpdateTicketRequest(BaseModel):
 class UpdateStaffActionRequest(BaseModel):
     """Request model for updating a staff action."""
     status: StaffActionStatus
+
+
+class StaffMessageRequest(BaseModel):
+    """Staff reply injected into guest conversation."""
+    content: str = Field(..., min_length=1, max_length=4000)
 
 
 # Response models
@@ -156,6 +171,16 @@ class StaffAction(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     guest_name: Optional[str] = None
     room_number: Optional[str] = None
+    escalation_type: StaffActionEscalationType = StaffActionEscalationType.NORMAL
+    allow_staff_jump_in: bool = True
+    guest_conversation_thread_id: Optional[str] = None
+
+
+class StaffActionConversationResponse(BaseModel):
+    """Guest profile and conversation thread for a staff action."""
+    action: StaffAction
+    guest: GuestProfile
+    messages: List[Message]
 
 
 class AgentAvailability(BaseModel):

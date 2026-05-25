@@ -2,7 +2,14 @@
 
 import { motion } from 'framer-motion';
 import { StaffAction } from '@/types';
-import { actionTypeBadgeClass, actionTypeLabel, formatRelativeTime, statusDotClass } from './actionBadges';
+import {
+  actionTypeBadgeClass,
+  actionTypeLabel,
+  escalationBadgeClass,
+  escalationLabel,
+  formatRelativeTime,
+  statusDotClass,
+} from './actionBadges';
 
 interface StaffInboxScreenProps {
   actions: StaffAction[];
@@ -99,11 +106,20 @@ export function StaffInboxScreen({
                     <p className="text-sm text-mage-gray-500 dark:text-mage-gray-400 mt-0.5 truncate">
                       Room {action.roomNumber ?? '—'} · {action.guestName ?? action.guestId}
                     </p>
-                    <span
-                      className={`inline-block mt-2 text-xs px-2 py-0.5 rounded-full ${actionTypeBadgeClass(action.actionType)}`}
-                    >
-                      {actionTypeLabel(action.actionType)}
-                    </span>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      <span
+                        className={`inline-block text-xs px-2 py-0.5 rounded-full ${actionTypeBadgeClass(action.actionType)}`}
+                      >
+                        {actionTypeLabel(action.actionType)}
+                      </span>
+                      {action.escalationType && action.escalationType !== 'normal' && (
+                        <span
+                          className={`inline-block text-xs px-2 py-0.5 rounded-full ${escalationBadgeClass(action.escalationType)}`}
+                        >
+                          {escalationLabel(action.escalationType)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <span className="text-xs text-mage-gray-400 flex-shrink-0">
                     {formatRelativeTime(action.createdAt)}

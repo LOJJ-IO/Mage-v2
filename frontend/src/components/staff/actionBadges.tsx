@@ -1,4 +1,4 @@
-import { ActionType } from '@/types';
+import { ActionType, StaffActionEscalationType } from '@/types';
 
 export function actionTypeLabel(type: ActionType): string {
   if (type === 'HANDOFF') {
@@ -32,6 +32,36 @@ export function statusDotClass(status: string): string {
       return 'bg-mage-blue';
     default:
       return 'border-2 border-mage-gray-400 dark:border-mage-gray-500 bg-transparent';
+  }
+}
+
+export function escalationLabel(type: StaffActionEscalationType): string {
+  switch (type) {
+    case 'escalated':
+      return 'Escalated';
+    case 'contact':
+      return 'Contact';
+    case 'status_check':
+      return 'Status';
+    case 'repetition':
+      return 'Repeat';
+    default:
+      return '';
+  }
+}
+
+export function escalationBadgeClass(type: StaffActionEscalationType): string {
+  switch (type) {
+    case 'escalated':
+      return 'bg-mage-red/20 text-mage-red';
+    case 'contact':
+      return 'bg-mage-yellow/20 text-mage-yellow dark:text-mage-yellow';
+    case 'status_check':
+      return 'bg-mage-blue/15 text-mage-blue';
+    case 'repetition':
+      return 'bg-mage-gray-200 text-mage-gray-600 dark:bg-mage-gray-700 dark:text-mage-gray-300';
+    default:
+      return 'bg-mage-gray-100 text-mage-gray-600';
   }
 }
 

@@ -1,93 +1,72 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useMageStore } from '@/store/mageStore';
-import { CONNECTION_COUNTDOWN } from '@/lib/stateMachine';
 import { useCreateTicket } from '@/hooks/useApi';
 
 export function ConnectionScreen() {
-  const {
-    transition,
-    setContext,
-    context,
-    addToast,
-    addMessage,
-    theme,
-  } = useMageStore();
-
-  const [countdown, setCountdown] = useState(CONNECTION_COUNTDOWN);
-  const [isConnecting, setIsConnecting] = useState(false);
+  const { transition, setContext, addMessage, addToast } = useMageStore();
   const createTicketMutation = useCreateTicket();
-  const hasTriggeredConnect = useRef(false);
-  const handleConnectRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const [frontDeskPhone, setFrontDeskPhone] = useState(
+    () => process.env.NEXT_PUBLIC_HOTEL_FRONT_DESK_PHONE?.trim() || ''
+  );
+  const [isBusy, setIsBusy] = useState(false);
 
-  // Handle cancel
+  useEffect(() => {
+    if (frontDeskPhone) return;
+    let cancelled = false;
+    (async () => {
+      const { apiClient } = await import('@/lib/api');
+      const res = await apiClient.getPublicConfig();
+      if (!cancelled && res.success && res.data?.frontDeskPhone) {
+        setFrontDeskPhone(res.data.frontDeskPhone);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [frontDeskPhone]);
+
+  const ensureTicket = useCallback(async () => {
+    try {
+      await createTicketMutation.mutateAsync('Front desk connection request');
+    } catch {
+      addToast({
+        type: 'error',
+        message: 'Could not log your request. You can still connect below.',
+      });
+    }
+  }, [createTicketMutation, addToast]);
+
+  const handleCall = useCallback(async () => {
+    if (isBusy) return;
+    setIsBusy(true);
+    await ensureTicket();
+    if (frontDeskPhone) {
+      window.location.href = `tel:${frontDeskPhone.replace(/\s/g, '')}`;
+    }
+    setContext({ conversationContext: 'FRONT_DESK_AGENT' });
+    transition('CONNECTION_CALL');
+    setIsBusy(false);
+  }, [isBusy, ensureTicket, frontDeskPhone, setContext, transition]);
+
+  const handleChat = useCallback(async () => {
+    if (isBusy) return;
+    setIsBusy(true);
+    await ensureTicket();
+    setContext({ conversationContext: 'FRONT_DESK_AGENT' });
+    addMessage({
+      role: 'system',
+      content: 'A team member may reply here.',
+    });
+    transition('CONNECTION_CHAT');
+    setIsBusy(false);
+  }, [isBusy, ensureTicket, setContext, addMessage, transition]);
+
   const handleCancel = useCallback(() => {
     transition('CANCEL_CONNECTION');
   }, [transition]);
-
-  // Handle connection after countdown (called once when countdown hits 0)
-  const handleConnect = useCallback(async () => {
-    setIsConnecting(true);
-
-    try {
-      // Create ticket (single POST per connection attempt)
-      await createTicketMutation.mutateAsync('Front desk connection request');
-
-      // Determine routing: human available → front desk; else → deferred (state machine sets BOT)
-      if (context.humanAgentAvailable) {
-        setContext({ conversationContext: 'FRONT_DESK_AGENT' });
-        addMessage({
-          role: 'system',
-          content: 'Connected to Front Desk',
-        });
-        addMessage({
-          role: 'assistant',
-          content: 'Hello! This is the front desk. How can I assist you today?',
-        });
-        transition('CONNECTION_TIMEOUT');
-      } else {
-        transition('CONNECTION_TIMEOUT');
-      }
-    } catch (error) {
-      addToast({
-        type: 'error',
-        message: 'Connection failed. Please try again.',
-      });
-      transition('CANCEL_CONNECTION');
-    }
-  }, [
-    context,
-    setContext,
-    addMessage,
-    addToast,
-    transition,
-    createTicketMutation,
-  ]);
-
-  handleConnectRef.current = handleConnect;
-
-  // Countdown timer: only decrement state; do not run side effects in the updater
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // When countdown reaches 0, run connect once (ref prevents duplicate calls / Strict Mode double-invoke)
-  useEffect(() => {
-    if (countdown !== 0 || hasTriggeredConnect.current) return;
-    hasTriggeredConnect.current = true;
-    handleConnectRef.current();
-  }, [countdown]);
 
   return (
     <motion.div
@@ -96,108 +75,56 @@ export function ConnectionScreen() {
       exit={{ opacity: 0 }}
       className="min-h-screen bg-white dark:bg-mage-gray-900 flex flex-col items-center justify-center p-6"
     >
-      {/* Loading animation — grey wheel, smooth drain */}
-      <div className="relative mb-8">
-        <svg width="120" height="120" viewBox="0 0 120 120" className="overflow-visible">
-          <circle
-            cx="60"
-            cy="60"
-            r="54"
-            fill="none"
-            stroke={theme === 'dark' ? '#404040' : '#E2E2E2'}
-            strokeWidth="8"
-          />
-          <motion.circle
-            cx="60"
-            cy="60"
-            r="54"
-            fill="none"
-            stroke={theme === 'dark' ? '#AFAFAF' : '#757575'}
-            strokeWidth="8"
-            strokeLinecap="round"
-            strokeDasharray={339.292}
-            initial={{ strokeDashoffset: 339.292 }}
-            animate={{ strokeDashoffset: 0 }}
-            transform="rotate(-90 60 60)"
-            transition={{ duration: CONNECTION_COUNTDOWN, ease: 'linear' }}
-          />
-        </svg>
-
-        {/* Countdown number */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <motion.span
-            key={countdown}
-            initial={{ scale: 1.2, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="text-4xl font-bold text-mage-black dark:text-white"
-          >
-            {countdown}
-          </motion.span>
-        </div>
-      </div>
-
-      {/* Status text */}
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.2 }}
-        className="text-center mb-8"
+        className="text-center mb-10 max-w-sm"
       >
         <h2 className="text-2xl font-semibold text-mage-black dark:text-white mb-2">
-          {isConnecting ? 'Connecting...' : 'Preparing connection'}
+          Connect with the front desk
         </h2>
         <p className="text-mage-gray-500 dark:text-mage-gray-400">
-          {context.humanAgentAvailable
-            ? 'Connecting you to the front desk'
-            : context.aiAgentAvailable && context.isPaidUser
-            ? 'Connecting you to AI assistance'
-            : 'Finding the best way to help you'}
+          Call the desk directly or continue in chat — a team member can reply when available.
         </p>
       </motion.div>
 
-      {/* Connection status indicators */}
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.3 }}
-        className="space-y-3 w-full max-w-xs mb-8"
+        transition={{ delay: 0.1 }}
+        className="flex flex-col gap-3 w-full max-w-xs mb-8"
       >
-        <StatusIndicator
-          icon={
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path
-                d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-              <circle cx="12" cy="7" r="4" stroke="currentColor" strokeWidth="2" />
-            </svg>
-          }
-          label="Human agent"
-          status={context.humanAgentAvailable ? 'available' : 'unavailable'}
-        />
-        <StatusIndicator
-          icon={
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path
-                d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-          }
-          label="AI assistant"
-          status={context.aiAgentAvailable ? 'available' : 'unavailable'}
-        />
+        <button
+          type="button"
+          disabled={isBusy}
+          onClick={handleCall}
+          className="
+            w-full py-3.5 rounded-uber-full
+            bg-mage-black dark:bg-white text-white dark:text-mage-black
+            font-semibold disabled:opacity-50
+            hover:opacity-90 active:scale-[0.98] transition-all
+          "
+        >
+          {frontDeskPhone ? 'Call front desk' : 'Call front desk (number unavailable)'}
+        </button>
+        <button
+          type="button"
+          disabled={isBusy}
+          onClick={handleChat}
+          className="
+            w-full py-3.5 rounded-uber-full
+            bg-mage-blue text-white font-semibold disabled:opacity-50
+            hover:opacity-90 active:scale-[0.98] transition-all
+          "
+        >
+          Chat with front desk
+        </button>
       </motion.div>
 
-      {/* Cancel button */}
       <motion.button
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.4 }}
+        transition={{ delay: 0.2 }}
         onClick={handleCancel}
         className="
           px-8 py-3
@@ -210,33 +137,5 @@ export function ConnectionScreen() {
         Cancel
       </motion.button>
     </motion.div>
-  );
-}
-
-// Status indicator component
-interface StatusIndicatorProps {
-  icon: React.ReactNode;
-  label: string;
-  status: 'available' | 'unavailable' | 'connecting';
-}
-
-function StatusIndicator({ icon, label, status }: StatusIndicatorProps) {
-  const getStatusColor = () => {
-    switch (status) {
-      case 'available':
-        return 'bg-mage-green';
-      case 'connecting':
-        return 'bg-mage-yellow';
-      default:
-        return 'bg-mage-gray-300';
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-3 p-3 bg-mage-gray-50 dark:bg-mage-gray-800 rounded-uber-lg">
-      <div className="text-mage-gray-600 dark:text-mage-gray-400">{icon}</div>
-      <span className="flex-1 text-mage-black dark:text-white font-medium">{label}</span>
-      <div className={`w-3 h-3 rounded-full ${getStatusColor()}`} />
-    </div>
   );
 }

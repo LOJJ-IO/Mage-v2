@@ -105,6 +105,18 @@ export function ChatScreen() {
     faqFeedbackMutation.isPending,
   ]);
 
+  // Poll staff jump-in messages while connected to front desk chat
+  useEffect(() => {
+    if (
+      context.conversationContext !== 'FRONT_DESK_AGENT' ||
+      !historyHydratedRef.current ||
+      !historyData
+    ) {
+      return;
+    }
+    setMessages(historyData);
+  }, [context.conversationContext, historyData, setMessages]);
+
   // Determine current sub-state
   const isIdle = currentState === 'S-G-003';
   const isTyping = currentState === 'S-G-004';
