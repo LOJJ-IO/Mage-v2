@@ -93,7 +93,7 @@ export default function WelcomePage() {
           transition={{ delay: 0.15, duration: 0.28 }}
           className="block w-full py-3.5 text-center rounded-uber-full border-2 border-mage-black dark:border-white text-mage-black dark:text-white font-medium"
         >
-          Staff inbox
+          Staff workspace
         </motion.a>
       </motion.div>
     </main>
