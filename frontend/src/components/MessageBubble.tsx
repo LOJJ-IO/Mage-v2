@@ -21,6 +21,7 @@ export function MessageBubble({
   faqFeedbackPending = false,
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
+  const isStaff = message.role === 'staff';
   const isSystem = message.role === 'system';
   const isFaq = message.kind === 'faq' && message.faqItems && message.faqItems.length > 0;
 
@@ -75,10 +76,18 @@ export function MessageBubble({
           max-w-[85%] min-w-0 px-4 py-3 rounded-uber-xl overflow-hidden
           ${isUser
             ? 'bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black rounded-br-sm'
-            : 'bg-mage-gray-100 dark:bg-mage-gray-800 text-mage-black dark:text-white rounded-bl-sm'
+            : isStaff
+              ? 'bg-mage-blue/15 dark:bg-mage-blue/25 text-mage-black dark:text-white rounded-bl-sm border border-mage-blue/30'
+              : 'bg-mage-gray-100 dark:bg-mage-gray-800 text-mage-black dark:text-white rounded-bl-sm'
           }
         `}
       >
+        {isStaff && (
+          <p className="text-xs font-medium text-mage-blue dark:text-mage-blue mb-1">
+            Front desk
+          </p>
+        )}
+
         {message.images && message.images.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2">
             {message.images.map((img, idx) => (

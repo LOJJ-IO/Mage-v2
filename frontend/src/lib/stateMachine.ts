@@ -45,7 +45,7 @@ export const STATES: Record<StateId, StateDefinition> = {
   'S-G-009': {
     id: 'S-G-009',
     name: 'Guest.Service.Connection.Loading',
-    description: 'Ticket creation & agent routing (8s countdown)',
+    description: 'Front desk connection — call or chat',
   },
   'S-G-010': {
     id: 'S-G-010',
@@ -107,9 +107,9 @@ export const TRANSITIONS: Transition[] = [
   { from: 'S-G-007', trigger: 'CONTACT_FRONT_DESK', to: 'S-G-009' },
   { from: 'S-G-009', trigger: 'CANCEL_CONNECTION', to: 'S-G-003', context: 'BOT' },
 
-  // Agent routing (after 8s countdown): human available → front desk; else → deferred
-  { from: 'S-G-009', condition: 'human_agent_available=true', to: 'S-G-003', context: 'FRONT_DESK_AGENT' },
-  { from: 'S-G-009', condition: 'human_agent_available=false', to: 'S-G-011', context: 'BOT' },
+  // Guest chooses call or in-app chat (no simulated agent countdown)
+  { from: 'S-G-009', trigger: 'CONNECTION_CALL', to: 'S-G-003', context: 'FRONT_DESK_AGENT' },
+  { from: 'S-G-009', trigger: 'CONNECTION_CHAT', to: 'S-G-003', context: 'FRONT_DESK_AGENT' },
 
   // Deferred state
   { from: 'S-G-011', trigger: 'CONTINUE', to: 'S-G-003' },

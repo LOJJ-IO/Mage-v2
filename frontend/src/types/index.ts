@@ -55,6 +55,8 @@ export type Trigger =
   | 'CONTACT_FRONT_DESK'
   | 'CANCEL_CONNECTION'
   | 'CONNECTION_TIMEOUT'
+  | 'CONNECTION_CALL'
+  | 'CONNECTION_CHAT'
   | 'SEND_RECORDING_FROM_PROFILE'
   | 'CANCEL_RECORDING_FROM_PROFILE';
 
@@ -87,7 +89,7 @@ export interface Transition {
 }
 
 // Message types
-export type MessageRole = 'user' | 'assistant' | 'system';
+export type MessageRole = 'user' | 'assistant' | 'system' | 'staff';
 export type MessageKind = 'text' | 'faq';
 
 export interface FaqItem {
@@ -218,6 +220,19 @@ export type ActionType =
 
 export type StaffActionStatus = 'pending' | 'acknowledged' | 'resolved';
 
+export type StaffActionEscalationType =
+  | 'normal'
+  | 'escalated'
+  | 'status_check'
+  | 'repetition'
+  | 'contact';
+
+export interface StaffActionConversation {
+  action: StaffAction;
+  guest: GuestProfile;
+  messages: Message[];
+}
+
 export interface StaffAction {
   id: string;
   guestId: string;
@@ -228,4 +243,7 @@ export interface StaffAction {
   createdAt: string;
   guestName?: string;
   roomNumber?: string;
+  escalationType?: StaffActionEscalationType;
+  allowStaffJumpIn?: boolean;
+  guestConversationThreadId?: string;
 }

@@ -10,7 +10,12 @@ from collections import deque
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 from app.core.config import get_settings
-from app.models.schemas import ConversationContext, ActionType, MessageKind
+from app.models.schemas import (
+    ConversationContext,
+    ActionType,
+    MessageKind,
+    StaffActionEscalationType,
+)
 from app.services.database import get_database
 from app.services.conversation_helpers import (
     trim_history,
@@ -36,7 +41,11 @@ from app.services.service_routing import (
     merge_classified_action,
     normalize_action_type_for_staff,
 )
-from app.services.request_consolidation import append_to_best_pending, list_pending_actions_for_guest
+from app.services.request_consolidation import (
+    append_to_best_pending,
+    escalate_or_create_task,
+    list_pending_actions_for_guest,
+)
 from app.services.intent_llm import (
     call_classifier,
     ClassifierError,
@@ -77,6 +86,96 @@ STAFF_INBOX_ACTION_TYPES = frozenset({
 _GREETING_SHORT_CIRCUIT = frozenset({
     "hello", "hi", "hey", "ok", "okay", "thanks", "thx",
 })
+
+_EXPLICIT_SPEAK_PHRASES = (
+    "speak to",
+    "talk to",
+    "contact",
+    "call ",
+    " person",
+    "someone",
+    "representative",
+    "agent",
+    "need to talk",
+    "want to talk",
+    "front desk",
+)
+
+
+def _is_pure_social_abilities(abilities: List[str]) -> bool:
+    return abilities == ["G"] or (len(abilities) == 1 and abilities[0] == "G")
+
+
+def _text_segment_dict(
+    content: str,
+    *,
+    require_contact: bool = False,
+) -> Dict[str, Any]:
+    return {
+        "content": content,
+        "kind": MessageKind.TEXT.value,
+        "require_contact_confirmation": require_contact,
+    }
+
+
+def _guest_explicitly_wants_to_speak(user_message: str) -> bool:
+    msg_lower = (user_message or "").lower()
+    return any(phrase in msg_lower for phrase in _EXPLICIT_SPEAK_PHRASES)
+
+
+def _escalation_type_for_request(request_type: str) -> StaffActionEscalationType:
+    mapping = {
+        "follow_up_escalation": StaffActionEscalationType.ESCALATED,
+        "repetition": StaffActionEscalationType.REPETITION,
+        "status_check": StaffActionEscalationType.STATUS_CHECK,
+        "social": StaffActionEscalationType.NORMAL,
+    }
+    return mapping.get(request_type, StaffActionEscalationType.NORMAL)
+
+
+def _handle_contact_front_desk_segments(
+    classified: ClassifierResult,
+    user_message: str,
+    guest_id: Optional[str],
+    conversation_history: Optional[List[Dict[str, str]]],
+) -> List[Dict[str, Any]]:
+    title = ""
+    if classified.tasks:
+        title = (classified.tasks[0].get("title") or "").strip()
+    if not title:
+        title = (classified.message or "Guest inquiry")[:200]
+
+    if classified.request_type == "follow_up_escalation" and guest_id:
+        _, guest_msg = escalate_or_create_task(
+            guest_id,
+            "CONTACT_FRONT_DESK",
+            title,
+            "follow_up_escalation",
+            user_message,
+            conversation_history,
+        )
+        return [_text_segment_dict(guest_msg)]
+
+    if _guest_explicitly_wants_to_speak(user_message):
+        content = (classified.message or "I can connect you to the front desk.").strip()
+        return [_text_segment_dict(content, require_contact=True)]
+
+    if guest_id:
+        _try_log_staff_action(
+            guest_id,
+            "CONTACT_FRONT_DESK",
+            title,
+            user_message,
+            conversation_history=conversation_history,
+            user_message=user_message,
+            escalation_type=StaffActionEscalationType.CONTACT,
+            skip_pending_append=True,
+        )
+    content = (
+        classified.message
+        or "The front desk can help with that — they'll reach out shortly."
+    ).strip()
+    return [_text_segment_dict(content)]
 
 _LOGGED_TASK_PHRASES = (
     "maintenance on the way",
@@ -147,11 +246,18 @@ def _try_log_staff_action(
     source_message: str,
     conversation_history: Optional[List[Dict[str, str]]] = None,
     user_message: Optional[str] = None,
+    *,
+    escalation_type: StaffActionEscalationType = StaffActionEscalationType.NORMAL,
+    skip_pending_append: bool = False,
 ) -> Optional[Any]:
     """Log or append staff action. Returns StaffAction on success."""
     if not guest_id:
         return None
-    if user_message and is_follow_up_detail(user_message):
+    if (
+        user_message
+        and is_follow_up_detail(user_message)
+        and not skip_pending_append
+    ):
         try:
             appended = append_to_best_pending(guest_id, user_message)
             if appended:
@@ -183,6 +289,8 @@ def _try_log_staff_action(
             action_type=resolved_type,
             summary=summary_text,
             source_message=substantive,
+            escalation_type=escalation_type,
+            guest_conversation_thread_id=guest_id,
         )
     except Exception as e:
         logger.exception("Staff action log error: %s", e)
@@ -1332,6 +1440,10 @@ class LLMService:
         segments: List[Dict[str, Any]] = []
         latest_lower = (user_message or "").lower().strip()
 
+        if _is_pure_social_abilities(abilities):
+            content = self._classifier_guest_reply(classified, "Hi there!")
+            return [self._text_segment(content)]
+
         if not abilities:
             if latest_lower in _GREETING_SHORT_CIRCUIT:
                 simple = self._get_simple_response(user_message, history)
@@ -1342,26 +1454,80 @@ class LLMService:
                     )
                 )
                 return [self._text_segment(content)]
+            if (classified.message or "").strip():
+                return [
+                    self._text_segment(
+                        self._classifier_guest_reply(classified, NON_ANSWER)
+                    )
+                ]
             return [self._text_segment(NON_ANSWER)]
 
         if "D" in abilities:
-            self._log_staff_tasks_from_classifier(
-                classified, user_message, history, guest_id
-            )
-            if classified.message:
-                require_contact = any(
-                    t.get("service") == "CONTACT_FRONT_DESK" for t in classified.tasks
-                )
-                segments.append(
-                    self._text_segment(
-                        self._classifier_guest_reply(
-                            classified,
-                            "I have that noted for you."
-                            if classified.request_type == "repetition"
-                            else "I've passed that along to our team.",
-                        ),
-                        require_contact=require_contact,
+            if classified.request_type == "repetition":
+                for task in classified.tasks:
+                    logger.info(
+                        "Duplicate task suppressed: %s '%s'",
+                        task.get("service"),
+                        task.get("title"),
                     )
+            else:
+                for task in classified.tasks:
+                    service = task.get("service")
+                    if not service or service not in STAFF_LOG_TYPES:
+                        continue
+                    title = (task.get("title") or "").strip()
+                    if service == "CONTACT_FRONT_DESK":
+                        segments.extend(
+                            _handle_contact_front_desk_segments(
+                                classified,
+                                user_message,
+                                guest_id,
+                                history,
+                            )
+                        )
+                        continue
+                    if classified.request_type == "follow_up_escalation" and guest_id:
+                        _, guest_msg = escalate_or_create_task(
+                            guest_id,
+                            service,
+                            title,
+                            classified.request_type,
+                            user_message,
+                            history,
+                        )
+                        segments.append(self._text_segment(guest_msg))
+                        continue
+                    if guest_id:
+                        _try_log_staff_action(
+                            guest_id,
+                            service,
+                            title or build_staff_summary(
+                                ActionType(service),
+                                resolve_substantive_user_message(
+                                    user_message, history
+                                ),
+                                history,
+                            ),
+                            user_message,
+                            conversation_history=history,
+                            user_message=user_message,
+                            escalation_type=_escalation_type_for_request(
+                                classified.request_type
+                            ),
+                            skip_pending_append=True,
+                        )
+                    guest_line = (classified.message or "").strip()
+                    if guest_line:
+                        segments.append(self._text_segment(guest_line))
+                    elif title:
+                        segments.append(
+                            self._text_segment(
+                                "I've passed that along to our team."
+                            )
+                        )
+            if classified.message and not segments:
+                segments.append(
+                    self._text_segment(self._classifier_guest_reply(classified, ""))
                 )
 
         if "A" in abilities:

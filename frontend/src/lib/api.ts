@@ -9,6 +9,7 @@ import {
   ConversationHistoryResponse,
   FaqFeedbackRequest,
   StaffAction,
+  StaffActionConversation,
   StaffActionStatus,
 } from '@/types';
 import { mapApiMessage } from '@/lib/mapMessage';
@@ -32,6 +33,16 @@ function mapStaffAction(raw: Record<string, unknown>): StaffAction {
     createdAt: String(raw.created_at),
     guestName: raw.guest_name != null ? String(raw.guest_name) : undefined,
     roomNumber: raw.room_number != null ? String(raw.room_number) : undefined,
+    escalationType:
+      raw.escalation_type != null
+        ? (String(raw.escalation_type) as StaffAction['escalationType'])
+        : 'normal',
+    allowStaffJumpIn:
+      raw.allow_staff_jump_in != null ? Boolean(raw.allow_staff_jump_in) : true,
+    guestConversationThreadId:
+      raw.guest_conversation_thread_id != null
+        ? String(raw.guest_conversation_thread_id)
+        : String(raw.guest_id),
   };
 }
 
@@ -409,6 +420,65 @@ class ApiClient {
       return { success: false, error: result.error };
     }
     return { success: true, data: mapStaffAction(result.data) };
+  }
+
+  async getStaffActionConversation(
+    staffKey: string,
+    actionId: string
+  ): Promise<ApiResponse<StaffActionConversation>> {
+    const result = await this.request<Record<string, unknown>>(
+      `/api/staff/actions/${actionId}/conversation`,
+      {},
+      staffKey
+    );
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    const raw = result.data;
+    const guestRaw = (raw.guest ?? {}) as Record<string, unknown>;
+    const messagesRaw = (raw.messages ?? []) as Record<string, unknown>[];
+    return {
+      success: true,
+      data: {
+        action: mapStaffAction((raw.action ?? {}) as Record<string, unknown>),
+        guest: {
+          id: String(guestRaw.id),
+          name: String(guestRaw.name),
+          roomNumber: String(guestRaw.room_number ?? guestRaw.roomNumber),
+          checkIn: new Date(String(guestRaw.check_in ?? guestRaw.checkIn)),
+          checkOut: new Date(String(guestRaw.check_out ?? guestRaw.checkOut)),
+          bookingId: String(guestRaw.booking_id ?? guestRaw.bookingId),
+          email: guestRaw.email != null ? String(guestRaw.email) : undefined,
+          phone: guestRaw.phone != null ? String(guestRaw.phone) : undefined,
+          membershipTier:
+            guestRaw.membership_tier != null
+              ? String(guestRaw.membership_tier)
+              : guestRaw.membershipTier != null
+                ? String(guestRaw.membershipTier)
+                : undefined,
+        },
+        messages: messagesRaw.map((m) => mapApiMessage(m)),
+      },
+    };
+  }
+
+  async sendStaffActionMessage(
+    staffKey: string,
+    actionId: string,
+    content: string
+  ): Promise<ApiResponse<Message>> {
+    const result = await this.request<Record<string, unknown>>(
+      `/api/staff/actions/${actionId}/message`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      },
+      staffKey
+    );
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    return { success: true, data: mapApiMessage(result.data) };
   }
 }
 

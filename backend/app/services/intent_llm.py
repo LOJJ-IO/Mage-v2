@@ -29,7 +29,10 @@ VALID_REQUEST_TYPES = frozenset({
     "follow_up_escalation",
     "status_check",
     "repetition",
+    "social",
 })
+
+VALID_ABILITY_CODES = frozenset({"A", "B", "C", "D", "E", "F", "G"})
 
 _THINKING_MODEL_MARKERS = ("thinking", "reason", "ring-", "r1", "deepseek-r1")
 _OPENROUTER_BROAD_ROUTERS = frozenset({"openrouter/free", "openrouter/auto"})
@@ -211,6 +214,9 @@ def _normalize_service_value(raw: Any) -> Optional[str]:
 
 
 def _normalize_request_type(raw: Any, abilities: List[str]) -> str:
+    if abilities == ["G"] or (len(abilities) == 1 and abilities[0] == "G"):
+        rt = str(raw or "social").lower().strip()
+        return rt if rt in VALID_REQUEST_TYPES else "social"
     if "D" not in abilities:
         rt = str(raw or "status_check").lower().strip()
         return rt if rt in VALID_REQUEST_TYPES else "status_check"
@@ -222,9 +228,16 @@ def _parse_abilities(raw: Any) -> List[str]:
     if raw is None:
         return []
     if isinstance(raw, list):
-        return [str(a).strip().upper()[:1] for a in raw if str(a).strip()]
+        out: List[str] = []
+        for a in raw:
+            code = str(a).strip().upper()
+            if code in VALID_ABILITY_CODES:
+                out.append(code)
+            elif len(code) == 1 and code in VALID_ABILITY_CODES:
+                out.append(code)
+        return out
     if isinstance(raw, str):
-        return [c.strip().upper() for c in re.findall(r"[A-F]", raw.upper())]
+        return [c for c in re.findall(r"[A-G]", raw.upper()) if c in VALID_ABILITY_CODES]
     return []
 
 
@@ -353,7 +366,7 @@ def parse_classifier_json(
     msg_m = re.search(r'"message"\s*:\s*"([^"]*)"', text)
     message = msg_m.group(1).strip() if msg_m and msg_m.group(1).strip() else ""
     rt_m = re.search(
-        r'"request_type"\s*:\s*"(new|follow_up_escalation|status_check|repetition)"',
+        r'"request_type"\s*:\s*"(new|follow_up_escalation|status_check|repetition|social)"',
         text,
         re.I,
     )

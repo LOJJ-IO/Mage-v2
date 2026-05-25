@@ -197,6 +197,26 @@ def test_copy_writer_user_content_uses_routing_not_full_chat():
     assert "Guest message to respond to:" in body
 
 
+def test_parse_social_ability_g():
+    raw = (
+        '{"abilities": ["G"], "tasks": [], "info_source": null, '
+        '"request_type": "social", "confidence": 0.95, '
+        '"message": "Hi there! How can I help you with your stay?"}'
+    )
+    result = parse_classifier_json(raw, user_message="hello")
+    assert result is not None
+    assert result.abilities == ["G"]
+    assert result.request_type == "social"
+    assert "Hi there" in (result.message or "")
+
+
+def test_parse_abilities_social_not_truncated_to_s():
+    raw = '{"abilities": ["SOCIAL"], "tasks": [], "request_type": "social", "confidence": 0.9}'
+    result = parse_classifier_json(raw, user_message="thanks")
+    assert result is not None
+    assert result.abilities != ["S"]
+
+
 def test_closing_pure_thats_all_is_closing():
     msg = "that's all"
     words = faq_words(msg)

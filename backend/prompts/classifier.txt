@@ -28,8 +28,8 @@ Examples:
   Latest: "I haven't heard back on the shower."
   → abilities: ["D"], request_type = follow_up_escalation, CONTACT_FRONT_DESK task.
 
-  Latest: "hello" or "ok" after a resolved conversation
-  → abilities: []. message only. No tasks.
+  Latest: "hello", "thanks", or "ok" with no operational request
+  → abilities: ["G"], request_type = social. Warm message only. No tasks.
 
 ════════════════════════════════════════════
 NODE 1 — HOTEL RELEVANCE
@@ -56,26 +56,19 @@ Select ALL that apply.
   E  ANSWER_INFO     Guest has a question answerable from hotel knowledge.
   F  FAQ_REFERENCE   Guest's question matches a FAQ shown already.
 
+  G  SOCIAL          Purely social (greeting, thanks, acknowledgment). No request or question.
+
 Continue to NODE 3.
 
 ════════════════════════════════════════════
-NODE 3 — INTERNAL INTENT (thinking only — do NOT emit in JSON)
+NODE 3 — REQUEST TYPE
 ════════════════════════════════════════════
-Using NODE 2 selections (for your reasoning only):
+For SOCIAL-only messages (abilities: ["G"] only):
+  → request_type = "social"
+  → tasks = []
+  → Use message field for a warm reply
 
-  D only                       → single task
-  D + D (two+ task requests)   → multiple tasks
-  D + any of E/F/A/B/C         → task plus other abilities
-  E or F only                  → info question
-  A, B, or C only              → utility
-  None clearly fit             → social / acknowledgment
-
-Continue to NODE 3B.
-
-════════════════════════════════════════════
-NODE 3B — REQUEST TYPE
-════════════════════════════════════════════
-Only applies when abilities contain D.
+When abilities contain D:
 
   · First time this topic appeared in conversation
       → request_type = "new"
@@ -129,7 +122,7 @@ Rules:
 Continue to NODE 6.
 
 ════════════════════════════════════════════
-NODE 6 — INFO SOURCE (skip if only A/B/C/D with no E/F)
+NODE 6 — INFO SOURCE (skip if no E/F)
 ════════════════════════════════════════════
 Where does the answer come from?
 
@@ -176,12 +169,12 @@ OUTPUT
 Output exactly this JSON. Do NOT include an "intent" field.
 
 {{
-  "abilities": ["<A, B, C, D, E, F>"],
+  "abilities": ["<A, B, C, D, E, F, G>"],
   "tasks": [
     {{"service": "HOUSEKEEPING | ROOM_SERVICE | MAINTENANCE | CONTACT_FRONT_DESK", "title": "<5–8 words>"}}
   ],
   "info_source": "HOTEL_DOCS | FAQ | null",
-  "request_type": "new | follow_up_escalation | status_check | repetition",
+  "request_type": "new | follow_up_escalation | status_check | repetition | social",
   "confidence": <0.20–0.95>,
   "message": "<1–2 warm sentences for guest>"
 }}
@@ -233,12 +226,42 @@ Guest: "I haven't heard back on the lobster order."
   "message": "Let me check on that for you and escalate it to the front desk right away."
 }}
 
-Guest: (after multiple exchanges) "hello"
+Guest: "hello"
 {{
-  "abilities": [],
+  "abilities": ["G"],
   "tasks": [],
   "info_source": null,
-  "request_type": "status_check",
+  "request_type": "social",
+  "confidence": 0.95,
+  "message": "Hi there! How can I help you with your stay?"
+}}
+
+Guest: "helloooo"
+{{
+  "abilities": ["G"],
+  "tasks": [],
+  "info_source": null,
+  "request_type": "social",
+  "confidence": 0.92,
+  "message": "Hey! What can I help you with today?"
+}}
+
+Guest: "thanks for your help!"
+{{
+  "abilities": ["G"],
+  "tasks": [],
+  "info_source": null,
+  "request_type": "social",
+  "confidence": 0.95,
+  "message": "You're welcome! Let me know if you need anything else during your stay."
+}}
+
+Guest: (after multiple exchanges) "hello"
+{{
+  "abilities": ["G"],
+  "tasks": [],
+  "info_source": null,
+  "request_type": "social",
   "confidence": 0.95,
   "message": "Hi there! Is there anything else I can help you with?"
 }}

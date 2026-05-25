@@ -8,6 +8,7 @@ from app.models.schemas import (
     ConversationContext,
     StaffAction,
     StaffActionStatus,
+    StaffActionEscalationType,
     ActionType,
 )
 from app.core.config import get_settings
@@ -105,8 +106,21 @@ class DatabaseProtocol(Protocol):
         action_type: ActionType,
         summary: str,
         source_message: str,
+        *,
+        escalation_type: StaffActionEscalationType = StaffActionEscalationType.NORMAL,
+        allow_staff_jump_in: bool = True,
+        guest_conversation_thread_id: Optional[str] = None,
     ) -> StaffAction:
         """Log a chatbot-flagged action for staff."""
+        ...
+
+    def list_pending_actions_for_guest_service(
+        self,
+        guest_id: str,
+        action_type: ActionType,
+        max_age_minutes: int = 60,
+    ) -> List[StaffAction]:
+        """Pending actions for guest matching service type within time window."""
         ...
 
     def list_staff_actions(
@@ -136,6 +150,36 @@ class DatabaseProtocol(Protocol):
     ) -> Optional[StaffAction]:
         """Update staff action summary text."""
         ...
+
+    def update_staff_action_escalation(
+        self,
+        action_id: str,
+        escalation_type: StaffActionEscalationType,
+        summary: Optional[str] = None,
+    ) -> Optional[StaffAction]:
+        """Mark action escalated and optionally update summary."""
+        ...
+
+
+def _staff_action_from_row(row: dict) -> StaffAction:
+    """Build StaffAction from DB/mock row with backward-compatible defaults."""
+    data = dict(row)
+    if "action_type" in data and isinstance(data["action_type"], str):
+        data["action_type"] = ActionType(data["action_type"])
+    if "status" in data and isinstance(data["status"], str):
+        data["status"] = StaffActionStatus(data["status"])
+    esc = data.get("escalation_type") or "normal"
+    if isinstance(esc, str):
+        data["escalation_type"] = StaffActionEscalationType(esc)
+    if data.get("created_at") and isinstance(data["created_at"], str):
+        data["created_at"] = datetime.fromisoformat(
+            data["created_at"].replace("Z", "+00:00")
+        )
+    if not data.get("guest_conversation_thread_id"):
+        data["guest_conversation_thread_id"] = data.get("guest_id")
+    if "allow_staff_jump_in" not in data:
+        data["allow_staff_jump_in"] = True
+    return StaffAction(**{k: v for k, v in data.items() if k in StaffAction.model_fields})
 
 
 class MockDatabase:
@@ -323,6 +367,10 @@ class MockDatabase:
         action_type: ActionType,
         summary: str,
         source_message: str,
+        *,
+        escalation_type: StaffActionEscalationType = StaffActionEscalationType.NORMAL,
+        allow_staff_jump_in: bool = True,
+        guest_conversation_thread_id: Optional[str] = None,
     ) -> StaffAction:
         action_id = f"ACT-{uuid.uuid4().hex[:8].upper()}"
         guest = self.get_guest(guest_id)
@@ -336,9 +384,30 @@ class MockDatabase:
             created_at=datetime.utcnow(),
             guest_name=guest.name if guest else None,
             room_number=guest.room_number if guest else None,
+            escalation_type=escalation_type,
+            allow_staff_jump_in=allow_staff_jump_in,
+            guest_conversation_thread_id=guest_conversation_thread_id or guest_id,
         )
         self.staff_actions[action_id] = action
         return action
+
+    def list_pending_actions_for_guest_service(
+        self,
+        guest_id: str,
+        action_type: ActionType,
+        max_age_minutes: int = 60,
+    ) -> List[StaffAction]:
+        cutoff = datetime.utcnow() - timedelta(minutes=max_age_minutes)
+        out = [
+            a
+            for a in self.staff_actions.values()
+            if a.guest_id == guest_id
+            and a.action_type == action_type
+            and a.status == StaffActionStatus.PENDING
+            and a.created_at >= cutoff
+        ]
+        out.sort(key=lambda a: a.created_at, reverse=True)
+        return out
 
     def list_staff_actions(
         self,
@@ -374,6 +443,20 @@ class MockDatabase:
         if not action:
             return None
         action.summary = (summary or "")[:500]
+        return action
+
+    def update_staff_action_escalation(
+        self,
+        action_id: str,
+        escalation_type: StaffActionEscalationType,
+        summary: Optional[str] = None,
+    ) -> Optional[StaffAction]:
+        action = self.staff_actions.get(action_id)
+        if not action:
+            return None
+        action.escalation_type = escalation_type
+        if summary is not None:
+            action.summary = (summary or "")[:500]
         return action
 
 
@@ -634,7 +717,7 @@ class SupabaseDatabase:
             )
             if not response.data:
                 return None
-            action = StaffAction(**response.data[0])
+            action = _staff_action_from_row(response.data[0])
             new_summary = f"{action.summary.rstrip('.')}; {note}"[:500]
             updated = (
                 self.client.table("staff_actions")
@@ -643,7 +726,7 @@ class SupabaseDatabase:
                 .execute()
             )
             if updated.data:
-                return StaffAction(**updated.data[0])
+                return _staff_action_from_row(updated.data[0])
             action.summary = new_summary
             return action
         except Exception as e:
@@ -656,9 +739,14 @@ class SupabaseDatabase:
         action_type: ActionType,
         summary: str,
         source_message: str,
+        *,
+        escalation_type: StaffActionEscalationType = StaffActionEscalationType.NORMAL,
+        allow_staff_jump_in: bool = True,
+        guest_conversation_thread_id: Optional[str] = None,
     ) -> StaffAction:
         try:
             guest = self.get_guest(guest_id)
+            thread_id = guest_conversation_thread_id or guest_id
             row = {
                 "id": f"ACT-{uuid.uuid4().hex[:8].upper()}",
                 "guest_id": guest_id,
@@ -669,14 +757,40 @@ class SupabaseDatabase:
                 "created_at": datetime.utcnow().isoformat(),
                 "guest_name": guest.name if guest else None,
                 "room_number": guest.room_number if guest else None,
+                "escalation_type": escalation_type.value,
+                "allow_staff_jump_in": allow_staff_jump_in,
+                "guest_conversation_thread_id": thread_id,
             }
             response = self.client.table("staff_actions").insert(row).execute()
             if response.data:
-                return StaffAction(**response.data[0])
-            return StaffAction(**row)
+                return _staff_action_from_row(response.data[0])
+            return _staff_action_from_row(row)
         except Exception as e:
             logger.error(f"Error logging staff action: {e}")
             raise
+
+    def list_pending_actions_for_guest_service(
+        self,
+        guest_id: str,
+        action_type: ActionType,
+        max_age_minutes: int = 60,
+    ) -> List[StaffAction]:
+        try:
+            cutoff = (datetime.utcnow() - timedelta(minutes=max_age_minutes)).isoformat()
+            response = (
+                self.client.table("staff_actions")
+                .select("*")
+                .eq("guest_id", guest_id)
+                .eq("action_type", action_type.value)
+                .eq("status", StaffActionStatus.PENDING.value)
+                .gte("created_at", cutoff)
+                .order("created_at", desc=True)
+                .execute()
+            )
+            return [_staff_action_from_row(row) for row in (response.data or [])]
+        except Exception as e:
+            logger.error(f"Error listing pending staff actions: {e}")
+            return []
 
     def list_staff_actions(
         self,
@@ -688,7 +802,7 @@ class SupabaseDatabase:
             if status is not None:
                 query = query.eq("status", status.value)
             response = query.execute()
-            return [StaffAction(**row) for row in (response.data or [])]
+            return [_staff_action_from_row(row) for row in (response.data or [])]
         except Exception as e:
             logger.error(f"Error listing staff actions: {e}")
             return []
@@ -697,7 +811,7 @@ class SupabaseDatabase:
         try:
             response = self.client.table("staff_actions").select("*").eq("id", action_id).execute()
             if response.data:
-                return StaffAction(**response.data[0])
+                return _staff_action_from_row(response.data[0])
             return None
         except Exception as e:
             logger.error(f"Error getting staff action {action_id}: {e}")
@@ -716,7 +830,7 @@ class SupabaseDatabase:
                 .execute()
             )
             if response.data:
-                return StaffAction(**response.data[0])
+                return _staff_action_from_row(response.data[0])
             return None
         except Exception as e:
             logger.error(f"Error updating staff action {action_id}: {e}")
@@ -735,10 +849,33 @@ class SupabaseDatabase:
                 .execute()
             )
             if response.data:
-                return StaffAction(**response.data[0])
+                return _staff_action_from_row(response.data[0])
             return None
         except Exception as e:
             logger.error(f"Error updating staff action summary {action_id}: {e}")
+            return None
+
+    def update_staff_action_escalation(
+        self,
+        action_id: str,
+        escalation_type: StaffActionEscalationType,
+        summary: Optional[str] = None,
+    ) -> Optional[StaffAction]:
+        try:
+            patch: dict = {"escalation_type": escalation_type.value}
+            if summary is not None:
+                patch["summary"] = (summary or "")[:500]
+            response = (
+                self.client.table("staff_actions")
+                .update(patch)
+                .eq("id", action_id)
+                .execute()
+            )
+            if response.data:
+                return _staff_action_from_row(response.data[0])
+            return None
+        except Exception as e:
+            logger.error(f"Error escalating staff action {action_id}: {e}")
             return None
 
 
