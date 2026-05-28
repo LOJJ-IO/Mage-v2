@@ -4,6 +4,7 @@ import { ReactNode } from 'react';
 import { StaffAction } from '@/types';
 import { IconCheckCircle, IconCheckSquare, IconCircle, IconMore, IconPlus } from './StaffIcons';
 import { StaffKanbanCard } from './StaffKanbanCard';
+import { getGuestRequestIndex, getGuestTaskCount } from './staffTaskQuery';
 
 export type KanbanColumnId = 'todo' | 'ongoing' | 'done';
 
@@ -31,15 +32,21 @@ const COLUMN_META: Record<
 interface StaffKanbanColumnProps {
   columnId: KanbanColumnId;
   actions: StaffAction[];
+  allActions: StaffAction[];
   onSelect: (id: string) => void;
 }
 
-export function StaffKanbanColumn({ columnId, actions, onSelect }: StaffKanbanColumnProps) {
+export function StaffKanbanColumn({
+  columnId,
+  actions,
+  allActions,
+  onSelect,
+}: StaffKanbanColumnProps) {
   const meta = COLUMN_META[columnId];
   const isEmpty = actions.length === 0;
 
   return (
-    <div className="flex min-w-[280px] max-w-[360px] flex-1 flex-col rounded-xl bg-neutral-50/80 dark:bg-neutral-900/50 md:min-w-[300px] lg:min-w-0">
+    <div className="flex w-full min-w-[280px] flex-1 flex-col rounded-xl bg-neutral-50/80 dark:bg-neutral-900/50 md:min-w-[300px] lg:min-w-0">
       <div className="flex items-center gap-2 px-3 py-3">
         <span className={meta.iconClass}>{meta.icon}</span>
         <h2 className="flex-1 text-sm font-semibold text-neutral-900 dark:text-white">
@@ -75,9 +82,20 @@ export function StaffKanbanColumn({ columnId, actions, onSelect }: StaffKanbanCo
             </p>
           </div>
         ) : (
-          actions.map((action) => (
-            <StaffKanbanCard key={action.id} action={action} onSelect={onSelect} />
-          ))
+          actions.map((action) => {
+            const indexInfo = getGuestRequestIndex(action, allActions);
+            return (
+              <StaffKanbanCard
+                key={action.id}
+                action={action}
+                onSelect={onSelect}
+                requestIndexLabel={
+                  indexInfo ? `${indexInfo.index}/${indexInfo.total}` : undefined
+                }
+                requestCount={getGuestTaskCount(action, allActions)}
+              />
+            );
+          })
         )}
 
         {!isEmpty && columnId === 'done' && null}

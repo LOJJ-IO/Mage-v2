@@ -2,6 +2,7 @@
 
 import {
   IconBell,
+  IconBook,
   IconCalendar,
   IconChevronDown,
   IconLayoutGrid,
@@ -17,6 +18,7 @@ import { STAFF_NAV_ITEMS, StaffNavId } from './staffNav';
 interface StaffSidebarProps {
   activeNav: StaffNavId;
   pendingCount: number;
+  guestUnreadCount?: number;
   onNavChange: (id: StaffNavId) => void;
   onLogout: () => void;
   mobileOpen?: boolean;
@@ -36,6 +38,8 @@ function NavIcon({ icon, className }: { icon: string; className?: string }) {
       return <IconCalendar className={cn} />;
     case 'message':
       return <IconMessage className={cn} />;
+    case 'book':
+      return <IconBook className={cn} />;
     default:
       return null;
   }
@@ -44,6 +48,7 @@ function NavIcon({ icon, className }: { icon: string; className?: string }) {
 export function StaffSidebar({
   activeNav,
   pendingCount,
+  guestUnreadCount = 0,
   onNavChange,
   onLogout,
   mobileOpen,
@@ -137,7 +142,12 @@ export function StaffSidebar({
               className={className}
             >
               <NavIcon icon={item.icon} />
-              <span className="text-left">{item.label}</span>
+              <span className="flex-1 text-left">{item.label}</span>
+              {item.id === 'guest-chat' && guestUnreadCount > 0 && (
+                <span className="min-w-[20px] rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[11px] font-semibold text-white">
+                  {guestUnreadCount > 99 ? '99+' : guestUnreadCount}
+                </span>
+              )}
             </button>
           );
         })}

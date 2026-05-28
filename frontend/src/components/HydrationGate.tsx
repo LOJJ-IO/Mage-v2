@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMageStore } from '@/store/mageStore';
 import { getEntryState } from '@/lib/stateMachine';
 
@@ -39,13 +39,17 @@ export function HydrationGate({ children }: { children: React.ReactNode }) {
 
   const ready = hasMounted && (hasHydrated || fallbackReady || forceReady);
   const [showLoader, setShowLoader] = useState(true);
+  const hasInitializedStoreRef = useRef(false);
 
   useEffect(() => {
     if (!ready) return;
-    const state = useMageStore.getState();
-    const entryState = getEntryState(state.context.hasSeenWelcome);
-    if (state.currentState !== entryState) {
-      useMageStore.setState({ currentState: entryState });
+    if (!hasInitializedStoreRef.current) {
+      hasInitializedStoreRef.current = true;
+      const state = useMageStore.getState();
+      const entryState = getEntryState(state.context.hasSeenWelcome);
+      if (state.currentState !== entryState) {
+        useMageStore.setState({ currentState: entryState });
+      }
     }
     const t = setTimeout(() => setShowLoader(false), 350);
     return () => clearTimeout(t);
@@ -60,7 +64,7 @@ export function HydrationGate({ children }: { children: React.ReactNode }) {
 
 function LoadingShell({ finishing }: { finishing?: boolean }) {
   const [tipIndex, setTipIndex] = useState(0);
-  const [progress, setProgress] = useState(40);
+  const [progress, setProgress] = useState(0);
 
   useEffect(() => {
     const t = setInterval(() => setTipIndex((i) => (i + 1) % HYDRATION_TIPS.length), 4000);
@@ -72,13 +76,14 @@ function LoadingShell({ finishing }: { finishing?: boolean }) {
       setProgress(100);
       return;
     }
-    const t = setTimeout(() => setProgress(72), 120);
+    // Deterministic early progress so users never see a "stale 40%" loader.
+    const t = setTimeout(() => setProgress(65), 120);
     return () => clearTimeout(t);
   }, [finishing]);
 
   return (
-    <div className="min-h-screen bg-mage-gray-50">
-      <div className="mage-container min-h-screen bg-mage-black flex flex-col items-center justify-center p-8">
+    <div className="fixed inset-0 bg-mage-gray-50 overflow-hidden">
+      <div className="mage-container bg-mage-black flex flex-col items-center justify-center p-8">
         <div className="mb-12">
           <div className="relative">
             <div className="absolute inset-0 bg-white/20 rounded-full blur-xl animate-pulse" />
