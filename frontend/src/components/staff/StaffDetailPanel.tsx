@@ -9,7 +9,6 @@ import {
   escalationBadgeClass,
   escalationLabel,
 } from './actionBadges';
-import { MessageBubble } from '@/components/MessageBubble';
 import {
   useStaffActionConversation,
   useSendStaffMessage,
@@ -136,13 +135,33 @@ export function StaffDetailPanel({
                 ) : !conversation?.messages.length ? (
                   <p className="text-sm text-neutral-500">No messages yet.</p>
                 ) : (
-                  conversation.messages.map((msg, i) => (
-                    <MessageBubble
-                      key={msg.id || `staff-view-${i}`}
-                      message={msg}
-                      isLast={i === conversation.messages.length - 1}
-                    />
-                  ))
+              conversation.messages.map((msg) => {
+                const guestSide = msg.role === 'user';
+                const bubbleClass = guestSide
+                  ? 'bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white rounded-bl-sm'
+                  : 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 rounded-br-sm';
+
+                return (
+                  <div
+                    key={msg.id}
+                    className={`flex mb-2 ${guestSide ? 'justify-start' : 'justify-end'}`}
+                  >
+                    <div className={`max-w-[78%] rounded-xl px-3 py-2 text-sm ${bubbleClass}`}>
+                      <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                      <p
+                        className={`mt-1 text-[11px] ${
+                          guestSide ? 'text-neutral-400' : 'text-white/70 dark:text-neutral-500'
+                        }`}
+                      >
+                        {new Date(msg.timestamp).toLocaleTimeString([], {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
                 )}
               </div>
               {canReply && (

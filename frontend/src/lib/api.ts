@@ -480,6 +480,24 @@ class ApiClient {
     }
     return { success: true, data: mapApiMessage(result.data) };
   }
+
+  async fetchStaffCalendarFeed(
+    staffKey: string,
+    url: string
+  ): Promise<ApiResponse<{ content: string; content_type?: string }>> {
+    const result = await this.request<{ content: string; content_type?: string }>(
+      '/api/staff/calendar/fetch',
+      {
+        method: 'POST',
+        body: JSON.stringify({ url }),
+      },
+      staffKey
+    );
+    if (!result.success || !result.data?.content) {
+      return { success: false, error: result.error ?? 'Could not load calendar feed.' };
+    }
+    return { success: true, data: result.data };
+  }
 }
 
 export const apiClient = new ApiClient();

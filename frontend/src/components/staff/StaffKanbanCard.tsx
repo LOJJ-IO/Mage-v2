@@ -20,17 +20,6 @@ function formatCardDate(iso: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function statusProgress(status: StaffAction['status']): string {
-  switch (status) {
-    case 'acknowledged':
-      return '2/4';
-    case 'resolved':
-      return '4/4';
-    default:
-      return '1/4';
-  }
-}
-
 function priorityDotClass(action: StaffAction): string {
   if (action.escalationType === 'escalated') return 'bg-red-500';
   if (action.escalationType === 'contact') return 'bg-amber-400';
@@ -50,9 +39,16 @@ function guestInitials(action: StaffAction): string {
 interface StaffKanbanCardProps {
   action: StaffAction;
   onSelect: (id: string) => void;
+  requestIndexLabel?: string;
+  requestCount?: number;
 }
 
-export function StaffKanbanCard({ action, onSelect }: StaffKanbanCardProps) {
+export function StaffKanbanCard({
+  action,
+  onSelect,
+  requestIndexLabel,
+  requestCount = 1,
+}: StaffKanbanCardProps) {
   const showAlert =
     action.escalationType === 'escalated' || action.escalationType === 'contact';
 
@@ -110,14 +106,14 @@ export function StaffKanbanCard({ action, onSelect }: StaffKanbanCardProps) {
           </span>
           <span className="inline-flex items-center gap-1 text-[11px]">
             <IconMessage className="w-3.5 h-3.5" />
-            1
+            {requestCount}
           </span>
           <span className="inline-flex items-center gap-1 text-[11px]">
             <IconLink className="w-3.5 h-3.5" />
           </span>
           <span className="inline-flex items-center gap-1 text-[11px]">
             <IconChecklist className="w-3.5 h-3.5" />
-            {statusProgress(action.status)}
+            {requestIndexLabel ?? '—'}
           </span>
         </div>
         <span

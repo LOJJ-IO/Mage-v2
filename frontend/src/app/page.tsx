@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { StateRenderer } from '@/components/StateRenderer';
 import { HydrationGate } from '@/components/HydrationGate';
@@ -10,10 +10,16 @@ import { useAgentAvailabilityWebSocket } from '@/hooks/useAgentAvailabilityWebSo
 export default function Home() {
   const router = useRouter();
   const { context, guestProfile } = useMageStore();
+  const [allowRender, setAllowRender] = useState(false);
+  const didInitRef = useRef(false);
 
   useAgentAvailabilityWebSocket();
 
   useEffect(() => {
+    // Guard against double-invocation in React StrictMode dev.
+    if (didInitRef.current) return;
+    didInitRef.current = true;
+
     const guestId = sessionStorage.getItem('mage-guest-id');
     if (!guestId && !guestProfile) {
       router.replace('/welcome');
@@ -23,9 +29,12 @@ export default function Home() {
     if (context.hasSeenWelcome) {
       useMageStore.setState({ currentState: 'S-G-003' });
     }
+
+    setAllowRender(true);
   }, [router, guestProfile, context.hasSeenWelcome]);
 
-  if (!guestProfile && typeof window !== 'undefined' && !sessionStorage.getItem('mage-guest-id')) {
+  // While we redirect (or decide), render nothing so we never leave a stale loader on the page.
+  if (!allowRender) {
     return null;
   }
 

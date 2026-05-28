@@ -1,6 +1,9 @@
 from datetime import datetime
+from urllib.parse import urlparse
 
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException
+from pydantic import BaseModel
 from typing import List, Optional
 
 from app.core.config import get_settings
@@ -20,6 +23,45 @@ from app.services.database import get_database
 from app.services.message_codec import parse_stored_message
 
 router = APIRouter(prefix="/staff", tags=["staff"])
+
+
+class StaffCalendarFetchRequest(BaseModel):
+    url: str
+
+
+def _normalize_calendar_url(url: str) -> str:
+    trimmed = url.strip()
+    if trimmed.lower().startswith("webcal://"):
+        return "https://" + trimmed[9:]
+    if trimmed.lower().startswith("webcals://"):
+        return "https://" + trimmed[10:]
+    return trimmed
+
+
+def _validate_calendar_feed_url(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(
+            status_code=400,
+            detail="Calendar URL must use http or https (or webcal://).",
+        )
+    lower = url.lower()
+    if "processinvitation" in lower or "outlook.live.com/mail/process" in lower:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Outlook invitation links are not calendar feeds. "
+                "Export an .ics file or use a subscription URL ending in .ics."
+            ),
+        )
+    if "calendar.google.com/calendar/u/" in lower and "cid=" in lower:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Use the secret iCal link (ends with basic.ics), "
+                "not the browser calendar page."
+            ),
+        )
 
 
 def verify_staff_key(x_staff_key: Optional[str] = Header(None, alias="X-Staff-Key")):
@@ -165,3 +207,48 @@ async def update_staff_action(
     if not action:
         raise HTTPException(status_code=404, detail="Action not found")
     return action
+
+
+@router.post("/calendar/fetch")
+async def fetch_staff_calendar_feed(
+    request: StaffCalendarFetchRequest,
+    _: bool = Depends(verify_staff_key),
+):
+    """Proxy calendar feed downloads server-side (avoids browser CORS on secret iCal URLs)."""
+    url = _normalize_calendar_url(request.url)
+    _validate_calendar_feed_url(url)
+
+    headers = {"User-Agent": "Mage-Staff-Calendar/1.0"}
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            response = await client.get(url, headers=headers)
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not reach calendar URL: {exc}",
+        ) from exc
+
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Calendar server returned HTTP {response.status_code}.",
+        )
+
+    content = response.text or ""
+    if not content.strip():
+        raise HTTPException(status_code=502, detail="Calendar feed was empty.")
+
+    sample = content[:800].lower()
+    if "<!doctype html" in sample or "<html" in sample:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "URL returned a web page, not a calendar file. "
+                "Use a direct .ics link or import the file."
+            ),
+        )
+
+    return {
+        "content": content,
+        "content_type": response.headers.get("content-type", ""),
+    }

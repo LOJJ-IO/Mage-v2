@@ -87,6 +87,7 @@ export function StaffStateRenderer() {
     <>
       <StaffWorkspace
         actions={actions}
+        staffKey={staffKey!}
         isLoading={isLoading}
         pendingCount={pendingCount}
         onSelect={handleSelect}
