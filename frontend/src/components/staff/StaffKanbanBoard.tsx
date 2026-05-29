@@ -83,7 +83,7 @@ export function StaffKanbanBoard({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <IconList className="w-5 h-5 text-neutral-700 dark:text-neutral-300" />
-            <h1 className="text-lg font-semibold text-neutral-900 dark:text-white">Tasks</h1>
+            <h1 className="font-heading text-lg font-semibold text-neutral-900 dark:text-white">Tasks</h1>
           </div>
           <button
             type="button"

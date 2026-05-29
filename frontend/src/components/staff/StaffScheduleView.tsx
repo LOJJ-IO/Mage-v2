@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/api';
+import { useMediaQuery } from '@/hooks/useResizableWidth';
+import { ResizablePanel } from './ResizablePanel';
 import {
   addDays,
   CalendarEvent,
@@ -448,6 +450,8 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
   };
 
   const rangeLabel = getRangeLabel(view, anchorDate);
+  const isLargeDesktop = useMediaQuery('(min-width: 1280px)');
+  const isScheduleSidebar = useMediaQuery('(min-width: 1024px)');
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white dark:bg-neutral-950">
@@ -522,7 +526,14 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-[220px] shrink-0 flex-col border-r border-neutral-200 dark:border-neutral-800 lg:flex">
+        {isScheduleSidebar ? (
+        <ResizablePanel
+          storageKey="staff-schedule-sidebar"
+          defaultWidth={220}
+          minWidth={180}
+          maxWidth={360}
+          className="flex flex-col border-r border-neutral-200 dark:border-neutral-800"
+        >
           <MiniMonth
             anchor={anchorDate}
             selected={selectedDay}
@@ -624,7 +635,8 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
               )}
             </div>
           </div>
-        </aside>
+        </ResizablePanel>
+        ) : null}
 
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="border-b border-neutral-200 px-3 py-2 text-xs text-neutral-500 dark:border-neutral-800 lg:hidden">
@@ -669,7 +681,15 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
           )}
         </main>
 
-        <aside className="hidden w-[300px] shrink-0 flex-col border-l border-neutral-200 dark:border-neutral-800 xl:flex">
+        {isLargeDesktop ? (
+        <ResizablePanel
+          storageKey="staff-schedule-event"
+          defaultWidth={300}
+          minWidth={240}
+          maxWidth={480}
+          side="right"
+          className="flex flex-col border-l border-neutral-200 dark:border-neutral-800"
+        >
           <div className="border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
             <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">Event</h3>
           </div>
@@ -714,7 +734,8 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
               <p className="text-neutral-500">Select an event to see details.</p>
             )}
           </div>
-        </aside>
+        </ResizablePanel>
+        ) : null}
       </div>
     </div>
   );

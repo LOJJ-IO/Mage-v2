@@ -1,7 +1,33 @@
 """FAQ keyword matching, task-request detection, and intro copy."""
+import json
 import re
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Set
+from datetime import datetime, timedelta
+from typing import Callable, Dict, List, Optional, Set
+
+FAQ_COOLDOWN_MINUTES = 10
+
+SPECIFIC_INFO_PATTERNS = (
+    r"\bwhen\b",
+    r"\bwhat time\b",
+    r"\bwhat hour",
+    r"\bclosing\b",
+    r"\bclose\b",
+    r"\bhours?\b",
+    r"\bhow late\b",
+    r"\bhow early\b",
+    r"\bwho\b",
+    r"\bstaff\b",
+    r"\bemployee\b",
+    r"\bhow much\b",
+    r"\bprice\b",
+    r"\bcost\b",
+)
+TIME_OR_DEFERRAL_IN_BODY = re.compile(
+    r"\b\d{1,2}\s*(?:am|pm)\b|\d{1,2}:\d{2}|"
+    r"\bopen\b|\bclose|\bhours?\b|dial\s*0|front desk",
+    re.I,
+)
 
 FAQ_INTRO_VARIANTS = [
     "First, I'll check a few FAQs that often cover this.",
@@ -206,7 +232,14 @@ def _faq_definitions() -> List[FaqDefinition]:
             "pool",
             "Pool & fitness",
             "The pool and fitness center are on the 3rd floor, open 6 AM - 10 PM. Towels are provided at the entrance.",
-            wif(["pool", "gym", "fitness", "spa", "swim"]),
+            wif(["pool", "gym", "fitness", "swim"]),
+        ),
+        FaqDefinition(
+            "spa",
+            "Spa services",
+            "In-room spa massages are available by appointment — please book at least 2 hours ahead. "
+            "For spa hours, staff, or scheduling, dial 0 from your room and the front desk can help.",
+            wif(["spa"]),
         ),
         FaqDefinition(
             "parking",
@@ -360,3 +393,129 @@ def collect_faq_matches(message_lower: str, words: Optional[Set[str]] = None) ->
             seen.add(faq.id)
             matched.append(faq)
     return matched
+
+
+def faq_bundle_key(faqs: List[FaqDefinition]) -> str:
+    return ",".join(sorted(f.id for f in faqs))
+
+
+def _parse_faq_payload(content: str) -> Optional[Dict[str, object]]:
+    stripped = (content or "").strip()
+    if not stripped.startswith("{"):
+        return None
+    try:
+        data = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict) or data.get("_mage") != "faq":
+        return None
+    return data
+
+
+def _faq_ids_from_payload(data: Dict[str, object]) -> str:
+    items = data.get("items") or []
+    ids = sorted(
+        str(item.get("id"))
+        for item in items
+        if isinstance(item, dict) and item.get("id")
+    )
+    return ",".join(ids)
+
+
+def faq_bundle_on_cooldown(
+    bundle_key: str,
+    conversation_history: Optional[List[Dict[str, str]]],
+    *,
+    cooldown_minutes: int = FAQ_COOLDOWN_MINUTES,
+) -> bool:
+    """True if this FAQ bundle was shown recently (guest likely already saw it)."""
+    if not bundle_key or not conversation_history:
+        return False
+    now = datetime.utcnow()
+    for msg in reversed(conversation_history):
+        if msg.get("role") != "assistant":
+            continue
+        payload = _parse_faq_payload(str(msg.get("content") or ""))
+        if not payload:
+            continue
+        shown_key = _faq_ids_from_payload(payload)
+        if shown_key != bundle_key:
+            continue
+        created_at = msg.get("created_at")
+        if created_at:
+            try:
+                ts = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+                if ts.tzinfo:
+                    ts = ts.replace(tzinfo=None) - (ts.utcoffset() or timedelta())
+                if now - ts < timedelta(minutes=cooldown_minutes):
+                    return True
+                continue
+            except ValueError:
+                pass
+        return True
+    return False
+
+
+def faq_plausibly_answers_question(message_lower: str, faq: FaqDefinition) -> bool:
+    """Skip FAQs that keyword-match but do not address what the guest asked."""
+    asks_specific = any(re.search(p, message_lower) for p in SPECIFIC_INFO_PATTERNS)
+    if not asks_specific:
+        return True
+
+    body_lower = faq.body.lower()
+    title_lower = faq.title.lower()
+    combined = f"{title_lower} {body_lower}"
+
+    topic_terms = [
+        term
+        for term in re.findall(r"\b[a-z]{3,}\b", message_lower)
+        if term
+        not in {
+            "when",
+            "what",
+            "where",
+            "does",
+            "close",
+            "closing",
+            "hours",
+            "hour",
+            "time",
+            "work",
+            "works",
+            "the",
+            "and",
+            "who",
+            "spa",
+        }
+    ]
+    for term in topic_terms[:4]:
+        if term in message_lower and term not in combined:
+            return False
+
+    if "spa" in message_lower and "spa" not in combined:
+        return False
+
+    if re.search(r"\bwhen\b|\bclose|\bclosing|\bhours?\b", message_lower):
+        if not TIME_OR_DEFERRAL_IN_BODY.search(combined):
+            return False
+
+    if re.search(r"\bwho\b|\bstaff\b|\bemployee\b", message_lower):
+        if not re.search(r"\bstaff|team|desk|dial\s*0|contact", combined):
+            return False
+
+    return True
+
+
+def filter_faqs_for_display(
+    message_lower: str,
+    matches: List[FaqDefinition],
+    conversation_history: Optional[List[Dict[str, str]]] = None,
+) -> List[FaqDefinition]:
+    """Relevance + cooldown filter before showing FAQ panels."""
+    relevant = [f for f in matches if faq_plausibly_answers_question(message_lower, f)]
+    if not relevant:
+        return []
+    bundle = faq_bundle_key(relevant)
+    if faq_bundle_on_cooldown(bundle, conversation_history):
+        return []
+    return relevant

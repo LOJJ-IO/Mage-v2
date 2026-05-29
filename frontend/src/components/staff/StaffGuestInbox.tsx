@@ -7,7 +7,9 @@ import {
   useStaffInboxThreads,
 } from '@/hooks/useStaffApi';
 import { formatMessageTime, parseApiTimestamp } from '@/lib/parseTimestamp';
+import { useMediaQuery } from '@/hooks/useResizableWidth';
 import { StaffCard } from './StaffLayoutPrimitives';
+import { ResizableSplit } from './ResizablePanel';
 import { staffChatBubbleClasses, staffChatMetaClasses } from './staffChatBubble';
 import { IconHeadset } from './StaffIcons';
 
@@ -58,6 +60,7 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
     error: conversationErrorDetail,
   } = useStaffGuestConversation(staffKey, guestId);
   const sendMutation = useSendStaffMessage();
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
 
   const messages = conversation?.messages ?? [];
   const showConversationLoading =
@@ -75,9 +78,8 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
     setReply('');
   };
 
-  return (
-    <div className="flex min-h-0 flex-1 overflow-hidden gap-3 p-4 md:p-5 flex-col lg:flex-row">
-      <StaffCard className="w-full lg:w-[300px] shrink-0 overflow-hidden flex flex-col max-h-[260px] lg:max-h-none">
+  const threadList = (
+      <StaffCard className="h-full min-h-0 overflow-hidden flex flex-col max-h-[260px] lg:max-h-none">
         <div className="border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
           <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">Guest inbox</h2>
           <p className="text-xs text-neutral-500 mt-1">
@@ -137,8 +139,10 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
           ))}
         </div>
       </StaffCard>
+  );
 
-      <StaffCard className="flex min-w-0 flex-1 flex-col overflow-hidden">
+  const conversationPanel = (
+      <StaffCard className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
           {selectedThread ? (
             <div className="flex items-center gap-2">
@@ -233,6 +237,26 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
           </div>
         </div>
       </StaffCard>
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1 overflow-hidden p-4 md:p-5">
+      {isDesktop ? (
+        <ResizableSplit
+          storageKey="staff-guest-inbox"
+          defaultLeftWidth={300}
+          minLeft={220}
+          maxLeft={480}
+          className="min-h-0 flex-1"
+          left={threadList}
+          right={conversationPanel}
+        />
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          {threadList}
+          {conversationPanel}
+        </div>
+      )}
     </div>
   );
 }

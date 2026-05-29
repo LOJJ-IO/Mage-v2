@@ -26,6 +26,7 @@ from app.services.conversation_helpers import (
 )
 from app.services.faq_intents import (
     collect_faq_matches,
+    filter_faqs_for_display,
     is_task_request,
     pick_faq_intro,
     is_conversation_closing,
@@ -459,7 +460,6 @@ NON_ANSWER = "I'm here to help with your stay—amenities, room, dining, and loc
 SATISFACTION_SUFFIX = "\n\nDo you require any further assistance? (Yes / No)"
 CLOSING_AFTER_NO = "Glad I could help! Let me know if you need anything else during your stay."
 FAQ_HELPFUL_ACK = "Glad that helped! Let me know if you need anything else."
-FAQ_ESCALATION_BRIDGE = "No problem — I'll help you directly."
 HELLO_RESPONSE = "Hello! I'm Mage, your hotel assistant. I can help with room service, amenities, local recommendations, or any questions about your stay. What can I do for you?"
 ACKNOWLEDGMENT_RESPONSE = "I understand. I'm here if you'd like more help with anything about your stay."
 THANKS_RESPONSE = "You're welcome! Let me know if you need anything else during your stay."
@@ -1027,10 +1027,17 @@ class LLMService:
         self,
         user_message: str,
         guest_id: Optional[str],
-    ) -> Dict[str, Any]:
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+    ) -> Optional[Dict[str, Any]]:
         message_lower = user_message.lower().strip()
         words = faq_words(message_lower)
-        matched = collect_faq_matches(message_lower, words)
+        matched = filter_faqs_for_display(
+            message_lower,
+            collect_faq_matches(message_lower, words),
+            conversation_history,
+        )
+        if not matched:
+            return None
         items = [{"id": f.id, "title": f.title, "body": f.body} for f in matched]
         bundle_key = ",".join(i["id"] for i in items)
         intro = pick_faq_intro(guest_id, bundle_key)
@@ -1122,6 +1129,9 @@ class LLMService:
             "\n\nIf specific details (hours, passwords, prices) are not in the hotel "
             "knowledge block, do not invent them. Say in one sentence that you don't "
             "have that detail and suggest dialing 0 for the front desk."
+            "\n\nUse only the hotel knowledge block for factual claims. "
+            "Ignore any draft classifier message or prior assistant replies that "
+            "state hours, prices, or policies not present in hotel knowledge."
         )
         base += self._build_copy_writer_operational_context(
             intent,
@@ -1137,7 +1147,7 @@ class LLMService:
         return base
 
     def _routing_json_for_copy(self, classified: ClassifierResult) -> str:
-        return format_classifier_routing_json(classified)
+        return format_classifier_routing_json(classified, for_copy_writer=True)
 
     async def _call_copy_writer(
         self,
@@ -1439,6 +1449,7 @@ class LLMService:
         abilities = classified.abilities or []
         segments: List[Dict[str, Any]] = []
         latest_lower = (user_message or "").lower().strip()
+        info_via_copy_writer = "E" in abilities or "F" in abilities
 
         if _is_pure_social_abilities(abilities):
             content = self._classifier_guest_reply(classified, "Hi there!")
@@ -1517,15 +1528,15 @@ class LLMService:
                             skip_pending_append=True,
                         )
                     guest_line = (classified.message or "").strip()
-                    if guest_line:
+                    if guest_line and not info_via_copy_writer:
                         segments.append(self._text_segment(guest_line))
-                    elif title:
+                    elif title and not info_via_copy_writer:
                         segments.append(
                             self._text_segment(
                                 "I've passed that along to our team."
                             )
                         )
-            if classified.message and not segments:
+            if classified.message and not segments and not info_via_copy_writer:
                 segments.append(
                     self._text_segment(self._classifier_guest_reply(classified, ""))
                 )
@@ -1555,25 +1566,15 @@ class LLMService:
             segments.append(self._text_segment(info))
 
         if "E" in abilities or "F" in abilities:
-            if _is_hotel_docs_source(classified.info_source):
-                copy_text = await self._call_copy_writer(
-                    "INFO",
-                    user_message,
-                    history,
-                    guest_id,
-                    images=images,
-                    classified=classified,
-                )
-                segments.append(self._text_segment(copy_text))
-            elif "D" not in abilities and classified.message:
-                segments.append(
-                    self._text_segment(
-                        self._classifier_guest_reply(
-                            classified,
-                            "The front desk can help with that — please dial 0 from your room phone.",
-                        )
-                    )
-                )
+            copy_text = await self._call_copy_writer(
+                "INFO",
+                user_message,
+                history,
+                guest_id,
+                images=images,
+                classified=classified,
+            )
+            segments.append(self._text_segment(copy_text))
 
         if not segments:
             segments.append(
@@ -1734,36 +1735,31 @@ class LLMService:
     ) -> List[Dict[str, Any]]:
         if helpful:
             return [{"content": FAQ_HELPFUL_ACK, "kind": MessageKind.TEXT.value, "require_contact_confirmation": False}]
-        bridge = FAQ_ESCALATION_BRIDGE
         llm_prompt = build_faq_llm_context(trigger_content, faq_titles)
         if not self.api_key:
             return [
-                {"content": bridge, "kind": MessageKind.TEXT.value, "require_contact_confirmation": False},
                 {"content": self._no_api_key_fallback_text(trigger_content), "kind": MessageKind.TEXT.value, "require_contact_confirmation": False},
             ]
-        segments: List[Dict[str, Any]] = [
-            {"content": bridge, "kind": MessageKind.TEXT.value, "require_contact_confirmation": False},
-        ]
+        segments: List[Dict[str, Any]] = []
         if settings.llm_use_two_layer_routing:
             try:
                 classified = await call_classifier(
                     llm_prompt, conversation_history, api_key=self.api_key
                 )
             except ClassifierError:
-                segments.append(
+                return [
                     {
                         "content": "I'm having trouble connecting right now. Please try again in a moment.",
                         "kind": MessageKind.TEXT.value,
                         "require_contact_confirmation": False,
                     }
-                )
-                return _finalize_segments(segments)
+                ]
             classified = self._apply_classifier_confidence_gate(
                 classified, llm_prompt, conversation_history
             )
             more = await self._route_by_abilities(
                 classified,
-                llm_prompt,
+                trigger_content,
                 conversation_history,
                 guest_id,
                 images,
@@ -1829,13 +1825,17 @@ class LLMService:
         words = faq_words(message_lower)
         task_like = is_task_request(message_lower, words) or bool(images) or is_in_room_issue(user_message)
         faq_matches = [] if (images or task_continuation) else collect_faq_matches(message_lower, words)
+        faq_matches = filter_faqs_for_display(message_lower, faq_matches, history)
 
         if faq_matches and task_like and should_show_faq_with_task(message_lower, words, faq_matches):
-            faq_seg = self._build_faq_segment(user_message, guest_id)
-            return (_finalize_segments([faq_seg]), True, user_message)
+            faq_seg = self._build_faq_segment(user_message, guest_id, history)
+            if faq_seg:
+                return (_finalize_segments([faq_seg]), True, user_message)
 
         if faq_matches and not task_like:
-            return (_finalize_segments([self._build_faq_segment(user_message, guest_id)]), False, None)
+            faq_seg = self._build_faq_segment(user_message, guest_id, history)
+            if faq_seg:
+                return (_finalize_segments([faq_seg]), False, None)
         
         if not self.api_key:
             if guest_id and task_like:

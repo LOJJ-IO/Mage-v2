@@ -4,7 +4,7 @@ import { ReactNode } from 'react';
 
 export function StaffPageShell({ children }: { children: ReactNode }) {
   return (
-    <div className="flex h-screen min-h-0 w-full overflow-hidden bg-neutral-100 dark:bg-neutral-950">
+    <div className="staff-ui font-sans flex h-screen min-h-0 w-full overflow-hidden bg-neutral-100 dark:bg-neutral-950">
       {children}
     </div>
   );
@@ -56,7 +56,7 @@ export function StaffEmptyState({
 }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
-      <p className="text-lg font-semibold text-neutral-900 dark:text-white">{title}</p>
+      <p className="font-heading text-lg font-semibold text-neutral-900 dark:text-white">{title}</p>
       <p className="mt-2 max-w-xl text-sm text-neutral-500">{description}</p>
     </div>
   );

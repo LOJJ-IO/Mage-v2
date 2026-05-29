@@ -15,6 +15,7 @@ import {
 } from '@/hooks/useStaffApi';
 import { formatMessageTime } from '@/lib/parseTimestamp';
 import { staffChatBubbleClasses, staffChatMetaClasses } from './staffChatBubble';
+import { ResizablePanel } from './ResizablePanel';
 
 interface StaffDetailPanelProps {
   action: StaffAction;
@@ -77,8 +78,16 @@ export function StaffDetailPanel({
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
           transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-          className="relative flex h-full w-full max-w-lg flex-col bg-white dark:bg-neutral-950 shadow-2xl border-l border-neutral-200 dark:border-neutral-800"
+          className="relative flex h-full flex-col bg-white dark:bg-neutral-950 shadow-2xl border-l border-neutral-200 dark:border-neutral-800"
         >
+          <ResizablePanel
+            storageKey="staff-detail-panel"
+            defaultWidth={448}
+            minWidth={320}
+            maxWidth={720}
+            side="right"
+            className="h-full"
+          >
           <header className="shrink-0 border-b border-neutral-200 dark:border-neutral-800 px-5 py-4">
             <button
               type="button"
@@ -212,6 +221,7 @@ export function StaffDetailPanel({
               </button>
             )}
           </footer>
+          </ResizablePanel>
         </motion.aside>
       </motion.div>
     </AnimatePresence>

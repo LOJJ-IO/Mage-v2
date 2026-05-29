@@ -18,7 +18,7 @@ export function StaffPinScreen({ onSubmit, error }: StaffPinScreenProps) {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-neutral-100 dark:bg-neutral-950 px-4 py-12">
+    <div className="staff-ui font-sans flex min-h-screen items-center justify-center bg-neutral-100 dark:bg-neutral-950 px-4 py-12">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}

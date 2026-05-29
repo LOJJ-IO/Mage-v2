@@ -9,8 +9,9 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        'clash': ['Clash Display', 'sans-serif'],
-        'sans': ['Clash Display', 'sans-serif'],
+        clash: ['Clash Display', 'system-ui', 'sans-serif'],
+        heading: ['Season Mix', 'Clash Display', 'Georgia', 'serif'],
+        sans: ['Clash Display', 'system-ui', 'sans-serif'],
       },
       colors: {
         // Uber-inspired palette

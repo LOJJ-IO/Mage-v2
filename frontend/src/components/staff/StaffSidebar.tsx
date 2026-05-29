@@ -1,5 +1,8 @@
 'use client';
 
+import { useMageStore } from '@/store/mageStore';
+import { ResizablePanel } from './ResizablePanel';
+import { useMediaQuery } from '@/hooks/useResizableWidth';
 import {
   IconBell,
   IconBook,
@@ -55,6 +58,11 @@ export function StaffSidebar({
   mobileOpen,
   onMobileClose,
 }: StaffSidebarProps) {
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
+  const theme = useMageStore((s) => s.theme);
+  const setTheme = useMageStore((s) => s.setTheme);
+  const isDark = theme === 'dark';
+
   const sidebarContent = (
     <div className="flex h-full flex-col bg-white dark:bg-neutral-950 border-r border-neutral-200 dark:border-neutral-800">
       <div className="p-4 border-b border-neutral-200 dark:border-neutral-800">
@@ -156,6 +164,36 @@ export function StaffSidebar({
       </nav>
 
       <div className="mt-auto border-t border-neutral-200 dark:border-neutral-800 p-3 space-y-1">
+        <div className="flex items-center justify-between gap-2 rounded-lg px-3 py-2">
+          <span className="text-sm text-neutral-600 dark:text-neutral-400">
+            {isDark ? 'Dark mode' : 'Light mode'}
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={isDark}
+            aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            onClick={() => setTheme(isDark ? 'light' : 'dark')}
+            className="relative h-6 w-10 shrink-0 rounded-full bg-neutral-200 transition-colors dark:bg-neutral-700"
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-white text-neutral-700 shadow-sm transition-transform duration-200 dark:bg-neutral-200 dark:text-neutral-900 ${
+                isDark ? 'translate-x-4' : 'translate-x-0'
+              }`}
+            >
+              {isDark ? (
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M12 3a9 9 0 109 9c-.53 0-1.04-.08-1.54-.22A6.5 6.5 0 0112 3.5V3z" />
+                </svg>
+              ) : (
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <circle cx="12" cy="12" r="4" />
+                  <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              )}
+            </span>
+          </button>
+        </div>
         <button
           type="button"
           onClick={onLogout}
@@ -178,11 +216,20 @@ export function StaffSidebar({
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-[260px] shrink-0 transform transition-transform duration-200 lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 shrink-0 transform transition-transform duration-200 lg:static lg:translate-x-0 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        {sidebarContent}
+        <ResizablePanel
+          storageKey="staff-sidebar"
+          defaultWidth={260}
+          minWidth={200}
+          maxWidth={380}
+          resizable={isDesktop}
+          className="h-full w-[260px] lg:w-auto"
+        >
+          {sidebarContent}
+        </ResizablePanel>
       </aside>
     </>
   );
