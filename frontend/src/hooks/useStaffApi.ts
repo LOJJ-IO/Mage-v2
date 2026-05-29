@@ -8,6 +8,9 @@ export const staffQueryKeys = {
   action: (staffKey: string, id: string) => ['staff', 'action', staffKey, id] as const,
   conversation: (staffKey: string, id: string) =>
     ['staff', 'conversation', staffKey, id] as const,
+  inboxThreads: (staffKey: string) => ['staff', 'inbox-threads', staffKey] as const,
+  guestConversation: (staffKey: string, guestId: string) =>
+    ['staff', 'guest-conversation', staffKey, guestId] as const,
 };
 
 const ESCALATION_SORT: Record<string, number> = {
@@ -51,6 +54,32 @@ export function useStaffAction(staffKey: string | null, actionId: string | null)
       return response.data!;
     },
     enabled: !!staffKey && !!actionId,
+  });
+}
+
+export function useStaffInboxThreads(staffKey: string | null) {
+  return useQuery({
+    queryKey: staffQueryKeys.inboxThreads(staffKey || ''),
+    queryFn: async () => {
+      const response = await apiClient.listStaffInboxThreads(staffKey!);
+      if (!response.success) throw new Error(response.error || 'Failed to load inbox');
+      return response.data ?? [];
+    },
+    enabled: !!staffKey,
+    refetchInterval: 3000,
+  });
+}
+
+export function useStaffGuestConversation(staffKey: string | null, guestId: string | null) {
+  return useQuery({
+    queryKey: staffQueryKeys.guestConversation(staffKey || '', guestId || ''),
+    queryFn: async () => {
+      const response = await apiClient.getStaffGuestConversation(staffKey!, guestId!);
+      if (!response.success) throw new Error(response.error || 'Failed to load conversation');
+      return response.data!;
+    },
+    enabled: !!staffKey && !!guestId,
+    refetchInterval: 3000,
   });
 }
 
@@ -100,26 +129,38 @@ export function useSendStaffMessage() {
   return useMutation({
     mutationFn: async ({
       actionId,
+      guestId,
       content,
       staffKey,
     }: {
-      actionId: string;
+      actionId?: string;
+      guestId?: string;
       content: string;
       staffKey: string;
     }) => {
-      const response = await apiClient.sendStaffActionMessage(staffKey, actionId, content);
+      const response = guestId
+        ? await apiClient.sendStaffGuestMessage(staffKey, guestId, content)
+        : await apiClient.sendStaffActionMessage(staffKey, actionId!, content);
       if (!response.success) throw new Error(response.error || 'Send failed');
       return response.data!;
     },
     onSuccess: (_, variables) => {
       const key = variables.staffKey || getStoredStaffKey() || '';
-      queryClient.invalidateQueries({
-        queryKey: staffQueryKeys.conversation(key, variables.actionId),
-      });
+      if (variables.guestId) {
+        queryClient.invalidateQueries({
+          queryKey: staffQueryKeys.guestConversation(key, variables.guestId),
+        });
+        queryClient.invalidateQueries({ queryKey: staffQueryKeys.inboxThreads(key) });
+      }
+      if (variables.actionId) {
+        queryClient.invalidateQueries({
+          queryKey: staffQueryKeys.conversation(key, variables.actionId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: staffQueryKeys.action(key, variables.actionId),
+        });
+      }
       queryClient.invalidateQueries({ queryKey: staffQueryKeys.actions(key) });
-      queryClient.invalidateQueries({
-        queryKey: staffQueryKeys.action(key, variables.actionId),
-      });
     },
   });
 }

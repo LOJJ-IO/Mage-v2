@@ -90,6 +90,10 @@ class DatabaseProtocol(Protocol):
         """Clear conversation history for a guest."""
         ...
 
+    def list_staff_inbox_threads(self, limit: int = 100) -> List[Dict[str, object]]:
+        """Guests with conversation history for staff inbox (newest activity first)."""
+        ...
+
     # Staff action inbox
     def append_pending_staff_action(
         self,
@@ -335,6 +339,58 @@ class MockDatabase:
     def clear_conversation(self, guest_id: str):
         """Clear conversation history for a guest."""
         self.conversations[guest_id] = []
+
+    def list_staff_inbox_threads(self, limit: int = 100) -> List[Dict[str, object]]:
+        """Guests with conversation history for staff inbox (newest activity first)."""
+        from app.services.conversation_helpers import is_internal_conversation_message
+
+        guest_ids = set(self.conversations.keys()) | {a.guest_id for a in self.staff_actions.values()}
+        threads: List[Dict[str, object]] = []
+
+        for guest_id in guest_ids:
+            rows = self.conversations.get(guest_id, [])
+            visible = [
+                row
+                for row in rows
+                if not is_internal_conversation_message(row.get("content", ""))
+            ]
+            if not visible and guest_id not in {a.guest_id for a in self.staff_actions.values()}:
+                continue
+
+            last_row = visible[-1] if visible else None
+            if last_row:
+                created = last_row.get("created_at")
+                try:
+                    last_at = (
+                        datetime.fromisoformat(str(created).replace("Z", "+00:00")).replace(tzinfo=None)
+                        if created
+                        else datetime.utcnow()
+                    )
+                except ValueError:
+                    last_at = datetime.utcnow()
+                preview = (last_row.get("content") or "")[:120]
+            else:
+                guest_actions = [a for a in self.staff_actions.values() if a.guest_id == guest_id]
+                if not guest_actions:
+                    continue
+                guest_actions.sort(key=lambda a: a.created_at, reverse=True)
+                last_at = guest_actions[0].created_at
+                preview = guest_actions[0].summary
+
+            guest = self.guests.get(guest_id)
+            threads.append(
+                {
+                    "guest_id": guest_id,
+                    "guest_name": guest.name if guest else None,
+                    "room_number": guest.room_number if guest else None,
+                    "last_message_preview": preview,
+                    "last_message_at": last_at,
+                    "message_count": len(visible),
+                }
+            )
+
+        threads.sort(key=lambda row: row["last_message_at"], reverse=True)
+        return threads[:limit]
 
     def append_pending_staff_action(
         self,
@@ -694,6 +750,87 @@ class SupabaseDatabase:
         except Exception as e:
             logger.error(f"Error clearing conversation for guest {guest_id}: {e}")
             raise
+
+    def list_staff_inbox_threads(self, limit: int = 100) -> List[Dict[str, object]]:
+        """Guests with conversation history for staff inbox (newest activity first)."""
+        from app.services.conversation_helpers import is_internal_conversation_message
+
+        try:
+            response = (
+                self.client.table("conversations")
+                .select("guest_id, role, content, created_at")
+                .order("created_at", desc=True)
+                .limit(2000)
+                .execute()
+            )
+            rows = response.data or []
+        except Exception as e:
+            logger.error(f"Error listing inbox threads: {e}")
+            rows = []
+
+        grouped: Dict[str, List[dict]] = {}
+        for row in rows:
+            guest_id = row.get("guest_id")
+            if not guest_id:
+                continue
+            content = row.get("content", "")
+            if is_internal_conversation_message(content):
+                continue
+            grouped.setdefault(str(guest_id), []).append(row)
+
+        try:
+            action_rows = (
+                self.client.table("staff_actions")
+                .select("guest_id")
+                .order("created_at", desc=True)
+                .limit(500)
+                .execute()
+            )
+            for row in action_rows.data or []:
+                gid = row.get("guest_id")
+                if gid:
+                    grouped.setdefault(str(gid), [])
+        except Exception as e:
+            logger.error(f"Error listing staff actions for inbox: {e}")
+
+        threads: List[Dict[str, object]] = []
+        for guest_id, messages in grouped.items():
+            messages_sorted = sorted(
+                messages,
+                key=lambda m: m.get("created_at") or "",
+            )
+            if messages_sorted:
+                last_row = messages_sorted[-1]
+                created = last_row.get("created_at")
+                try:
+                    last_at = (
+                        datetime.fromisoformat(str(created).replace("Z", "+00:00")).replace(tzinfo=None)
+                        if created
+                        else datetime.utcnow()
+                    )
+                except ValueError:
+                    last_at = datetime.utcnow()
+                preview = (last_row.get("content") or "")[:120]
+                count = len(messages_sorted)
+            else:
+                preview = ""
+                last_at = datetime.utcnow()
+                count = 0
+
+            guest = self.get_guest(guest_id)
+            threads.append(
+                {
+                    "guest_id": guest_id,
+                    "guest_name": guest.name if guest else None,
+                    "room_number": guest.room_number if guest else None,
+                    "last_message_preview": preview,
+                    "last_message_at": last_at,
+                    "message_count": count,
+                }
+            )
+
+        threads.sort(key=lambda row: row["last_message_at"], reverse=True)
+        return threads[:limit]
 
     def append_pending_staff_action(
         self,

@@ -65,13 +65,56 @@ export function escalationBadgeClass(type: StaffActionEscalationType): string {
   }
 }
 
-export function formatRelativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const diff = Math.max(0, Date.now() - then);
+/** Parse staff action timestamps (UTC from API, often without a Z suffix). */
+export function parseActionTimestamp(iso: string): Date {
+  const trimmed = iso.trim();
+  if (!trimmed) return new Date(Number.NaN);
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(trimmed) && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(trimmed)) {
+    return new Date(`${trimmed}Z`);
+  }
+  return new Date(trimmed);
+}
+
+export function formatRelativeTime(iso: string, now = Date.now()): string {
+  const then = parseActionTimestamp(iso).getTime();
+  if (Number.isNaN(then)) return 'Unknown time';
+  const diff = Math.max(0, now - then);
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return new Date(iso).toLocaleDateString();
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 14) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return parseActionTimestamp(iso).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+export function formatPreciseTimestamp(iso: string): string {
+  return parseActionTimestamp(iso).toLocaleString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+export function escalationTooltip(type: StaffActionEscalationType): string {
+  switch (type) {
+    case 'escalated':
+      return 'Escalated — needs urgent attention';
+    case 'contact':
+      return 'Contact — guest asked to speak with the front desk';
+    case 'status_check':
+      return 'Status — guest is following up on a prior request';
+    case 'repetition':
+      return 'Repeat — similar request from this guest; check if duplicate';
+    default:
+      return '';
+  }
 }

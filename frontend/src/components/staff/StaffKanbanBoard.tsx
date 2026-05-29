@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
-import { ActionType, StaffAction } from '@/types';
-import { IconCalendar, IconList } from './StaffIcons';
+import { useRef, useState } from 'react';
+import { ActionType, StaffAction, StaffActionStatus } from '@/types';
+import { IconCalendar, IconFilter, IconList, IconSort, IconX } from './StaffIcons';
 import { StaffKanbanColumn } from './StaffKanbanColumn';
 import { TaskFilters, TaskSortKey } from './staffTaskQuery';
+import { useClickOutside } from './useClickOutside';
 
 interface StaffKanbanBoardProps {
   allActions: StaffAction[];
@@ -21,6 +22,8 @@ interface StaffKanbanBoardProps {
   onChangeSort: (sort: TaskSortKey) => void;
   onResetView: () => void;
   onOpenCalendar: () => void;
+  onMoveAction: (actionId: string, status: StaffActionStatus) => void;
+  guestMessageCounts: Record<string, number>;
 }
 
 export function StaffKanbanBoard({
@@ -38,9 +41,18 @@ export function StaffKanbanBoard({
   onChangeSort,
   onResetView,
   onOpenCalendar,
+  onMoveAction,
+  guestMessageCounts,
 }: StaffKanbanBoardProps) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  const sortRef = useRef<HTMLDivElement>(null);
+
+  useClickOutside([filterRef, sortRef], () => {
+    setFilterOpen(false);
+    setSortOpen(false);
+  }, filterOpen || sortOpen);
 
   const activeFilterCount = filters.serviceTypes.length + filters.floors.length;
   const totalVisible = todo.length + ongoing.length + done.length;
@@ -83,20 +95,27 @@ export function StaffKanbanBoard({
           </button>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2 relative">
-          <div className="relative">
+          <div className="relative" ref={filterRef}>
             <button
               type="button"
               onClick={() => {
                 setFilterOpen((prev) => !prev);
                 setSortOpen(false);
               }}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeFilterCount > 0
-                  ? 'border-neutral-300 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-white'
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                filterOpen || activeFilterCount > 0
+                  ? 'border-neutral-900 dark:border-white bg-neutral-900 dark:bg-white text-white dark:text-neutral-900'
                   : 'border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900'
               }`}
             >
+              <IconFilter className="w-3.5 h-3.5" />
               Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+              {filterOpen && (
+                <IconX
+                  className="w-3 h-3"
+                  aria-hidden
+                />
+              )}
             </button>
             {filterOpen && (
               <div className="absolute z-30 mt-2 w-72 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-3 shadow-xl">
@@ -147,16 +166,22 @@ export function StaffKanbanBoard({
               </div>
             )}
           </div>
-          <div className="relative">
+          <div className="relative" ref={sortRef}>
             <button
               type="button"
               onClick={() => {
                 setSortOpen((prev) => !prev);
                 setFilterOpen(false);
               }}
-              className="rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900"
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                sortOpen
+                  ? 'border-neutral-900 dark:border-white bg-neutral-900 dark:bg-white text-white dark:text-neutral-900'
+                  : 'border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900'
+              }`}
             >
+              <IconSort className="w-3.5 h-3.5" />
               Sort
+              {sortOpen && <IconX className="w-3 h-3" aria-hidden />}
             </button>
             {sortOpen && (
               <div className="absolute z-30 mt-2 w-56 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-2 shadow-xl">
@@ -218,19 +243,25 @@ export function StaffKanbanBoard({
               columnId="todo"
               actions={todo}
               allActions={allActions}
+              guestMessageCounts={guestMessageCounts}
               onSelect={onSelect}
+              onMoveAction={onMoveAction}
             />
             <StaffKanbanColumn
               columnId="ongoing"
               actions={ongoing}
               allActions={allActions}
+              guestMessageCounts={guestMessageCounts}
               onSelect={onSelect}
+              onMoveAction={onMoveAction}
             />
             <StaffKanbanColumn
               columnId="done"
               actions={done}
               allActions={allActions}
+              guestMessageCounts={guestMessageCounts}
               onSelect={onSelect}
+              onMoveAction={onMoveAction}
             />
           </div>
         )}

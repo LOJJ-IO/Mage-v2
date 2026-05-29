@@ -17,6 +17,7 @@ from app.models.schemas import (
     StaffActionEscalationType,
 )
 from app.services.database import get_database
+from app.services.social_shortcuts import is_standalone_thanks
 from app.services.conversation_helpers import (
     trim_history,
     resolve_substantive_user_message,
@@ -1057,9 +1058,8 @@ class LLMService:
             return HELLO_RESPONSE
         if words & {"help", "hi", "hello", "hey", "greetings"} and len(words) <= 3:
             return HELLO_RESPONSE
-        if re.search(r"\bthanks?\b", message_lower) or re.search(r"\bthx\b", message_lower):
-            if "thanksgiving" not in message_lower:
-                return THANKS_RESPONSE
+        if is_standalone_thanks(user_message):
+            return THANKS_RESPONSE
         return None
 
     def _copy_models_to_try(self) -> List[str]:

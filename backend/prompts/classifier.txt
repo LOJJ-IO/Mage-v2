@@ -57,6 +57,7 @@ Select ALL that apply.
   F  FAQ_REFERENCE   Guest's question matches a FAQ shown already.
 
   G  SOCIAL          Purely social (greeting, thanks, acknowledgment). No request or question.
+                      If thanks appears WITH another request ("thanks, can I get towels"), handle the request — do not only reply "you're welcome".
 
 Continue to NODE 3.
 

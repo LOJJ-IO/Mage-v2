@@ -11,6 +11,8 @@ import {
   StaffAction,
   StaffActionConversation,
   StaffActionStatus,
+  StaffGuestConversation,
+  StaffInboxThread,
 } from '@/types';
 import { mapApiMessage } from '@/lib/mapMessage';
 import { GUEST_CHAT_ERROR, toGuestFriendlyError } from '@/lib/guestErrors';
@@ -373,11 +375,93 @@ class ApiClient {
   }
 
   // Staff inbox
+  async listStaffInboxThreads(staffKey: string): Promise<ApiResponse<StaffInboxThread[]>> {
+    const result = await this.request<Record<string, unknown>[]>(
+      '/api/staff/inbox/threads?limit=100',
+      {},
+      staffKey
+    );
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    return {
+      success: true,
+      data: result.data.map((row) => ({
+        guestId: String(row.guest_id),
+        guestName: row.guest_name != null ? String(row.guest_name) : undefined,
+        roomNumber: row.room_number != null ? String(row.room_number) : null,
+        lastMessagePreview: String(row.last_message_preview ?? ''),
+        lastMessageAt: String(row.last_message_at),
+        messageCount: Number(row.message_count ?? 0),
+        linkedActionId:
+          row.linked_action_id != null ? String(row.linked_action_id) : null,
+        liveChatPending: Boolean(row.live_chat_pending),
+      })),
+    };
+  }
+
+  async getStaffGuestConversation(
+    staffKey: string,
+    guestId: string
+  ): Promise<ApiResponse<StaffGuestConversation>> {
+    const result = await this.request<Record<string, unknown>>(
+      `/api/staff/guests/${encodeURIComponent(guestId)}/conversation`,
+      {},
+      staffKey
+    );
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    const raw = result.data;
+    const guestRaw = (raw.guest ?? {}) as Record<string, unknown>;
+    const messagesRaw = (raw.messages ?? []) as Record<string, unknown>[];
+    return {
+      success: true,
+      data: {
+        guest: {
+          id: String(guestRaw.id),
+          name: String(guestRaw.name ?? ''),
+          roomNumber:
+            guestRaw.room_number != null ? String(guestRaw.room_number) : '',
+          checkIn: guestRaw.check_in ? new Date(String(guestRaw.check_in)) : new Date(),
+          checkOut: guestRaw.check_out ? new Date(String(guestRaw.check_out)) : new Date(),
+          bookingId: String(guestRaw.booking_id ?? ''),
+          email: guestRaw.email != null ? String(guestRaw.email) : undefined,
+          phone: guestRaw.phone != null ? String(guestRaw.phone) : undefined,
+          membershipTier:
+            guestRaw.membership_tier != null ? String(guestRaw.membership_tier) : undefined,
+        },
+        messages: messagesRaw.map((m) => mapApiMessage(m)),
+        linkedActionId:
+          raw.linked_action_id != null ? String(raw.linked_action_id) : null,
+      },
+    };
+  }
+
+  async sendStaffGuestMessage(
+    staffKey: string,
+    guestId: string,
+    content: string
+  ): Promise<ApiResponse<Message>> {
+    const result = await this.request<Record<string, unknown>>(
+      `/api/staff/guests/${encodeURIComponent(guestId)}/message`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      },
+      staffKey
+    );
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    return { success: true, data: mapApiMessage(result.data) };
+  }
+
   async listStaffActions(
     staffKey: string,
     status?: StaffActionStatus
   ): Promise<ApiResponse<StaffAction[]>> {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ limit: '200' });
     if (status) params.set('status', status);
     const qs = params.toString();
     const result = await this.request<Record<string, unknown>[]>(

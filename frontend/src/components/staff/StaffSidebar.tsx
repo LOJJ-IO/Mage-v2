@@ -8,6 +8,7 @@ import {
   IconLayoutGrid,
   IconList,
   IconMageLogo,
+  IconHeadset,
   IconMessage,
   IconSearch,
   IconStar,
@@ -144,7 +145,8 @@ export function StaffSidebar({
               <NavIcon icon={item.icon} />
               <span className="flex-1 text-left">{item.label}</span>
               {item.id === 'guest-chat' && guestUnreadCount > 0 && (
-                <span className="min-w-[20px] rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[11px] font-semibold text-white">
+                <span className="inline-flex min-w-[20px] items-center gap-1 rounded-full bg-mage-blue px-1.5 py-0.5 text-[11px] font-semibold text-white">
+                  <IconHeadset className="w-3 h-3" />
                   {guestUnreadCount > 99 ? '99+' : guestUnreadCount}
                 </span>
               )}
