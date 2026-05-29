@@ -40,23 +40,34 @@ export function HydrationGate({ children }: { children: React.ReactNode }) {
   const ready = hasMounted && (hasHydrated || fallbackReady || forceReady);
   const [showLoader, setShowLoader] = useState(true);
   const hasInitializedStoreRef = useRef(false);
+  const entryState = getEntryState(useMageStore.getState().context.hasSeenWelcome);
+  /** First-time users use LoadingScreen (S-G-001) — skip this gate's progress bar to avoid double animation. */
+  const showBootLoader = entryState !== 'S-G-001';
 
   useEffect(() => {
     if (!ready) return;
     if (!hasInitializedStoreRef.current) {
       hasInitializedStoreRef.current = true;
       const state = useMageStore.getState();
-      const entryState = getEntryState(state.context.hasSeenWelcome);
-      if (state.currentState !== entryState) {
-        useMageStore.setState({ currentState: entryState });
+      const nextEntry = getEntryState(state.context.hasSeenWelcome);
+      if (state.currentState !== nextEntry) {
+        useMageStore.setState({ currentState: nextEntry });
       }
+    }
+    if (!showBootLoader) {
+      setShowLoader(false);
+      return;
     }
     const t = setTimeout(() => setShowLoader(false), 350);
     return () => clearTimeout(t);
-  }, [ready]);
+  }, [ready, showBootLoader]);
 
-  if (!ready || showLoader) {
-    return <LoadingShell finishing={ready} />;
+  if (!ready) {
+    return showBootLoader ? <LoadingShell finishing={false} /> : null;
+  }
+
+  if (showBootLoader && showLoader) {
+    return <LoadingShell finishing />;
   }
 
   return <>{children}</>;

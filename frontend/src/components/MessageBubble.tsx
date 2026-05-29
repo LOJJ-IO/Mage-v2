@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Message } from '@/types';
 import Image from 'next/image';
 import { FaqPanel } from '@/components/FaqPanel';
+import { formatMessageTime } from '@/lib/parseTimestamp';
 
 interface MessageBubbleProps {
   message: Message;
@@ -144,11 +145,7 @@ export function MessageBubble({
 }
 
 function formatTime(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  }).format(new Date(date));
+  return formatMessageTime(date);
 }
 
 export function TypingIndicator() {

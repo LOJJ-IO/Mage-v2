@@ -55,7 +55,8 @@ export function useConversationHistory(guestId: string | undefined) {
       return response.data.messages;
     },
     enabled: !!guestId,
-    staleTime: 0,
+    staleTime: 30_000,
+    placeholderData: (previous) => previous,
     refetchOnWindowFocus: false,
     refetchInterval:
       conversationContext === 'FRONT_DESK_AGENT' ? 4000 : false,

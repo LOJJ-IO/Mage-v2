@@ -10,6 +10,7 @@ import { MessageBubble, TypingIndicator } from '@/components/MessageBubble';
 import { ChatInput } from '@/components/ChatInput';
 import { RecordingToast } from '@/components/Toast';
 import { ConversationContext } from '@/types';
+import { mergeConversationMessages } from '@/lib/mergeMessages';
 
 /** Skeleton that matches ChatScreen layout; shown briefly before chat content. */
 function ChatScreenSkeleton() {
@@ -88,15 +89,17 @@ export function ChatScreen() {
 
   useEffect(() => {
     if (
-      historyLoaded &&
-      historyData &&
-      !historyHydratedRef.current &&
-      !sendMessageMutation.isPending &&
-      !faqFeedbackMutation.isPending
+      !historyLoaded ||
+      historyData == null ||
+      historyHydratedRef.current ||
+      sendMessageMutation.isPending ||
+      faqFeedbackMutation.isPending
     ) {
-      setMessages(historyData);
-      historyHydratedRef.current = true;
+      return;
     }
+    const current = useMageStore.getState().messages;
+    setMessages(mergeConversationMessages(current, historyData));
+    historyHydratedRef.current = true;
   }, [
     historyLoaded,
     historyData,
@@ -105,16 +108,17 @@ export function ChatScreen() {
     faqFeedbackMutation.isPending,
   ]);
 
-  // Poll staff jump-in messages while connected to front desk chat
+  // Poll staff jump-in while on front desk — merge server history without wiping local bubbles
   useEffect(() => {
     if (
       context.conversationContext !== 'FRONT_DESK_AGENT' ||
       !historyHydratedRef.current ||
-      !historyData
+      historyData == null
     ) {
       return;
     }
-    setMessages(historyData);
+    const current = useMageStore.getState().messages;
+    setMessages(mergeConversationMessages(current, historyData));
   }, [context.conversationContext, historyData, setMessages]);
 
   // Determine current sub-state
