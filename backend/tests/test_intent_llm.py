@@ -191,10 +191,36 @@ def test_copy_writer_user_content_uses_routing_not_full_chat():
         conversation_gist="Extra towels please",
     )
     assert "Routing from classifier" in body
+    assert "abilities/tasks only" in body
     data = json.loads(routing)
     assert data["abilities"] == ["D"]
     assert "intent" not in data
     assert "Guest message to respond to:" in body
+
+
+def test_routing_json_for_copy_writer_omits_info_message():
+    result = ClassifierResult(
+        confidence=0.88,
+        raw="",
+        abilities=["E"],
+        info_source="HOTEL_DOCS",
+        message="The spa closes at 8 PM.",
+    )
+    data = json.loads(format_classifier_routing_json(result, for_copy_writer=True))
+    assert data["abilities"] == ["E"]
+    assert "message" not in data
+
+
+def test_routing_json_keeps_task_message_for_copy_writer_when_no_info():
+    result = ClassifierResult(
+        confidence=0.9,
+        raw="",
+        abilities=["D"],
+        tasks=[{"service": "HOUSEKEEPING", "title": "Towels"}],
+        message="Towels are on the way!",
+    )
+    data = json.loads(format_classifier_routing_json(result, for_copy_writer=True))
+    assert data["message"] == "Towels are on the way!"
 
 
 def test_parse_social_ability_g():

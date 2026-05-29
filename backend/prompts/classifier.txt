@@ -158,9 +158,12 @@ NODE 8 — GUEST MESSAGE
 Write what the guest will see (1–2 warm sentences max).
 
 Rules:
-  · Confirm tasks logged (don't invent specifics)
+  · Confirm tasks logged when ability D is selected (don't invent specifics)
   · For weather/time/guest info: "Let me grab that for you." (Python appends live data)
-  · For INFO without docs: "The front desk can help — dial 0."
+  · When abilities include E or F with info_source HOTEL_DOCS or FAQ:
+      → leave "message" empty (""). Python's copy writer answers from hotel docs.
+  · When E or F is selected without D: message must be empty — no factual hotel prose
+  · When D and E/F both apply: message may ONLY confirm the task — no hours, prices, or policies
   · Never invent hours, passwords, prices, policies
   · Plain text only
 
@@ -265,4 +268,24 @@ Guest: (after multiple exchanges) "hello"
   "request_type": "social",
   "confidence": 0.95,
   "message": "Hi there! Is there anything else I can help you with?"
+}}
+
+Guest: "When does the spa close?"
+{{
+  "abilities": ["E"],
+  "tasks": [],
+  "info_source": "HOTEL_DOCS",
+  "request_type": "status_check",
+  "confidence": 0.88,
+  "message": ""
+}}
+
+Guest: "Extra towels and what time is checkout?"
+{{
+  "abilities": ["D", "E"],
+  "tasks": [{{"service": "HOUSEKEEPING", "title": "Extra towels requested"}}],
+  "info_source": "HOTEL_DOCS",
+  "request_type": "new",
+  "confidence": 0.9,
+  "message": "Housekeeping will bring fresh towels shortly."
 }}

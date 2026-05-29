@@ -440,8 +440,12 @@ def _normalize_classifier_dict(
     )
 
 
-def format_classifier_routing_json(result: ClassifierResult) -> str:
-    """Compact routing payload for the copy writer."""
+def format_classifier_routing_json(
+    result: ClassifierResult,
+    *,
+    for_copy_writer: bool = False,
+) -> str:
+    """Compact routing payload for the copy writer or logs."""
     payload: Dict[str, Any] = {
         "abilities": result.abilities,
         "confidence": round(max(0.0, min(1.0, result.confidence)), 3),
@@ -451,7 +455,9 @@ def format_classifier_routing_json(result: ClassifierResult) -> str:
         payload["tasks"] = result.tasks
     if result.info_source:
         payload["info_source"] = result.info_source
-    if result.message:
+    abilities = result.abilities or []
+    has_info_ability = "E" in abilities or "F" in abilities
+    if result.message and not (for_copy_writer and has_info_ability):
         payload["message"] = result.message
     return json.dumps(payload, separators=(",", ":"))
 
@@ -463,7 +469,7 @@ def build_copy_writer_user_content(
     conversation_gist: str = "",
 ) -> str:
     parts = [
-        "Routing from classifier (ground truth — do not re-classify):",
+        "Routing from classifier (abilities/tasks only — not factual answers):",
         routing_json,
         "",
         "Guest message to respond to:",

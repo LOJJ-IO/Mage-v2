@@ -33,7 +33,7 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://api.fontshare.com" />
       </head>
-      <body className="font-clash antialiased">
+      <body className="font-sans antialiased">
         <QueryProvider>
           <ThemeClass />
           <ToastContainer />

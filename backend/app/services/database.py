@@ -713,7 +713,7 @@ class SupabaseDatabase:
             response = self.client.table("conversations").select("*").eq("guest_id", guest_id).order("created_at").limit(50).execute()
             if response.data:
                 return [
-                    {"role": msg.get("role"), "content": msg.get("content")}
+                    {"role": msg.get("role"), "content": msg.get("content"), "created_at": msg.get("created_at")}
                     for msg in response.data
                 ]
             return []

@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from 'react';
 import { HelpDeskNode, STAFF_HELP_DESK_TREE } from '@/data/staffHelpDeskTree';
+import { useMediaQuery } from '@/hooks/useResizableWidth';
 import { StaffCard } from './StaffLayoutPrimitives';
+import { ResizableSplit } from './ResizablePanel';
 
 function flattenNodes(nodes: HelpDeskNode[], path: string[] = []): Array<{
   node: HelpDeskNode;
@@ -101,9 +103,10 @@ export function StaffHelpDesk() {
     }
   };
 
-  return (
-    <div className="flex min-h-0 flex-1 gap-3 p-4 md:p-5">
-      <StaffCard className="w-[320px] shrink-0 overflow-hidden flex flex-col">
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
+
+  const treePanel = (
+      <StaffCard className="h-full min-h-0 overflow-hidden flex flex-col">
         <div className="border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
           <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">Help desk</h2>
           <input
@@ -133,8 +136,10 @@ export function StaffHelpDesk() {
           ))}
         </div>
       </StaffCard>
+  );
 
-      <StaffCard className="min-w-0 flex-1 overflow-hidden flex flex-col">
+  const detailPanel = (
+      <StaffCard className="min-h-0 min-w-0 flex-1 overflow-hidden flex flex-col">
         <div className="border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
           <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
             {selectedNode?.title ?? 'Select an item'}
@@ -161,6 +166,26 @@ export function StaffHelpDesk() {
           )}
         </div>
       </StaffCard>
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1 overflow-hidden p-4 md:p-5">
+      {isDesktop ? (
+        <ResizableSplit
+          storageKey="staff-help-desk"
+          defaultLeftWidth={320}
+          minLeft={240}
+          maxLeft={520}
+          className="min-h-0 flex-1"
+          left={treePanel}
+          right={detailPanel}
+        />
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          {treePanel}
+          {detailPanel}
+        </div>
+      )}
     </div>
   );
 }

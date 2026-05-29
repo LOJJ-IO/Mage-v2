@@ -84,7 +84,7 @@ export function StaffStateRenderer() {
   }
 
   return (
-    <>
+    <div className="staff-ui font-sans flex h-screen min-h-0 w-full overflow-hidden">
       <StaffWorkspace
         actions={actions}
         staffKey={staffKey!}
@@ -102,6 +102,6 @@ export function StaffStateRenderer() {
           onUpdateStatus={handleUpdateStatus}
         />
       )}
-    </>
+    </div>
   );
 }

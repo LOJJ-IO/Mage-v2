@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { StaffAction } from '@/types';
 import { StaffCard, StaffTag } from './StaffLayoutPrimitives';
+import { ResizableSplit } from './ResizablePanel';
 
 const SETTINGS_KEY = 'mage-review-platform-settings';
 const REVIEW_STATUS_KEY = 'mage-review-status';
@@ -111,9 +112,8 @@ export function StaffReviewDashboard({ actions }: StaffReviewDashboardProps) {
 
   const allPlatforms = ['Google', 'Tripadvisor', 'Booking.com', 'Expedia', 'Yelp'];
 
-  return (
-    <div className="flex min-h-0 flex-1 gap-3 p-4 md:p-5">
-      <StaffCard className="min-w-0 flex-1 overflow-hidden">
+  const tableCard = (
+      <StaffCard className="h-full min-h-0 min-w-0 flex-1 overflow-hidden">
         <div className="border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
@@ -211,29 +211,49 @@ export function StaffReviewDashboard({ actions }: StaffReviewDashboardProps) {
           </table>
         </div>
       </StaffCard>
+  );
 
-      {showSettings && (
-        <StaffCard className="w-[280px] shrink-0 p-4 space-y-2">
-          <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
-            Encouraged platforms
-          </h3>
-          {allPlatforms.map((platform) => (
-            <label key={platform} className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
-              <input
-                type="checkbox"
-                checked={platformSettings.includes(platform)}
-                onChange={() =>
-                  setPlatformSettings((prev) =>
-                    prev.includes(platform)
-                      ? prev.filter((item) => item !== platform)
-                      : [...prev, platform]
-                  )
-                }
-              />
-              {platform}
-            </label>
-          ))}
-        </StaffCard>
+  const settingsCard = (
+    <StaffCard className="h-full min-h-0 overflow-hidden p-4 space-y-2">
+      <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
+        Encouraged platforms
+      </h3>
+      {allPlatforms.map((platform) => (
+        <label
+          key={platform}
+          className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300"
+        >
+          <input
+            type="checkbox"
+            checked={platformSettings.includes(platform)}
+            onChange={() =>
+              setPlatformSettings((prev) =>
+                prev.includes(platform)
+                  ? prev.filter((item) => item !== platform)
+                  : [...prev, platform]
+              )
+            }
+          />
+          {platform}
+        </label>
+      ))}
+    </StaffCard>
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1 overflow-hidden p-4 md:p-5">
+      {showSettings ? (
+        <ResizableSplit
+          storageKey="staff-review-settings"
+          defaultLeftWidth={720}
+          minLeft={400}
+          maxLeft={1200}
+          className="min-h-0 flex-1"
+          left={tableCard}
+          right={settingsCard}
+        />
+      ) : (
+        tableCard
       )}
     </div>
   );
