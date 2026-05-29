@@ -1,12 +1,18 @@
 'use client';
 
-import { ReactNode } from 'react';
-import { StaffAction } from '@/types';
+import { DragEvent, ReactNode, useState } from 'react';
+import { StaffAction, StaffActionStatus } from '@/types';
 import { IconCheckCircle, IconCheckSquare, IconCircle, IconMore, IconPlus } from './StaffIcons';
 import { StaffKanbanCard } from './StaffKanbanCard';
-import { getGuestRequestIndex, getGuestTaskCount } from './staffTaskQuery';
+import { getGuestRequestIndex, isDuplicateRequest } from './staffTaskQuery';
 
 export type KanbanColumnId = 'todo' | 'ongoing' | 'done';
+
+const COLUMN_STATUS: Record<KanbanColumnId, StaffActionStatus> = {
+  todo: 'pending',
+  ongoing: 'acknowledged',
+  done: 'resolved',
+};
 
 const COLUMN_META: Record<
   KanbanColumnId,
@@ -33,20 +39,48 @@ interface StaffKanbanColumnProps {
   columnId: KanbanColumnId;
   actions: StaffAction[];
   allActions: StaffAction[];
+  guestMessageCounts: Record<string, number>;
   onSelect: (id: string) => void;
+  onMoveAction: (actionId: string, status: StaffActionStatus) => void;
 }
 
 export function StaffKanbanColumn({
   columnId,
   actions,
   allActions,
+  guestMessageCounts,
   onSelect,
+  onMoveAction,
 }: StaffKanbanColumnProps) {
   const meta = COLUMN_META[columnId];
   const isEmpty = actions.length === 0;
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDragOver(true);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragOver(false);
+    const actionId = event.dataTransfer.getData('text/plain');
+    if (!actionId) return;
+    onMoveAction(actionId, COLUMN_STATUS[columnId]);
+  };
 
   return (
-    <div className="flex w-full min-w-[280px] flex-1 flex-col rounded-xl bg-neutral-50/80 dark:bg-neutral-900/50 md:min-w-[300px] lg:min-w-0">
+    <div
+      className={`flex w-full min-w-[280px] flex-1 flex-col rounded-xl transition-colors md:min-w-[300px] lg:min-w-0 ${
+        dragOver
+          ? 'bg-sky-50/90 ring-2 ring-sky-300 dark:bg-sky-950/30 dark:ring-sky-700'
+          : 'bg-neutral-50/80 dark:bg-neutral-900/50'
+      }`}
+      onDragLeave={() => setDragOver(false)}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <div className="flex items-center gap-2 px-3 py-3">
         <span className={meta.iconClass}>{meta.icon}</span>
         <h2 className="flex-1 text-sm font-semibold text-neutral-900 dark:text-white">
@@ -92,16 +126,17 @@ export function StaffKanbanColumn({
                 requestIndexLabel={
                   indexInfo ? `${indexInfo.index}/${indexInfo.total}` : undefined
                 }
-                requestCount={getGuestTaskCount(action, allActions)}
+                requestIndex={indexInfo?.index}
+                requestTotal={indexInfo?.total}
+                sessionMessageCount={guestMessageCounts[action.guestId] ?? 0}
+                isDuplicate={isDuplicateRequest(action, allActions)}
               />
             );
           })
         )}
 
-        {!isEmpty && columnId === 'done' && null}
-
         {isEmpty && columnId !== 'done' && (
-          <p className="py-8 text-center text-xs text-neutral-400">No tasks in this column</p>
+          <p className="py-8 text-center text-xs text-neutral-400">Drop tasks here</p>
         )}
       </div>
 

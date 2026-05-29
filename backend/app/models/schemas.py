@@ -183,6 +183,25 @@ class StaffActionConversationResponse(BaseModel):
     messages: List[Message]
 
 
+class StaffInboxThread(BaseModel):
+    """Guest conversation visible in staff inbox (independent of task notifications)."""
+    guest_id: str
+    guest_name: Optional[str] = None
+    room_number: Optional[str] = None
+    last_message_preview: str = ""
+    last_message_at: datetime = Field(default_factory=datetime.utcnow)
+    message_count: int = 0
+    linked_action_id: Optional[str] = None
+    live_chat_pending: bool = False
+
+
+class StaffGuestConversationResponse(BaseModel):
+    """Guest profile and full conversation for staff inbox."""
+    guest: GuestProfile
+    messages: List[Message]
+    linked_action_id: Optional[str] = None
+
+
 class AgentAvailability(BaseModel):
     """Agent availability response."""
     human_agent_available: bool = False

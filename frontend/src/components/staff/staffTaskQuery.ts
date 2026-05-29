@@ -90,6 +90,42 @@ export function getGuestTaskCount(action: StaffAction, allActions: StaffAction[]
   return count;
 }
 
+function normalizeRequestText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** True when this looks like the same request sent again (e.g. sprite twice), not merely multiple tasks. */
+export function isDuplicateRequest(action: StaffAction, allActions: StaffAction[]): boolean {
+  if (action.escalationType === 'repetition') return true;
+
+  const summaryNorm = normalizeRequestText(action.summary);
+  const sourceNorm = normalizeRequestText(action.sourceMessage);
+  if (!summaryNorm && !sourceNorm) return false;
+
+  const peers = allActions.filter(
+    (row) => row.guestId === action.guestId && row.id !== action.id
+  );
+
+  for (const other of peers) {
+    if (other.actionType !== action.actionType) continue;
+    const otherSummary = normalizeRequestText(other.summary);
+    const otherSource = normalizeRequestText(other.sourceMessage);
+
+    if (summaryNorm && summaryNorm === otherSummary) return true;
+    if (sourceNorm && sourceNorm === otherSource) return true;
+
+    const probe = (summaryNorm.length >= sourceNorm.length ? summaryNorm : sourceNorm).slice(0, 24);
+    if (probe.length >= 8) {
+      if (otherSummary.includes(probe) || otherSource.includes(probe)) return true;
+    }
+  }
+  return false;
+}
+
 export function getGuestRequestIndex(
   action: StaffAction,
   allActions: StaffAction[]

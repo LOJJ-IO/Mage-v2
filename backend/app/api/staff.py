@@ -8,13 +8,17 @@ from typing import List, Optional
 
 from app.core.config import get_settings
 from app.models.schemas import (
+    ActionType,
     GuestProfile,
     Message,
     MessageKind,
     MessageRole,
     StaffAction,
     StaffActionConversationResponse,
+    StaffActionEscalationType,
     StaffActionStatus,
+    StaffGuestConversationResponse,
+    StaffInboxThread,
     StaffMessageRequest,
     UpdateStaffActionRequest,
 )
@@ -64,6 +68,83 @@ def _validate_calendar_feed_url(url: str) -> None:
         )
 
 
+def _is_direct_guest_chat_action(action: StaffAction) -> bool:
+    if not action.allow_staff_jump_in:
+        return False
+    if action.action_type == ActionType.CONTACT_FRONT_DESK:
+        return True
+    if action.escalation_type == StaffActionEscalationType.CONTACT:
+        return True
+    return False
+
+
+def _pick_linked_action_id(actions: List[StaffAction]) -> Optional[str]:
+    if not actions:
+        return None
+    open_actions = [
+        a
+        for a in actions
+        if a.status in (StaffActionStatus.PENDING, StaffActionStatus.ACKNOWLEDGED)
+    ]
+    pool = open_actions or actions
+    pool.sort(key=lambda a: a.created_at, reverse=True)
+    return pool[0].id
+
+
+def _enrich_inbox_threads(raw_threads: List[dict], actions: List[StaffAction]) -> List[StaffInboxThread]:
+    by_guest: dict[str, List[StaffAction]] = {}
+    for action in actions:
+        by_guest.setdefault(action.guest_id, []).append(action)
+
+    enriched: List[StaffInboxThread] = []
+    seen_guests = set()
+    for row in raw_threads:
+        guest_id = str(row["guest_id"])
+        seen_guests.add(guest_id)
+        guest_actions = by_guest.get(guest_id, [])
+        guest_actions.sort(key=lambda a: a.created_at, reverse=True)
+        latest = guest_actions[0] if guest_actions else None
+        enriched.append(
+            StaffInboxThread(
+                guest_id=guest_id,
+                guest_name=row.get("guest_name") or (latest.guest_name if latest else None),
+                room_number=row.get("room_number") or (latest.room_number if latest else None),
+                last_message_preview=str(row.get("last_message_preview") or ""),
+                last_message_at=row["last_message_at"],
+                message_count=int(row.get("message_count") or 0),
+                linked_action_id=_pick_linked_action_id(guest_actions),
+                live_chat_pending=any(
+                    a.status == StaffActionStatus.PENDING and _is_direct_guest_chat_action(a)
+                    for a in guest_actions
+                ),
+            )
+        )
+
+    for guest_id, guest_actions in by_guest.items():
+        if guest_id in seen_guests:
+            continue
+        guest_actions.sort(key=lambda a: a.created_at, reverse=True)
+        latest = guest_actions[0]
+        enriched.append(
+            StaffInboxThread(
+                guest_id=guest_id,
+                guest_name=latest.guest_name,
+                room_number=latest.room_number,
+                last_message_preview=latest.summary,
+                last_message_at=latest.created_at,
+                message_count=0,
+                linked_action_id=_pick_linked_action_id(guest_actions),
+                live_chat_pending=any(
+                    a.status == StaffActionStatus.PENDING and _is_direct_guest_chat_action(a)
+                    for a in guest_actions
+                ),
+            )
+        )
+
+    enriched.sort(key=lambda t: t.last_message_at, reverse=True)
+    return enriched
+
+
 def verify_staff_key(x_staff_key: Optional[str] = Header(None, alias="X-Staff-Key")):
     settings = get_settings()
     if not x_staff_key or x_staff_key != settings.staff_access_key:
@@ -106,14 +187,107 @@ def _conversation_messages_for_guest(guest_id: str) -> List[Message]:
     return messages
 
 
-@router.get("/actions", response_model=List[StaffAction])
-async def list_staff_actions(
-    status: Optional[StaffActionStatus] = None,
-    limit: int = 50,
+@router.get("/inbox/threads", response_model=List[StaffInboxThread])
+async def list_staff_inbox_threads(
+    limit: int = 100,
     _: bool = Depends(verify_staff_key),
 ):
     db = get_database()
-    return db.list_staff_actions(limit=min(limit, 100), status=status)
+    raw = db.list_staff_inbox_threads(limit=min(limit, 200))
+    actions = db.list_staff_actions(limit=500)
+    return _enrich_inbox_threads(raw, actions)
+
+
+@router.get("/guests/{guest_id}/conversation", response_model=StaffGuestConversationResponse)
+async def get_staff_guest_conversation(
+    guest_id: str,
+    _: bool = Depends(verify_staff_key),
+):
+    db = get_database()
+    guest = db.get_guest(guest_id)
+    if not guest:
+        raise HTTPException(status_code=404, detail="Guest not found")
+
+    actions = [
+        a for a in db.list_staff_actions(limit=500) if a.guest_id == guest_id
+    ]
+    thread_id = guest_id
+    if actions:
+        latest = sorted(actions, key=lambda a: a.created_at, reverse=True)[0]
+        thread_id = latest.guest_conversation_thread_id or guest_id
+
+    return StaffGuestConversationResponse(
+        guest=guest,
+        messages=_conversation_messages_for_guest(thread_id),
+        linked_action_id=_pick_linked_action_id(actions),
+    )
+
+
+@router.post("/guests/{guest_id}/message", response_model=Message)
+async def post_staff_guest_message(
+    guest_id: str,
+    request: StaffMessageRequest,
+    _: bool = Depends(verify_staff_key),
+):
+    db = get_database()
+    guest = db.get_guest(guest_id)
+    if not guest:
+        raise HTTPException(status_code=404, detail="Guest not found")
+
+    actions = [
+        a for a in db.list_staff_actions(limit=500) if a.guest_id == guest_id
+    ]
+    actions.sort(key=lambda a: a.created_at, reverse=True)
+    linked = actions[0] if actions else None
+    thread_id = guest_id
+    if linked:
+        thread_id = linked.guest_conversation_thread_id or guest_id
+        if not linked.allow_staff_jump_in:
+            raise HTTPException(
+                status_code=403,
+                detail="Staff jump-in disabled for this guest's active task.",
+            )
+    # No linked task: staff may still reply into the guest conversation thread.
+
+    db.add_message_to_conversation(thread_id, MessageRole.STAFF.value, request.content.strip())
+    if linked and linked.status == StaffActionStatus.PENDING:
+        db.update_staff_action_status(linked.id, StaffActionStatus.ACKNOWLEDGED)
+
+    raw = db.get_conversation(thread_id)
+    last_row = raw[-1] if raw else None
+    if not last_row:
+        raise HTTPException(status_code=500, detail="Failed to persist staff message")
+
+    ts = datetime.utcnow()
+    created = last_row.get("created_at")
+    if created:
+        try:
+            ts = datetime.fromisoformat(created.replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            pass
+    parsed = parse_stored_message(
+        MessageRole.STAFF.value,
+        request.content.strip(),
+        f"staff-msg-{guest_id}",
+        ts,
+    )
+    return Message(
+        id=parsed["id"],
+        role=MessageRole.STAFF,
+        content=parsed["content"],
+        timestamp=parsed["timestamp"],
+        kind=MessageKind(parsed.get("kind", MessageKind.TEXT.value)),
+    )
+
+
+@router.get("/actions", response_model=List[StaffAction])
+async def list_staff_actions(
+    status: Optional[StaffActionStatus] = None,
+    limit: int = 200,
+    _: bool = Depends(verify_staff_key),
+):
+    db = get_database()
+    return db.list_staff_actions(limit=min(limit, 500), status=status)
 
 
 @router.get("/actions/{action_id}", response_model=StaffAction)

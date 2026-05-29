@@ -13,6 +13,7 @@ import {
   useStaffActionConversation,
   useSendStaffMessage,
 } from '@/hooks/useStaffApi';
+import { staffChatBubbleClasses, staffChatMetaClasses } from './staffChatBubble';
 
 interface StaffDetailPanelProps {
   action: StaffAction;
@@ -137,9 +138,7 @@ export function StaffDetailPanel({
                 ) : (
               conversation.messages.map((msg) => {
                 const guestSide = msg.role === 'user';
-                const bubbleClass = guestSide
-                  ? 'bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white rounded-bl-sm'
-                  : 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 rounded-br-sm';
+                const bubbleClass = staffChatBubbleClasses(msg.role);
 
                 return (
                   <div
@@ -147,12 +146,13 @@ export function StaffDetailPanel({
                     className={`flex mb-2 ${guestSide ? 'justify-start' : 'justify-end'}`}
                   >
                     <div className={`max-w-[78%] rounded-xl px-3 py-2 text-sm ${bubbleClass}`}>
+                      {msg.role === 'staff' && (
+                        <p className="text-xs font-medium text-mage-blue dark:text-mage-blue mb-1">
+                          Front desk
+                        </p>
+                      )}
                       <p className="whitespace-pre-wrap break-words">{msg.content}</p>
-                      <p
-                        className={`mt-1 text-[11px] ${
-                          guestSide ? 'text-neutral-400' : 'text-white/70 dark:text-neutral-500'
-                        }`}
-                      >
+                      <p className={`mt-1 text-[11px] ${staffChatMetaClasses(msg.role)}`}>
                         {new Date(msg.timestamp).toLocaleTimeString([], {
                           hour: 'numeric',
                           minute: '2-digit',
@@ -183,7 +183,7 @@ export function StaffDetailPanel({
                     type="button"
                     disabled={!reply.trim() || sendMutation.isPending}
                     onClick={() => void handleSend()}
-                    className="px-4 py-2.5 rounded-full bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-sm font-medium disabled:opacity-50"
+                    className="px-4 py-2.5 rounded-full bg-mage-blue text-white text-sm font-medium disabled:opacity-50 hover:opacity-90"
                   >
                     Send
                   </button>

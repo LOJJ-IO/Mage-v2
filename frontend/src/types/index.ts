@@ -233,6 +233,23 @@ export interface StaffActionConversation {
   messages: Message[];
 }
 
+export interface StaffInboxThread {
+  guestId: string;
+  guestName?: string;
+  roomNumber?: string | null;
+  lastMessagePreview: string;
+  lastMessageAt: string;
+  messageCount: number;
+  linkedActionId?: string | null;
+  liveChatPending: boolean;
+}
+
+export interface StaffGuestConversation {
+  guest: GuestProfile;
+  messages: Message[];
+  linkedActionId?: string | null;
+}
+
 export interface StaffAction {
   id: string;
   guestId: string;

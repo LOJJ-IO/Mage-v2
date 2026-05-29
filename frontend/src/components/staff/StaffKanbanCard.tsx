@@ -1,31 +1,25 @@
 'use client';
 
-import { StaffAction } from '@/types';
+import { DragEvent, ReactNode, useRef } from 'react';
+import { StaffAction, StaffActionEscalationType } from '@/types';
 import {
   actionTypeBadgeClass,
   actionTypeLabel,
   escalationBadgeClass,
   escalationLabel,
+  escalationTooltip,
 } from './actionBadges';
+import { TaskRelativeTime } from './TaskRelativeTime';
 import {
-  IconAlert,
-  IconCalendar,
   IconChecklist,
-  IconLink,
+  IconEscalationMark,
+  IconGrip,
+  IconHeadset,
   IconMessage,
+  IconRepeat,
+  IconStatusClock,
 } from './StaffIcons';
-
-function formatCardDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function priorityDotClass(action: StaffAction): string {
-  if (action.escalationType === 'escalated') return 'bg-red-500';
-  if (action.escalationType === 'contact') return 'bg-amber-400';
-  if (action.status === 'acknowledged') return 'bg-sky-400';
-  return 'bg-red-400';
-}
+import { isDuplicateRequest } from './staffTaskQuery';
 
 function guestInitials(action: StaffAction): string {
   const name = action.guestName ?? action.guestId;
@@ -36,93 +30,254 @@ function guestInitials(action: StaffAction): string {
   return name.slice(0, 2).toUpperCase();
 }
 
+function IconFrame({
+  children,
+  tone = 'neutral',
+}: {
+  children: ReactNode;
+  tone?: 'neutral' | 'violet' | 'red' | 'amber' | 'blue';
+}) {
+  const toneClass =
+    tone === 'violet'
+      ? 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-700 dark:bg-violet-950/50 dark:text-violet-300'
+      : tone === 'red'
+        ? 'border-red-200 bg-red-50 text-red-600 dark:border-red-900 dark:bg-red-950/40'
+        : tone === 'amber'
+          ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40'
+          : tone === 'blue'
+            ? 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950/40'
+            : 'border-neutral-200 bg-neutral-100 text-neutral-600 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-300';
+
+  return (
+    <span
+      className={`inline-flex h-6 w-6 items-center justify-center rounded-md border ${toneClass}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function KanbanTooltip({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <span className="group/tip relative inline-flex">
+      {children}
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-max max-w-[220px] -translate-x-1/2 rounded-md border border-neutral-200 bg-neutral-900 px-2 py-1 text-center text-[10px] font-medium leading-snug text-white shadow-lg group-hover/tip:block dark:border-neutral-700"
+      >
+        {label}
+      </span>
+    </span>
+  );
+}
+
+function EscalationTitleIcon({ type }: { type: StaffActionEscalationType }) {
+  const tip = escalationTooltip(type);
+  if (type === 'escalated') {
+    return (
+      <KanbanTooltip label={tip}>
+        <IconFrame tone="red">
+          <IconEscalationMark className="text-sm font-bold text-red-600" />
+        </IconFrame>
+      </KanbanTooltip>
+    );
+  }
+  if (type === 'contact') {
+    return (
+      <KanbanTooltip label={tip}>
+        <IconFrame tone="amber">
+          <IconHeadset className="w-3.5 h-3.5" />
+        </IconFrame>
+      </KanbanTooltip>
+    );
+  }
+  if (type === 'status_check') {
+    return (
+      <KanbanTooltip label={tip}>
+        <IconFrame tone="blue">
+          <IconStatusClock />
+        </IconFrame>
+      </KanbanTooltip>
+    );
+  }
+  if (type === 'repetition') {
+    return (
+      <KanbanTooltip label={tip}>
+        <IconFrame tone="violet">
+          <IconRepeat className="w-3.5 h-3.5" />
+        </IconFrame>
+      </KanbanTooltip>
+    );
+  }
+  return null;
+}
+
 interface StaffKanbanCardProps {
   action: StaffAction;
   onSelect: (id: string) => void;
   requestIndexLabel?: string;
-  requestCount?: number;
+  requestIndex?: number;
+  requestTotal?: number;
+  sessionMessageCount?: number;
+  isDuplicate?: boolean;
 }
 
 export function StaffKanbanCard({
   action,
   onSelect,
   requestIndexLabel,
-  requestCount = 1,
+  requestIndex,
+  requestTotal,
+  sessionMessageCount = 0,
+  isDuplicate = false,
 }: StaffKanbanCardProps) {
-  const showAlert =
-    action.escalationType === 'escalated' || action.escalationType === 'contact';
+  const escalation = action.escalationType ?? 'normal';
+  const showEscalationIcon = escalation !== 'normal';
+  const messageCount = sessionMessageCount > 0 ? sessionMessageCount : 0;
+  const didDragRef = useRef(false);
+
+  const requestTooltip =
+    requestIndex && requestTotal
+      ? `Guest request ${requestIndex} of ${requestTotal} from this guest`
+      : requestTotal && requestTotal > 1
+        ? `${requestTotal} requests from this guest`
+        : 'Only request from this guest so far';
+
+  const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
+    didDragRef.current = true;
+    event.dataTransfer.setData('text/plain', action.id);
+    event.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragEnd = () => {
+    window.setTimeout(() => {
+      didDragRef.current = false;
+    }, 0);
+  };
+
+  const handleClick = () => {
+    if (didDragRef.current) return;
+    onSelect(action.id);
+  };
 
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(action.id)}
-      className="group relative w-full text-left rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-4 shadow-sm hover:shadow-md transition-shadow"
+    <div
+      role="button"
+      tabIndex={0}
+      draggable
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onClick={handleClick}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect(action.id);
+        }
+      }}
+      className="flex w-full cursor-pointer gap-2 rounded-lg border border-neutral-200 bg-white p-3 text-left shadow-sm transition-shadow hover:shadow-md dark:border-neutral-700 dark:bg-neutral-900"
     >
       <span
-        className={`absolute top-4 right-4 w-2 h-2 rounded-full ${priorityDotClass(action)}`}
+        className="mt-0.5 flex h-5 w-4 shrink-0 cursor-grab items-start justify-center text-neutral-400 active:cursor-grabbing"
         aria-hidden
-      />
+      >
+        <IconGrip className="h-3.5 w-3.5 pointer-events-none" />
+      </span>
 
-      <div className="flex items-start gap-2 pr-4">
-        <h3 className="text-sm font-semibold text-neutral-900 dark:text-white leading-snug line-clamp-2">
-          {action.summary}
-        </h3>
-        {showAlert && (
-          <span className="shrink-0 text-red-500" aria-label="Needs attention">
-            <IconAlert />
-          </span>
-        )}
-      </div>
-
-      <p className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400 line-clamp-2 leading-relaxed">
-        {action.sourceMessage}
-      </p>
-
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        <span
-          className={`inline-flex text-[11px] font-medium px-2 py-0.5 rounded-full ${actionTypeBadgeClass(action.actionType)}`}
-        >
-          {actionTypeLabel(action.actionType)}
-        </span>
-        {action.escalationType && action.escalationType !== 'normal' && (
-          <span
-            className={`inline-flex text-[11px] font-medium px-2 py-0.5 rounded-full ${escalationBadgeClass(action.escalationType)}`}
-          >
-            {escalationLabel(action.escalationType)}
-          </span>
-        )}
-        {action.roomNumber && (
-          <span className="inline-flex text-[11px] font-medium px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
-            Room {action.roomNumber}
-          </span>
-        )}
-      </div>
-
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-3 text-neutral-400">
-          <span className="inline-flex items-center gap-1 text-[11px]">
-            <IconCalendar className="w-3.5 h-3.5" />
-            {formatCardDate(action.createdAt)}
-          </span>
-          <span className="inline-flex items-center gap-1 text-[11px]">
-            <IconMessage className="w-3.5 h-3.5" />
-            {requestCount}
-          </span>
-          <span className="inline-flex items-center gap-1 text-[11px]">
-            <IconLink className="w-3.5 h-3.5" />
-          </span>
-          <span className="inline-flex items-center gap-1 text-[11px]">
-            <IconChecklist className="w-3.5 h-3.5" />
-            {requestIndexLabel ?? '—'}
-          </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start gap-2">
+          <h3 className="flex-1 text-sm font-semibold leading-snug text-neutral-900 line-clamp-2 dark:text-white">
+            {action.summary}
+          </h3>
+          {showEscalationIcon && (
+            <span className="flex shrink-0 items-center gap-1">
+              <EscalationTitleIcon type={escalation} />
+            </span>
+          )}
         </div>
-        <span
-          className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-200 dark:bg-neutral-700 text-[10px] font-semibold text-neutral-700 dark:text-neutral-200"
-          title={action.guestName ?? action.guestId}
-        >
-          {guestInitials(action)}
-        </span>
+
+        <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+          {action.sourceMessage}
+        </p>
+
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <span
+            className={`inline-flex text-[11px] font-medium px-2 py-0.5 rounded-full ${actionTypeBadgeClass(action.actionType)}`}
+          >
+            {actionTypeLabel(action.actionType)}
+          </span>
+          {escalation === 'contact' && (
+            <KanbanTooltip label={escalationTooltip('contact')}>
+              <span
+                className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${escalationBadgeClass('contact')}`}
+              >
+                <IconHeadset className="w-3 h-3 shrink-0" />
+                {escalationLabel('contact')}
+              </span>
+            </KanbanTooltip>
+          )}
+          {escalation === 'status_check' && (
+            <KanbanTooltip label={escalationTooltip('status_check')}>
+              <span
+                className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${escalationBadgeClass('status_check')}`}
+              >
+                <IconStatusClock className="w-3 h-3 shrink-0" />
+                {escalationLabel('status_check')}
+              </span>
+            </KanbanTooltip>
+          )}
+          {action.roomNumber && (
+            <span className="inline-flex text-[11px] font-medium px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+              Room {action.roomNumber}
+            </span>
+          )}
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <TaskRelativeTime iso={action.createdAt} />
+
+            <KanbanTooltip
+              label={
+                messageCount > 0
+                  ? `This guest has sent ${messageCount} message${messageCount === 1 ? '' : 's'} this session`
+                  : 'No guest messages loaded for this session yet'
+              }
+            >
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-neutral-600 dark:text-neutral-300">
+                <IconFrame>
+                  <IconMessage className="w-3.5 h-3.5" />
+                </IconFrame>
+                {messageCount > 0 ? messageCount : '—'}
+              </span>
+            </KanbanTooltip>
+
+            {isDuplicate && (
+              <KanbanTooltip label="Possible duplicate — check guest chat in case they sent the same request twice">
+                <span className="inline-flex items-center">
+                  <IconFrame tone="violet">
+                    <IconRepeat className="w-3.5 h-3.5" />
+                  </IconFrame>
+                </span>
+              </KanbanTooltip>
+            )}
+
+            <KanbanTooltip label={requestTooltip}>
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-neutral-700 dark:text-neutral-200">
+                <IconFrame tone={requestTotal && requestTotal > 1 ? 'violet' : 'neutral'}>
+                  <IconChecklist className="w-3.5 h-3.5" />
+                </IconFrame>
+                {requestIndexLabel ?? '—'}
+              </span>
+            </KanbanTooltip>
+          </div>
+
+          <KanbanTooltip label={action.guestName ?? action.guestId}>
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-neutral-200 text-[10px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+              {guestInitials(action)}
+            </span>
+          </KanbanTooltip>
+        </div>
       </div>
-    </button>
+    </div>
   );
 }

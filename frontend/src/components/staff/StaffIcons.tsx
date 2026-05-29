@@ -158,12 +158,80 @@ export function IconChecklist({ className = 'w-4 h-4' }: IconProps) {
   );
 }
 
-export function IconAlert({ className = 'w-3 h-3' }: IconProps) {
+export function IconX({ className = 'w-3.5 h-3.5' }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M18 6 6 18" strokeLinecap="round" />
+      <path d="m6 6 12 12" strokeLinecap="round" />
     </svg>
   );
+}
+
+export function IconRepeat({ className = 'w-3.5 h-3.5' }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M17 1l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 11V9a4 4 0 0 1 4-4h14" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7 23l-4-4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M21 13v2a4 4 0 0 1-4 4H3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconHeadset({ className = 'w-3.5 h-3.5' }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M3 11h1a7 7 0 0 1 14 0h1a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-1" />
+      <path d="M7 20v-2a2 2 0 0 1 2-2h1" />
+      <path d="M17 20v-2a2 2 0 0 0-2-2h-1" />
+    </svg>
+  );
+}
+
+export function IconFilter({ className = 'w-4 h-4' }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconSort({ className = 'w-4 h-4' }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M3 6h18M7 12h10m-4 6h4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconGrip({ className = 'w-4 h-4' }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="9" cy="6" r="1.25" />
+      <circle cx="15" cy="6" r="1.25" />
+      <circle cx="9" cy="12" r="1.25" />
+      <circle cx="15" cy="12" r="1.25" />
+      <circle cx="9" cy="18" r="1.25" />
+      <circle cx="15" cy="18" r="1.25" />
+    </svg>
+  );
+}
+
+export function IconStatusClock({ className = 'w-3.5 h-3.5' }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconEscalationMark({ className = 'text-sm font-bold leading-none' }: IconProps) {
+  return <span className={className}>!</span>;
+}
+
+export function IconAlert({ className = 'w-3 h-3' }: IconProps) {
+  return <IconEscalationMark className={className} />;
 }
 
 export function IconMageLogo({ className = 'w-5 h-5' }: IconProps) {

@@ -22,7 +22,9 @@ import {
   TaskFilters,
   TaskSortKey,
 } from './staffTaskQuery';
-import { ActionType } from '@/types';
+import { ActionType, StaffActionStatus } from '@/types';
+import { useStaffInboxThreads, useUpdateStaffAction } from '@/hooks/useStaffApi';
+import { countDirectGuestChatPending } from './staffNotifications';
 import {
   StaffContentShell,
   StaffEmptyState,
@@ -157,10 +159,20 @@ export function StaffWorkspace({
   );
   const columns = useMemo(() => groupByStatus(sortedActions), [sortedActions]);
 
-  const guestUnreadCount = useMemo(
-    () => actions.filter((action) => action.status === 'pending').length,
-    [actions]
-  );
+  const guestUnreadCount = useMemo(() => countDirectGuestChatPending(actions), [actions]);
+  const { data: inboxThreads = [] } = useStaffInboxThreads(staffKey);
+  const guestMessageCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const thread of inboxThreads) {
+      counts[thread.guestId] = thread.messageCount;
+    }
+    return counts;
+  }, [inboxThreads]);
+  const updateMutation = useUpdateStaffAction();
+
+  const handleMoveAction = async (actionId: string, status: StaffActionStatus) => {
+    await updateMutation.mutateAsync({ actionId, status, staffKey });
+  };
 
   return (
     <StaffPageShell>
@@ -205,10 +217,12 @@ export function StaffWorkspace({
             onChangeSort={(nextSort) => persistTaskView(filters, nextSort)}
             onResetView={resetTaskView}
             onOpenCalendar={() => setActiveNav('schedule')}
+            onMoveAction={(actionId, status) => void handleMoveAction(actionId, status)}
+            guestMessageCounts={guestMessageCounts}
           />
         )}
 
-        {activeNav === 'guest-chat' && <StaffGuestInbox actions={actions} staffKey={staffKey} />}
+        {activeNav === 'guest-chat' && <StaffGuestInbox staffKey={staffKey} />}
         {activeNav === 'schedule' && <StaffScheduleView staffKey={staffKey} />}
         {activeNav === 'review' && <StaffReviewDashboard actions={actions} />}
         {activeNav === 'help-desk' && <StaffHelpDesk />}
