@@ -1,13 +1,17 @@
 import { Message, FaqItem } from '@/types';
+import { parseApiTimestamp } from '@/lib/parseTimestamp';
 
 /** Map API message (snake_case or camelCase) to client Message. */
 export function mapApiMessage(raw: Record<string, unknown>): Message {
   const faqRaw = (raw.faq_items ?? raw.faqItems) as Array<Record<string, string>> | undefined;
+  const tsRaw = raw.timestamp ?? Date.now();
   return {
     id: String(raw.id),
     role: raw.role as Message['role'],
     content: String(raw.content ?? ''),
-    timestamp: new Date(String(raw.timestamp ?? Date.now())),
+    timestamp: parseApiTimestamp(
+      tsRaw instanceof Date ? tsRaw : String(tsRaw)
+    ),
     requireContactConfirmation:
       raw.require_contact_confirmation != null
         ? Boolean(raw.require_contact_confirmation)

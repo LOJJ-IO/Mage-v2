@@ -1,4 +1,7 @@
+import { parseApiTimestamp } from '@/lib/parseTimestamp';
 import { ActionType, StaffActionEscalationType } from '@/types';
+
+export const parseActionTimestamp = parseApiTimestamp;
 
 export function actionTypeLabel(type: ActionType): string {
   if (type === 'HANDOFF') {
@@ -65,18 +68,8 @@ export function escalationBadgeClass(type: StaffActionEscalationType): string {
   }
 }
 
-/** Parse staff action timestamps (UTC from API, often without a Z suffix). */
-export function parseActionTimestamp(iso: string): Date {
-  const trimmed = iso.trim();
-  if (!trimmed) return new Date(Number.NaN);
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(trimmed) && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(trimmed)) {
-    return new Date(`${trimmed}Z`);
-  }
-  return new Date(trimmed);
-}
-
 export function formatRelativeTime(iso: string, now = Date.now()): string {
-  const then = parseActionTimestamp(iso).getTime();
+  const then = parseApiTimestamp(iso).getTime();
   if (Number.isNaN(then)) return 'Unknown time';
   const diff = Math.max(0, now - then);
   const mins = Math.floor(diff / 60000);
@@ -86,7 +79,7 @@ export function formatRelativeTime(iso: string, now = Date.now()): string {
   if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
   const days = Math.floor(hrs / 24);
   if (days < 14) return `${days} day${days === 1 ? '' : 's'} ago`;
-  return parseActionTimestamp(iso).toLocaleDateString(undefined, {
+  return parseApiTimestamp(iso).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -94,7 +87,7 @@ export function formatRelativeTime(iso: string, now = Date.now()): string {
 }
 
 export function formatPreciseTimestamp(iso: string): string {
-  return parseActionTimestamp(iso).toLocaleString(undefined, {
+  return parseApiTimestamp(iso).toLocaleString(undefined, {
     weekday: 'short',
     month: 'short',
     day: 'numeric',

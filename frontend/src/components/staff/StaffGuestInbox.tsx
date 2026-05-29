@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   useSendStaffMessage,
   useStaffGuestConversation,
   useStaffInboxThreads,
 } from '@/hooks/useStaffApi';
+import { formatMessageTime, parseApiTimestamp } from '@/lib/parseTimestamp';
 import { StaffCard } from './StaffLayoutPrimitives';
 import { staffChatBubbleClasses, staffChatMetaClasses } from './staffChatBubble';
 import { IconHeadset } from './StaffIcons';
@@ -15,7 +16,7 @@ interface StaffGuestInboxProps {
 }
 
 function formatRelative(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
+  const diff = Date.now() - parseApiTimestamp(iso).getTime();
   const mins = Math.max(0, Math.floor(diff / 60000));
   if (mins < 1) return 'now';
   if (mins < 60) return `${mins}m`;
@@ -33,25 +34,34 @@ function initials(name: string): string {
 export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
   const [reply, setReply] = useState('');
+  const userPickedGuestRef = useRef(false);
 
   const { data: threads = [], isLoading: threadsLoading, error: threadsError } =
     useStaffInboxThreads(staffKey);
 
   const selectedThread =
-    threads.find((thread) => thread.guestId === selectedGuestId) ?? threads[0] ?? null;
+    threads.find((thread) => thread.guestId === selectedGuestId) ?? null;
 
   useEffect(() => {
+    if (userPickedGuestRef.current) return;
     if (!selectedGuestId && threads[0]?.guestId) {
       setSelectedGuestId(threads[0].guestId);
     }
   }, [threads, selectedGuestId]);
 
   const guestId = selectedThread?.guestId ?? null;
-  const { data: conversation, isLoading: conversationLoading } = useStaffGuestConversation(
-    staffKey,
-    guestId
-  );
+  const {
+    data: conversation,
+    isLoading: conversationLoading,
+    isFetching: conversationFetching,
+    isError: conversationError,
+    error: conversationErrorDetail,
+  } = useStaffGuestConversation(staffKey, guestId);
   const sendMutation = useSendStaffMessage();
+
+  const messages = conversation?.messages ?? [];
+  const showConversationLoading =
+    !!guestId && conversationLoading && messages.length === 0;
 
   const handleSend = async () => {
     const text = reply.trim();
@@ -92,7 +102,10 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
             <button
               key={thread.guestId}
               type="button"
-              onClick={() => setSelectedGuestId(thread.guestId)}
+              onClick={() => {
+                userPickedGuestRef.current = true;
+                setSelectedGuestId(thread.guestId);
+              }}
               className={`w-full text-left rounded-lg px-3 py-2 ${
                 selectedThread?.guestId === thread.guestId
                   ? 'bg-neutral-100 dark:bg-neutral-800'
@@ -135,6 +148,9 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
               <span className="text-xs text-neutral-500">
                 {selectedThread.roomNumber ? `Room ${selectedThread.roomNumber}` : 'No room'}
               </span>
+              {conversationFetching && messages.length > 0 && (
+                <span className="text-[10px] text-neutral-400">Updating…</span>
+              )}
             </div>
           ) : (
             <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
@@ -143,19 +159,25 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-neutral-50/70 dark:bg-neutral-950/40">
+        <div className="relative flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-neutral-50/70 dark:bg-neutral-950/40">
           {!selectedThread ? (
             <p className="text-sm text-neutral-500">
               All guest chats with Mage appear here, even when no task was logged.
             </p>
-          ) : conversationLoading ? (
+          ) : conversationError ? (
+            <p className="text-sm text-red-600 dark:text-red-400">
+              {conversationErrorDetail instanceof Error
+                ? conversationErrorDetail.message
+                : 'Could not load conversation.'}
+            </p>
+          ) : showConversationLoading ? (
             <p className="text-sm text-neutral-500">Loading conversation…</p>
-          ) : !conversation?.messages.length ? (
+          ) : messages.length === 0 ? (
             <p className="text-sm text-neutral-500">
               No messages in this thread yet. The guest may have only triggered a staff task.
             </p>
           ) : (
-            conversation.messages.map((message) => {
+            messages.map((message) => {
               const guestSide = message.role === 'user';
               const bubbleClass = staffChatBubbleClasses(message.role);
 
@@ -175,10 +197,7 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
                     )}
                     <p className="whitespace-pre-wrap break-words">{message.content}</p>
                     <p className={`mt-1 text-[11px] ${staffChatMetaClasses(message.role)}`}>
-                      {new Date(message.timestamp).toLocaleTimeString([], {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      })}
+                      {formatMessageTime(message.timestamp)}
                     </p>
                   </div>
                 </div>

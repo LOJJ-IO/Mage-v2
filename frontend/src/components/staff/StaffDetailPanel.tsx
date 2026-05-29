@@ -13,6 +13,7 @@ import {
   useStaffActionConversation,
   useSendStaffMessage,
 } from '@/hooks/useStaffApi';
+import { formatMessageTime } from '@/lib/parseTimestamp';
 import { staffChatBubbleClasses, staffChatMetaClasses } from './staffChatBubble';
 
 interface StaffDetailPanelProps {
@@ -153,10 +154,7 @@ export function StaffDetailPanel({
                       )}
                       <p className="whitespace-pre-wrap break-words">{msg.content}</p>
                       <p className={`mt-1 text-[11px] ${staffChatMetaClasses(msg.role)}`}>
-                        {new Date(msg.timestamp).toLocaleTimeString([], {
-                          hour: 'numeric',
-                          minute: '2-digit',
-                        })}
+                        {formatMessageTime(msg.timestamp)}
                       </p>
                     </div>
                   </div>

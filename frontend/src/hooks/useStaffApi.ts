@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
-import { StaffActionStatus } from '@/types';
+import { StaffActionStatus, StaffGuestConversation } from '@/types';
 import { getStoredStaffKey } from '@/lib/stateMachineStaff';
 
 export const staffQueryKeys = {
@@ -71,7 +71,7 @@ export function useStaffInboxThreads(staffKey: string | null) {
 }
 
 export function useStaffGuestConversation(staffKey: string | null, guestId: string | null) {
-  return useQuery({
+  return useQuery<StaffGuestConversation>({
     queryKey: staffQueryKeys.guestConversation(staffKey || '', guestId || ''),
     queryFn: async () => {
       const response = await apiClient.getStaffGuestConversation(staffKey!, guestId!);
@@ -80,6 +80,9 @@ export function useStaffGuestConversation(staffKey: string | null, guestId: stri
     },
     enabled: !!staffKey && !!guestId,
     refetchInterval: 3000,
+    retry: 2,
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
   });
 }
 
@@ -93,6 +96,8 @@ export function useStaffActionConversation(staffKey: string | null, actionId: st
     },
     enabled: !!staffKey && !!actionId,
     refetchInterval: 3000,
+    retry: 2,
+    staleTime: 0,
   });
 }
 
