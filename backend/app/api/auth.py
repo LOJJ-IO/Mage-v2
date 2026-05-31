@@ -58,13 +58,14 @@ async def verify_magic_link(
         samesite="lax",
         secure=not settings.debug,
         max_age=settings.session_ttl_hours * 3600,
+        path="/",
     )
     return resp
 
 
 @router.post("/logout")
 async def logout(response: Response):
-    response.delete_cookie(SESSION_COOKIE)
+    response.delete_cookie(SESSION_COOKIE, path="/")
     return {"ok": True}
 
 
