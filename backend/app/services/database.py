@@ -10,7 +10,10 @@ from app.models.schemas import (
     StaffActionStatus,
     StaffActionEscalationType,
     ActionType,
+    Property,
 )
+from app.services.property_db_mock import PropertyStoreMixin
+from app.services.property_db_supabase import PropertyStoreSupabase
 from app.core.config import get_settings
 from functools import lru_cache
 import uuid
@@ -27,10 +30,102 @@ class DatabaseProtocol(Protocol):
         """Get guest by ID."""
         ...
     
-    def get_guest_by_booking(self, booking_id: str) -> Optional[GuestProfile]:
+    def get_guest_by_booking(self, booking_id: str, property_id: Optional[str] = None) -> Optional[GuestProfile]:
         """Get guest by booking ID."""
         ...
-    
+
+    def list_guests(self, property_id: Optional[str] = None) -> List[GuestProfile]:
+        """List guests, optionally filtered by property."""
+        ...
+
+    def upsert_guest(self, guest: GuestProfile) -> GuestProfile:
+        """Create or update guest (property-scoped)."""
+        ...
+
+    # Property operations
+    def get_property(self, property_id: str) -> Optional[Property]:
+        ...
+
+    def set_property_published_snapshot(self, property_id: str, snapshot_id: str) -> None:
+        ...
+
+    def update_property_knowledge_mode(self, property_id: str, mode: str) -> None:
+        ...
+
+    # Auth tokens & sessions
+    def create_auth_token(
+        self,
+        token_hash: str,
+        property_id: str,
+        booking_id: str,
+        expires_at: datetime,
+    ) -> None:
+        ...
+
+    def consume_auth_token(self, token_hash: str) -> Optional[dict]:
+        ...
+
+    def register_guest_session(self, guest_id: str, property_id: str) -> int:
+        ...
+
+    def is_guest_session_revoked(
+        self, guest_id: str, property_id: str, session_version: int
+    ) -> bool:
+        ...
+
+    def revoke_guest_sessions(self, guest_id: str, property_id: str) -> int:
+        ...
+
+    # Knowledge facts & snapshots
+    def list_property_facts(self, property_id: str) -> List[dict]:
+        ...
+
+    def upsert_property_fact(
+        self,
+        property_id: str,
+        slot_key: str,
+        value: object,
+        status: str = "filled",
+        *,
+        confidence: Optional[float] = None,
+        source_url: Optional[str] = None,
+        source_snippet: Optional[str] = None,
+        updated_by: Optional[str] = None,
+    ) -> dict:
+        ...
+
+    def create_knowledge_snapshot(
+        self,
+        snapshot_id: str,
+        property_id: str,
+        schema_version: str,
+        markdown: str,
+        tree_json: list,
+        faq_json: list,
+        facts_json: dict,
+        published_by: str,
+    ) -> dict:
+        ...
+
+    def get_knowledge_snapshot(self, snapshot_id: str) -> Optional[dict]:
+        ...
+
+    # Crawl jobs
+    def create_crawl_job(self, property_id: str, seed_url: str) -> dict:
+        ...
+
+    def get_crawl_job(self, job_id: str) -> Optional[dict]:
+        ...
+
+    def update_crawl_job(self, job_id: str, **fields) -> None:
+        ...
+
+    def create_crawl_page(self, job_id: str, url: str) -> str:
+        ...
+
+    def update_crawl_page(self, page_id: str, **fields) -> None:
+        ...
+
     def create_guest(self, guest: GuestProfile) -> GuestProfile:
         """Create a new guest."""
         ...
@@ -186,10 +281,12 @@ def _staff_action_from_row(row: dict) -> StaffAction:
     return StaffAction(**{k: v for k, v in data.items() if k in StaffAction.model_fields})
 
 
-class MockDatabase:
+class MockDatabase(PropertyStoreMixin):
     """Mock database for development/testing."""
     
     def __init__(self):
+        settings = get_settings()
+        pid = settings.property_id or "grand-horizon"
         # Initialize with mock data
         self.guests: Dict[str, GuestProfile] = {
             "guest-001": GuestProfile(
@@ -201,7 +298,8 @@ class MockDatabase:
                 booking_id="BK-2026-0412",
                 email="alex.johnson@email.com",
                 phone="+1 555-0123",
-                membership_tier="Platinum"
+                membership_tier="Platinum",
+                property_id=pid,
             ),
             "guest-002": GuestProfile(
                 id="guest-002",
@@ -212,7 +310,8 @@ class MockDatabase:
                 booking_id="BK-2026-0305",
                 email="sarah.w@email.com",
                 phone="+1 555-0456",
-                membership_tier="Gold"
+                membership_tier="Gold",
+                property_id=pid,
             )
         }
         
@@ -225,18 +324,12 @@ class MockDatabase:
         
         # Conversation histories per guest
         self.conversations: Dict[str, List[Dict[str, str]]] = {}
+        self._init_property_stores()
     
     # Guest operations
     def get_guest(self, guest_id: str) -> Optional[GuestProfile]:
         """Get guest by ID."""
         return self.guests.get(guest_id)
-    
-    def get_guest_by_booking(self, booking_id: str) -> Optional[GuestProfile]:
-        """Get guest by booking ID."""
-        for guest in self.guests.values():
-            if guest.booking_id == booking_id:
-                return guest
-        return None
     
     def create_guest(self, guest: GuestProfile) -> GuestProfile:
         """Create a new guest."""
@@ -516,7 +609,7 @@ class MockDatabase:
         return action
 
 
-class SupabaseDatabase:
+class SupabaseDatabase(PropertyStoreSupabase):
     """Supabase database implementation."""
     
     def __init__(self):
@@ -544,17 +637,6 @@ class SupabaseDatabase:
             return None
         except Exception as e:
             logger.error(f"Error getting guest {guest_id}: {e}")
-            return None
-    
-    def get_guest_by_booking(self, booking_id: str) -> Optional[GuestProfile]:
-        """Get guest by booking ID."""
-        try:
-            response = self.client.table("guests").select("*").eq("booking_id", booking_id).execute()
-            if response.data and len(response.data) > 0:
-                return GuestProfile(**response.data[0])
-            return None
-        except Exception as e:
-            logger.error(f"Error getting guest by booking {booking_id}: {e}")
             return None
     
     def create_guest(self, guest: GuestProfile) -> GuestProfile:

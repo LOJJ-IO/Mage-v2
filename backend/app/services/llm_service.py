@@ -487,8 +487,19 @@ _NO_API_KEY_FALLBACK_VARIANTS = [
 _hotel_knowledge_cache: Dict[str, str] = {}
 
 
-def _load_hotel_knowledge() -> str:
-    """Load hotel knowledge from the file at settings.hotel_knowledge_path. Returns '' if path empty or file missing."""
+def _load_hotel_knowledge(property_id: Optional[str] = None) -> str:
+    """Load hotel knowledge — published snapshot first, then file fallback."""
+    from app.knowledge.service import get_runtime_knowledge
+
+    settings = get_settings()
+    pid = property_id or settings.property_id
+    if pid:
+        snapshot_md = get_runtime_knowledge(pid)
+        if snapshot_md:
+            cache_key = f"snapshot:{pid}"
+            _hotel_knowledge_cache[cache_key] = snapshot_md
+            return snapshot_md
+
     path = (settings.hotel_knowledge_path or "").strip()
     if not path:
         return ""
@@ -503,6 +514,19 @@ def _load_hotel_knowledge() -> str:
         return content
     except Exception:
         return ""
+
+
+def _resolve_property_id(
+    guest_id: Optional[str], property_id: Optional[str] = None
+) -> Optional[str]:
+    if property_id:
+        return property_id
+    settings = get_settings()
+    if guest_id:
+        guest = get_database().get_guest(guest_id)
+        if guest and getattr(guest, "property_id", None):
+            return guest.property_id
+    return settings.property_id or None
 
 
 # OpenRouter free/auto routers often pick slow "thinking" models that exhaust max_tokens.
@@ -727,7 +751,7 @@ class LLMService:
         guest_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Build message array for the small model (relevance + answer/handoff)."""
-        hotel_context = _load_hotel_knowledge()
+        hotel_context = _load_hotel_knowledge(_resolve_property_id(guest_id))
         system_content = _get_small_model_system(hotel_context) + _format_guest_context(guest_id)
         messages = [{"role": "system", "content": system_content}]
         if conversation_history:
@@ -1028,12 +1052,14 @@ class LLMService:
         user_message: str,
         guest_id: Optional[str],
         conversation_history: Optional[List[Dict[str, str]]] = None,
+        property_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         message_lower = user_message.lower().strip()
         words = faq_words(message_lower)
+        pid = _resolve_property_id(guest_id, property_id)
         matched = filter_faqs_for_display(
             message_lower,
-            collect_faq_matches(message_lower, words),
+            collect_faq_matches(message_lower, words, property_id=pid),
             conversation_history,
         )
         if not matched:
@@ -1122,7 +1148,7 @@ class LLMService:
             f"You are Mage, the hotel assistant for {hotel_name}. "
             "Write warm, brief, mobile-friendly replies (2–3 sentences max)."
         )
-        knowledge = _load_hotel_knowledge()
+        knowledge = _load_hotel_knowledge(_resolve_property_id(guest_id))
         if knowledge:
             base += f"\n\nHotel knowledge:\n{knowledge}"
         base += (
@@ -1809,8 +1835,10 @@ class LLMService:
         guest_id: Optional[str],
         *,
         task_continuation: bool = False,
+        property_id: Optional[str] = None,
     ) -> Tuple[List[Dict[str, Any]], bool, Optional[str]]:
         history = trim_history(conversation_history)
+        pid = _resolve_property_id(guest_id, property_id)
         simple = self._get_simple_response(user_message, history)
         if simple is not None:
             return (
@@ -1824,16 +1852,20 @@ class LLMService:
         message_lower = user_message.lower().strip()
         words = faq_words(message_lower)
         task_like = is_task_request(message_lower, words) or bool(images) or is_in_room_issue(user_message)
-        faq_matches = [] if (images or task_continuation) else collect_faq_matches(message_lower, words)
+        faq_matches = (
+            []
+            if (images or task_continuation)
+            else collect_faq_matches(message_lower, words, property_id=pid)
+        )
         faq_matches = filter_faqs_for_display(message_lower, faq_matches, history)
 
         if faq_matches and task_like and should_show_faq_with_task(message_lower, words, faq_matches):
-            faq_seg = self._build_faq_segment(user_message, guest_id, history)
+            faq_seg = self._build_faq_segment(user_message, guest_id, history, property_id=pid)
             if faq_seg:
                 return (_finalize_segments([faq_seg]), True, user_message)
 
         if faq_matches and not task_like:
-            faq_seg = self._build_faq_segment(user_message, guest_id, history)
+            faq_seg = self._build_faq_segment(user_message, guest_id, history, property_id=pid)
             if faq_seg:
                 return (_finalize_segments([faq_seg]), False, None)
         
@@ -1938,7 +1970,9 @@ class LLMService:
             return [{"content": "I'm currently experiencing high demand. Please try again in a moment.", "require_contact_confirmation": False}]
         if context == ConversationContext.FRONT_DESK_AGENT:
             return [{"content": "Your message has been sent to the front desk. They will respond shortly.", "require_contact_confirmation": False}]
-        segments, _, _ = await self._route_bot_message(user_message, conversation_history, images, guest_id)
+        segments, _, _ = await self._route_bot_message(
+            user_message, conversation_history, images, guest_id, property_id=property_id
+        )
         return segments
 
     async def route_message(
@@ -1949,6 +1983,7 @@ class LLMService:
         guest_id: Optional[str] = None,
         *,
         task_continuation: bool = False,
+        property_id: Optional[str] = None,
     ) -> Tuple[List[Dict[str, Any]], bool, Optional[str]]:
         """Route message; returns (segments, continue_task, task_message)."""
         return await self._route_bot_message(
@@ -1957,6 +1992,7 @@ class LLMService:
             images,
             guest_id,
             task_continuation=task_continuation,
+            property_id=property_id,
         )
     
     async def generate_stream(
@@ -1966,6 +2002,7 @@ class LLMService:
         conversation_history: Optional[List[Dict[str, str]]] = None,
         images: Optional[List[str]] = None,
         guest_id: Optional[str] = None,
+        property_id: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """Generate a streaming response: Python intent first, then small/large model."""
         
@@ -1979,7 +2016,9 @@ class LLMService:
                 yield word + " "
             return
         
-        segments, _, _ = await self._route_bot_message(user_message, conversation_history, images, guest_id)
+        segments, _, _ = await self._route_bot_message(
+            user_message, conversation_history, images, guest_id, property_id=property_id
+        )
         parts: List[str] = []
         for seg in segments:
             if seg.get("kind") == MessageKind.FAQ.value:

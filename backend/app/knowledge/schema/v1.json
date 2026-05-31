@@ -1,0 +1,400 @@
+{
+  "version": "v1",
+  "description": "Canonical hotel knowledge slots — shared across all properties",
+  "tiers": {
+    "A": "Must-have for guest chat and staff tree",
+    "B": "Important for limited-service and OTA parity"
+  },
+  "slots": [
+    {
+      "key": "property.name",
+      "domain": "property",
+      "tier": "A",
+      "label": "Property name",
+      "value_type": "string",
+      "markdown_section": "Overview"
+    },
+    {
+      "key": "property.location",
+      "domain": "property",
+      "tier": "A",
+      "label": "Location",
+      "value_type": "string",
+      "markdown_section": "Overview"
+    },
+    {
+      "key": "property.check_in.time",
+      "domain": "property",
+      "tier": "A",
+      "label": "Check-in time",
+      "value_type": "string",
+      "aliases": ["check in", "check-in", "arrival"],
+      "faq_id": "checkin",
+      "markdown_section": "Check-In & Check-Out"
+    },
+    {
+      "key": "property.check_out.time",
+      "domain": "property",
+      "tier": "A",
+      "label": "Checkout time",
+      "value_type": "string",
+      "aliases": ["checkout", "check out", "departure", "leaving"],
+      "faq_id": "checkout",
+      "markdown_section": "Check-In & Check-Out"
+    },
+    {
+      "key": "property.check_out.late_policy",
+      "domain": "property",
+      "tier": "B",
+      "label": "Late checkout policy",
+      "value_type": "string",
+      "markdown_section": "Check-In & Check-Out"
+    },
+    {
+      "key": "connectivity.wifi.network_name",
+      "domain": "property",
+      "tier": "A",
+      "label": "Wi-Fi network name",
+      "value_type": "string",
+      "aliases": ["wifi", "wi-fi", "internet", "password"],
+      "faq_id": "wifi",
+      "markdown_section": "WiFi"
+    },
+    {
+      "key": "connectivity.wifi.password",
+      "domain": "property",
+      "tier": "A",
+      "label": "Wi-Fi password",
+      "value_type": "string",
+      "aliases": ["wifi password", "internet password"],
+      "faq_id": "wifi",
+      "markdown_section": "WiFi"
+    },
+    {
+      "key": "dining.restaurant.hours",
+      "domain": "dining",
+      "tier": "A",
+      "label": "Restaurant hours",
+      "value_type": "string",
+      "aliases": ["breakfast", "restaurant", "food", "dining", "eat"],
+      "faq_id": "dining",
+      "markdown_section": "Dining"
+    },
+    {
+      "key": "dining.breakfast.hours",
+      "domain": "dining",
+      "tier": "A",
+      "label": "Breakfast hours",
+      "value_type": "string",
+      "aliases": ["breakfast"],
+      "faq_id": "dining",
+      "markdown_section": "Dining"
+    },
+    {
+      "key": "dining.bar.hours",
+      "domain": "dining",
+      "tier": "B",
+      "label": "Bar & lounge hours",
+      "value_type": "string",
+      "aliases": ["bar", "lounge", "cocktail", "wine", "beer"],
+      "faq_id": "bar",
+      "markdown_section": "Dining"
+    },
+    {
+      "key": "dining.room_service.available",
+      "domain": "dining",
+      "tier": "A",
+      "label": "Room service availability",
+      "value_type": "boolean",
+      "aliases": ["room service", "order food"],
+      "faq_id": "room_service_info",
+      "markdown_section": "Dining"
+    },
+    {
+      "key": "dining.room_service.hours",
+      "domain": "dining",
+      "tier": "B",
+      "label": "Room service hours",
+      "value_type": "string",
+      "faq_id": "room_service_info",
+      "markdown_section": "Dining"
+    },
+    {
+      "key": "amenities.pool.hours",
+      "domain": "amenities",
+      "tier": "A",
+      "label": "Pool hours",
+      "value_type": "string",
+      "aliases": ["pool", "swim", "swimming"],
+      "faq_id": "pool",
+      "markdown_section": "Amenities"
+    },
+    {
+      "key": "amenities.pool.location",
+      "domain": "amenities",
+      "tier": "A",
+      "label": "Pool location",
+      "value_type": "string",
+      "aliases": ["pool", "where is the pool"],
+      "faq_id": "pool",
+      "markdown_section": "Amenities"
+    },
+    {
+      "key": "amenities.fitness.hours",
+      "domain": "amenities",
+      "tier": "A",
+      "label": "Fitness center hours",
+      "value_type": "string",
+      "aliases": ["gym", "fitness", "workout"],
+      "faq_id": "pool",
+      "markdown_section": "Amenities"
+    },
+    {
+      "key": "amenities.fitness.location",
+      "domain": "amenities",
+      "tier": "B",
+      "label": "Fitness center location",
+      "value_type": "string",
+      "aliases": ["gym", "fitness"],
+      "faq_id": "pool",
+      "markdown_section": "Amenities"
+    },
+    {
+      "key": "amenities.spa.hours",
+      "domain": "amenities",
+      "tier": "B",
+      "label": "Spa hours",
+      "value_type": "string",
+      "aliases": ["spa"],
+      "markdown_section": "Amenities"
+    },
+    {
+      "key": "parking.self.available",
+      "domain": "property",
+      "tier": "A",
+      "label": "Self-parking available",
+      "value_type": "boolean",
+      "aliases": ["parking", "park", "car"],
+      "faq_id": "parking",
+      "markdown_section": "Parking"
+    },
+    {
+      "key": "parking.self.location",
+      "domain": "property",
+      "tier": "A",
+      "label": "Self-parking location",
+      "value_type": "string",
+      "aliases": ["parking", "garage"],
+      "faq_id": "parking",
+      "markdown_section": "Parking"
+    },
+    {
+      "key": "parking.valet.available",
+      "domain": "property",
+      "tier": "B",
+      "label": "Valet parking",
+      "value_type": "boolean",
+      "aliases": ["valet"],
+      "faq_id": "parking",
+      "markdown_section": "Parking"
+    },
+    {
+      "key": "fees_payments.billing.policy",
+      "domain": "property",
+      "tier": "A",
+      "label": "Billing policy",
+      "value_type": "string",
+      "aliases": ["bill", "invoice", "charge", "payment"],
+      "faq_id": "billing",
+      "markdown_section": "Policies"
+    },
+    {
+      "key": "policies.pets.allowed",
+      "domain": "property",
+      "tier": "A",
+      "label": "Pet policy",
+      "value_type": "string",
+      "aliases": ["pet", "pets", "dog", "cat"],
+      "faq_id": "pets",
+      "markdown_section": "Policies"
+    },
+    {
+      "key": "services.laundry.available",
+      "domain": "property",
+      "tier": "B",
+      "label": "Laundry service",
+      "value_type": "string",
+      "aliases": ["laundry", "dry cleaning"],
+      "faq_id": "laundry",
+      "markdown_section": "Services"
+    },
+    {
+      "key": "services.lost_found.process",
+      "domain": "property",
+      "tier": "B",
+      "label": "Lost & found",
+      "value_type": "string",
+      "aliases": ["lost", "missing", "forgot"],
+      "faq_id": "lost_found",
+      "markdown_section": "Services"
+    },
+    {
+      "key": "room.supplies.towels.policy",
+      "domain": "room",
+      "tier": "A",
+      "label": "Extra towels policy",
+      "value_type": "string",
+      "aliases": ["towel", "towels", "linens"],
+      "faq_id": "towels_info",
+      "markdown_section": "Room"
+    },
+    {
+      "key": "room.supplies.iron_board.availability",
+      "domain": "room",
+      "tier": "A",
+      "label": "Iron & ironing board",
+      "value_type": "string",
+      "aliases": ["iron", "ironing", "ironing board"],
+      "faq_id": "iron",
+      "markdown_section": "Room"
+    },
+    {
+      "key": "room.supplies.hair_dryer.availability",
+      "domain": "room",
+      "tier": "B",
+      "label": "Hair dryer",
+      "value_type": "string",
+      "aliases": ["hair dryer", "hairdryer", "blow dryer"],
+      "faq_id": "hair_dryer",
+      "markdown_section": "Room"
+    },
+    {
+      "key": "room.climate.thermostat",
+      "domain": "room",
+      "tier": "B",
+      "label": "Room temperature / thermostat",
+      "value_type": "string",
+      "aliases": ["cold", "hot", "temperature", "thermostat", "air conditioning"],
+      "faq_id": "climate",
+      "markdown_section": "Room"
+    },
+    {
+      "key": "room.safe.instructions",
+      "domain": "room",
+      "tier": "B",
+      "label": "In-room safe",
+      "value_type": "string",
+      "aliases": ["safe", "room safe"],
+      "faq_id": "safe",
+      "markdown_section": "Room"
+    },
+    {
+      "key": "room.minibar.policy",
+      "domain": "room",
+      "tier": "B",
+      "label": "Minibar policy",
+      "value_type": "string",
+      "aliases": ["minibar", "mini bar"],
+      "faq_id": "minibar",
+      "markdown_section": "Room"
+    },
+    {
+      "key": "services.housekeeping.policy",
+      "domain": "property",
+      "tier": "A",
+      "label": "Housekeeping",
+      "value_type": "string",
+      "aliases": ["housekeeping", "housekeeper", "clean"],
+      "faq_id": "housekeeping_info",
+      "markdown_section": "Services"
+    },
+    {
+      "key": "property.elevators.location",
+      "domain": "property",
+      "tier": "B",
+      "label": "Elevators",
+      "value_type": "string",
+      "aliases": ["elevator", "lift"],
+      "faq_id": "elevator",
+      "markdown_section": "Property"
+    },
+    {
+      "key": "transport.airport_shuttle",
+      "domain": "property",
+      "tier": "B",
+      "label": "Airport & taxis",
+      "value_type": "string",
+      "aliases": ["airport", "shuttle", "taxi", "uber", "lyft"],
+      "faq_id": "transport",
+      "markdown_section": "Transport"
+    },
+    {
+      "key": "services.concierge",
+      "domain": "property",
+      "tier": "B",
+      "label": "Concierge",
+      "value_type": "string",
+      "aliases": ["concierge", "directions", "nearby"],
+      "faq_id": "concierge",
+      "markdown_section": "Services"
+    },
+    {
+      "key": "services.wake_up_call",
+      "domain": "property",
+      "tier": "B",
+      "label": "Wake-up call",
+      "value_type": "string",
+      "aliases": ["wake up", "wakeup"],
+      "faq_id": "wake_up",
+      "markdown_section": "Services"
+    },
+    {
+      "key": "services.upgrades.policy",
+      "domain": "property",
+      "tier": "B",
+      "label": "Room upgrades",
+      "value_type": "string",
+      "aliases": ["upgrade", "upgrades"],
+      "faq_id": "upgrade",
+      "markdown_section": "Services"
+    },
+    {
+      "key": "dining.coffee.availability",
+      "domain": "dining",
+      "tier": "B",
+      "label": "Coffee & tea",
+      "value_type": "string",
+      "aliases": ["coffee", "tea"],
+      "faq_id": "coffee",
+      "markdown_section": "Dining"
+    },
+    {
+      "key": "property.amenities.summary",
+      "domain": "property",
+      "tier": "A",
+      "label": "Hotel amenities overview",
+      "value_type": "string",
+      "aliases": ["amenities", "amenity"],
+      "faq_id": "amenities",
+      "markdown_section": "Amenities"
+    },
+    {
+      "key": "property.noise.policy",
+      "domain": "property",
+      "tier": "B",
+      "label": "Noise concerns",
+      "value_type": "string",
+      "aliases": ["noise", "loud", "noisy"],
+      "faq_id": "noise",
+      "markdown_section": "Policies"
+    },
+    {
+      "key": "property.front_desk.phone",
+      "domain": "property",
+      "tier": "A",
+      "label": "Front desk phone",
+      "value_type": "string",
+      "markdown_section": "Contact"
+    }
+  ]
+}

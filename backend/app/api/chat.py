@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from datetime import datetime
+from typing import Optional
 import uuid
 import json
 
@@ -20,9 +21,17 @@ from app.services.database import get_database
 from app.services.message_codec import encode_faq_payload, parse_stored_message
 from app.services.conversation_helpers import is_internal_conversation_message
 from app.core.config import get_settings
+from app.services.guest_session import resolve_guest_id_for_chat
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 settings = get_settings()
+
+
+async def _require_guest(request: Request, guest_id: Optional[str]) -> tuple[str, Optional[str]]:
+    resolved_id, property_id = await resolve_guest_id_for_chat(request, guest_id)
+    if not resolved_id:
+        raise HTTPException(status_code=401, detail="Guest session required")
+    return resolved_id, property_id
 
 
 def _segment_to_message(segment: dict, msg_id: str) -> Message:
@@ -81,12 +90,12 @@ async def get_public_config():
 
 
 @router.get("/history/{guest_id}", response_model=ConversationHistoryResponse)
-async def get_conversation_history(guest_id: str):
+async def get_conversation_history(guest_id: str, request: Request):
     """Return stored conversation for a guest (excludes internal ops messages)."""
+    session_guest_id, _ = await _require_guest(request, guest_id)
+    if session_guest_id != guest_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     db = get_database()
-    guest = db.get_guest(guest_id)
-    if not guest:
-        raise HTTPException(status_code=404, detail="Guest not found")
     raw = db.get_conversation(guest_id)
     messages: list[Message] = []
     idx = 0
@@ -121,11 +130,12 @@ async def get_conversation_history(guest_id: str):
 
 
 @router.post("/faq-feedback", response_model=ChatMessageResponse)
-async def faq_feedback(request: FaqFeedbackRequest):
+async def faq_feedback(request: FaqFeedbackRequest, http_request: Request):
     """Guest feedback on an FAQ panel (helpful → ack; not helpful → LLM). No guest-visible user row."""
+    guest_id, property_id = await _require_guest(http_request, request.guest_id)
+    if guest_id != request.guest_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     db = get_database()
-    if not db.get_guest(request.guest_id):
-        raise HTTPException(status_code=404, detail="Guest not found")
 
     history = db.get_conversation(request.guest_id)
     assistant_segments = await llm_service.generate_faq_feedback(
@@ -141,20 +151,21 @@ async def faq_feedback(request: FaqFeedbackRequest):
 
 
 @router.post("/message", response_model=ChatMessageResponse)
-async def send_message(request: ChatMessageRequest):
+async def send_message(request: ChatMessageRequest, http_request: Request):
     """Send a message and get a response."""
     
+    guest_id, property_id = await _require_guest(http_request, request.guest_id)
     db = get_database()
     conversation_history = []
-    if request.guest_id:
+    if guest_id:
         conversation_history = [
-            m for m in db.get_conversation(request.guest_id)
+            m for m in db.get_conversation(guest_id)
             if not is_internal_conversation_message(m.get("content", ""))
         ]
         
         if not request.task_continuation:
             db.add_message_to_conversation(
-                request.guest_id,
+                guest_id,
                 "user",
                 request.content,
             )
@@ -174,13 +185,14 @@ async def send_message(request: ChatMessageRequest):
             user_message=request.content,
             conversation_history=conversation_history,
             images=request.images,
-            guest_id=request.guest_id,
+            guest_id=guest_id,
+            property_id=property_id,
             task_continuation=request.task_continuation,
         )
 
     response_messages: list[Message] = []
-    if request.guest_id:
-        response_messages = _persist_assistant_segments(request.guest_id, assistant_segments)
+    if guest_id:
+        response_messages = _persist_assistant_segments(guest_id, assistant_segments)
     else:
         for segment in assistant_segments:
             response_messages.append(_segment_to_message(segment, f"msg-{uuid.uuid4().hex[:8]}"))
@@ -193,17 +205,18 @@ async def send_message(request: ChatMessageRequest):
 
 
 @router.post("/stream")
-async def stream_message(request: ChatMessageRequest):
+async def stream_message(request: ChatMessageRequest, http_request: Request):
     """Stream a message response."""
     
+    guest_id, property_id = await _require_guest(http_request, request.guest_id)
     db = get_database()
     conversation_history = []
-    if request.guest_id:
-        conversation_history = db.get_conversation(request.guest_id)
+    if guest_id:
+        conversation_history = db.get_conversation(guest_id)
         
         if not request.task_continuation:
             db.add_message_to_conversation(
-                request.guest_id,
+                guest_id,
                 "user",
                 request.content,
             )
@@ -219,14 +232,15 @@ async def stream_message(request: ChatMessageRequest):
                 context=request.conversation_context,
                 conversation_history=conversation_history,
                 images=request.images,
-                guest_id=request.guest_id,
+                guest_id=guest_id,
+                property_id=property_id,
             ):
                 full_response += chunk
                 yield f"data: {json.dumps({'content': chunk})}\n\n"
         
-        if request.guest_id:
+        if guest_id:
             db.add_message_to_conversation(
-                request.guest_id,
+                guest_id,
                 "assistant",
                 full_response
             )

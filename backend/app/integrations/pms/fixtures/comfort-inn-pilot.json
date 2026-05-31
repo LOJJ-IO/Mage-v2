@@ -1,0 +1,15 @@
+{
+  "reservations": [
+    {
+      "booking_id": "CI-2026-1001",
+      "guest_name": "Jordan Lee",
+      "room_number": "214",
+      "check_in": "2026-05-28T15:00:00",
+      "check_out": "2026-05-31T11:00:00",
+      "email": "jordan.lee@example.com",
+      "phone": "+15551234567",
+      "membership_tier": null,
+      "in_house": true
+    }
+  ]
+}

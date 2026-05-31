@@ -382,17 +382,52 @@ def _faq_definitions() -> List[FaqDefinition]:
     ]
 
 
-def collect_faq_matches(message_lower: str, words: Optional[Set[str]] = None) -> List[FaqDefinition]:
+def collect_faq_matches(
+    message_lower: str,
+    words: Optional[Set[str]] = None,
+    *,
+    property_id: Optional[str] = None,
+) -> List[FaqDefinition]:
     w = words if words is not None else _words(message_lower)
     seen: Set[str] = set()
     matched: List[FaqDefinition] = []
-    for faq in _faq_definitions():
+    for faq in get_active_faq_definitions(property_id):
         if faq.id in seen:
             continue
         if faq.matches(message_lower, w):
             seen.add(faq.id)
             matched.append(faq)
     return matched
+
+
+def get_active_faq_definitions(property_id: Optional[str] = None) -> List[FaqDefinition]:
+    """Snapshot FAQs take precedence; fall back to hardcoded Grand Horizon matchers."""
+    if property_id:
+        try:
+            from app.knowledge.service import get_runtime_faqs
+
+            runtime = get_runtime_faqs(property_id)
+            if runtime:
+                out: List[FaqDefinition] = []
+                for row in runtime:
+                    aliases = row.get("aliases") or []
+
+                    def _matcher(_ml: str, w: Set[str], _aliases=aliases) -> bool:
+                        alias_set = {a.lower() for a in _aliases}
+                        return bool(w & alias_set) or any(a in _ml for a in alias_set)
+
+                    out.append(
+                        FaqDefinition(
+                            id=row["id"],
+                            title=row["title"],
+                            body=row["body"],
+                            matches=_matcher,
+                        )
+                    )
+                return out
+        except Exception:
+            pass
+    return _faq_definitions()
 
 
 def faq_bundle_key(faqs: List[FaqDefinition]) -> str:

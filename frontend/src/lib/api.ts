@@ -48,6 +48,20 @@ function mapStaffAction(raw: Record<string, unknown>): StaffAction {
   };
 }
 
+function mapGuestProfile(raw: Record<string, unknown>): GuestProfile {
+  return {
+    id: String(raw.id),
+    name: String(raw.name),
+    roomNumber: String(raw.room_number),
+    checkIn: new Date(String(raw.check_in)),
+    checkOut: new Date(String(raw.check_out)),
+    bookingId: String(raw.booking_id),
+    membershipTier: raw.membership_tier != null ? String(raw.membership_tier) : undefined,
+    email: raw.email != null ? String(raw.email) : undefined,
+    phone: raw.phone != null ? String(raw.phone) : undefined,
+  };
+}
+
 /**
  * When unset, requests use same-origin `/api/...` (see next.config.js rewrites → FastAPI).
  * Set NEXT_PUBLIC_API_URL only if you need the browser to talk to the API host directly
@@ -93,6 +107,7 @@ class ApiClient {
       const response = await fetch(url, {
         ...options,
         headers,
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -350,12 +365,47 @@ class ApiClient {
   }
 
   // Guest profile endpoints
-  async getGuestProfile(guestId: string): Promise<ApiResponse<GuestProfile>> {
-    return this.request<GuestProfile>(`/api/guests/${guestId}`);
+  async getGuestMe(): Promise<ApiResponse<GuestProfile>> {
+    const res = await this.request<Record<string, unknown>>('/api/guests/me');
+    if (!res.success || !res.data) {
+      return { success: false, error: res.error };
+    }
+    return { success: true, data: mapGuestProfile(res.data) };
   }
 
-  async getGuestByBooking(bookingId: string): Promise<ApiResponse<GuestProfile>> {
-    return this.request<GuestProfile>(`/api/guests/booking/${bookingId}`);
+  async getGuestProfile(guestId: string): Promise<ApiResponse<GuestProfile>> {
+    const res = await this.request<Record<string, unknown>>(`/api/guests/${guestId}`);
+    if (!res.success || !res.data) {
+      return { success: false, error: res.error };
+    }
+    return { success: true, data: mapGuestProfile(res.data) };
+  }
+
+  async verifyAuthToken(token: string): Promise<ApiResponse<{ ok: boolean }>> {
+    return this.request<{ ok: boolean }>(
+      `/api/auth/verify?t=${encodeURIComponent(token)}&redirect=false`
+    );
+  }
+
+  async getAuthSession(): Promise<
+    ApiResponse<{ authenticated: boolean; guestId?: string; propertyId?: string }>
+  > {
+    const res = await this.request<{
+      authenticated: boolean;
+      guest_id?: string;
+      property_id?: string;
+    }>('/api/auth/session');
+    if (!res.success || !res.data) {
+      return { success: false, error: res.error };
+    }
+    return {
+      success: true,
+      data: {
+        authenticated: res.data.authenticated,
+        guestId: res.data.guest_id,
+        propertyId: res.data.property_id,
+      },
+    };
   }
 
   // Agent availability endpoints
