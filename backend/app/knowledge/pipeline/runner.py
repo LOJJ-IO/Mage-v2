@@ -30,6 +30,7 @@ async def run_crawl_job(job_id: str) -> dict:
         batches = []
 
         pages_blocked = 0
+        pages_with_facts = 0
         async with crawl_client() as client:
             for url in urls:
                 page_id = db.create_crawl_page(job_id, url)
@@ -43,6 +44,7 @@ async def run_crawl_job(job_id: str) -> dict:
                     facts = extract_facts_from_page(url, html)
                     db.update_crawl_page(page_id, status="extracted", extracted_facts=facts)
                     if facts:
+                        pages_with_facts += 1
                         batches.append(facts)
                 except Exception as e:
                     logger.warning("Page fetch failed %s: %s", url, e)
@@ -76,7 +78,7 @@ async def run_crawl_job(job_id: str) -> dict:
         db.update_crawl_job(
             job_id,
             status="completed",
-            pages_extracted=len(batches),
+            pages_extracted=pages_with_facts,
             facts_merged=len(merged),
             gap_report=report,
             completed_at=datetime.utcnow(),

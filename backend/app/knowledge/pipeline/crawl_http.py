@@ -11,9 +11,9 @@ CRAWL_HEADERS = {
 
 
 def crawl_client(**kwargs: object) -> httpx.AsyncClient:
+    kwargs.setdefault("timeout", 20.0)
     return httpx.AsyncClient(
         follow_redirects=True,
-        timeout=20.0,
         headers=CRAWL_HEADERS,
         **kwargs,
     )
