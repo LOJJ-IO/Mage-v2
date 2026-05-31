@@ -1,39 +1,27 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { apiClient } from '@/lib/api';
-import { useMageStore } from '@/store/mageStore';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 export default function AuthVerifyClient() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const setGuestProfile = useMageStore((s) => s.setGuestProfile);
   const [error, setError] = useState<string | null>(null);
+  const didRedirectRef = useRef(false);
 
   useEffect(() => {
+    if (didRedirectRef.current) return;
+    didRedirectRef.current = true;
+
     const token = searchParams.get('t');
     if (!token) {
       setError('Missing sign-in link.');
       return;
     }
 
-    (async () => {
-      const verify = await apiClient.verifyAuthToken(token);
-      if (!verify.success) {
-        setError(verify.error || 'This link is invalid or has expired.');
-        return;
-      }
-      const me = await apiClient.getGuestMe();
-      if (!me.success || !me.data) {
-        setError('Signed in but could not load your profile.');
-        return;
-      }
-      setGuestProfile(me.data);
-      sessionStorage.setItem('mage-guest-id', me.data.id);
-      router.replace('/');
-    })();
-  }, [searchParams, router, setGuestProfile]);
+    // Full-page navigation so Set-Cookie is applied reliably (fetch + StrictMode can
+    // double-consume one-time tokens or miss cookies through the dev proxy).
+    window.location.replace(`/api/auth/verify?t=${encodeURIComponent(token)}`);
+  }, [searchParams]);
 
   if (error) {
     return (
