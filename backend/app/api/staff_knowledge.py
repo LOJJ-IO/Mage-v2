@@ -6,6 +6,7 @@ from urllib.parse import unquote
 
 from app.api.staff import verify_staff_key
 from app.core.config import get_settings
+from app.knowledge.property_helpers import ensure_property_for_crawl, property_id_from_url
 from app.knowledge.pipeline.runner import run_crawl_job
 from app.knowledge.schema_loader import get_slots, slot_by_key
 from app.knowledge.service import compute_completeness, publish_snapshot, seed_grand_horizon_facts
@@ -101,11 +102,16 @@ async def start_crawl(
     _: None = Depends(verify_staff_key),
 ):
     db = get_database()
-    if not db.get_property(body.property_id):
-        raise HTTPException(status_code=404, detail="Property not found")
-    job = db.create_crawl_job(body.property_id, body.seed_url)
+    seed = (body.seed_url or "").strip()
+    if not seed:
+        raise HTTPException(status_code=400, detail="seed_url is required")
+
+    property_id = (body.property_id or "").strip() or property_id_from_url(seed)
+    ensure_property_for_crawl(db, property_id, seed)
+
+    job = db.create_crawl_job(property_id, seed if "://" in seed else f"https://{seed}")
     background_tasks.add_task(run_crawl_job, job["id"])
-    return job
+    return {**job, "property_id": property_id}
 
 
 @router.get("/crawl/{job_id}")
