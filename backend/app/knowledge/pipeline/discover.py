@@ -1,15 +1,26 @@
 """Discover crawl targets from sitemap.xml (primary) with minimal fallback."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from typing import Set
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 from xml.etree import ElementTree
 
 from app.knowledge.pipeline.crawl_http import crawl_client
+from app.knowledge.pipeline.crawl_scope import (
+    CrawlScope,
+    crawl_scope_from_seed,
+    normalize_seed_url,
+    prioritize_scoped_urls,
+    url_under_scope,
+)
 
 logger = logging.getLogger(__name__)
+
+_PROBE_TIMEOUT = 8.0
+_MIN_SCOPED_URLS = 5
 
 _SKIP_EXTENSIONS = (
     ".pdf",
@@ -23,6 +34,18 @@ _SKIP_EXTENSIONS = (
     ".kml",
     ".mp4",
     ".mp3",
+    ".ico",
+)
+
+_SKIP_PATH_SNIPPETS = (
+    "/tracking/",
+    "/images/",
+    "/css/",
+    "/scripts/",
+    "/cdn-cgi/",
+    "click-reservation",
+    "print.aspx",
+    "/amp",
 )
 
 _SITEMAP_CANDIDATES = (
@@ -31,6 +54,35 @@ _SITEMAP_CANDIDATES = (
     "/sitemap-index.xml",
     "/sitemap/sitemap.xml",
 )
+
+# Brand sites often use these instead of /amenities, /faq, etc.
+_SCOPED_PATH_SUFFIXES = (
+    "/overview",
+    "/amenities",
+    "/amenities-and-services",
+    "/hotel-amenities",
+    "/dining",
+    "/restaurants",
+    "/faq",
+    "/faqs",
+    "/policies",
+    "/location",
+    "/contact",
+    "/rooms",
+    "/gallery",
+)
+
+_PAGE_QUOTAS = {
+    "core": 4,
+    "amenities": 5,
+    "dining": 3,
+    "rooms": 4,
+    "policies": 3,
+    "contact": 2,
+    "faq": 6,
+    "offers": 2,
+    "general": 8,
+}
 
 _NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
 
@@ -50,19 +102,25 @@ def _same_site(url: str, seed_netloc: str) -> bool:
 
 
 def _clean_url(url: str) -> str:
-    return url.split("#")[0].strip()
+    parsed = urlparse(url.split("#")[0].strip())
+    path = parsed.path or "/"
+    if path != "/" and path.endswith("/"):
+        path = path.rstrip("/")
+    # Drop querystrings for crawl targets to avoid duplicate variants.
+    parsed = parsed._replace(path=path, query="")
+    return urlunparse(parsed)
 
 
 def _is_crawlable_url(url: str) -> bool:
     path = urlparse(url).path.lower()
-    return not any(path.endswith(ext) for ext in _SKIP_EXTENSIONS)
+    if any(path.endswith(ext) for ext in _SKIP_EXTENSIONS):
+        return False
+    if any(snippet in path for snippet in _SKIP_PATH_SNIPPETS):
+        return False
+    return True
 
 
 def _parse_locs_from_xml(text: str) -> tuple[list[str], list[str]]:
-    """
-    Return (page_urls, nested_sitemap_urls) from sitemap or sitemap index XML.
-    Falls back to regex if XML parsing fails.
-    """
     page_locs: list[str] = []
     sitemap_locs: list[str] = []
     try:
@@ -121,10 +179,23 @@ async def _sitemap_urls_from_robots(client, base: str) -> list[str]:
     return urls
 
 
+def _filter_for_scope(urls: Set[str], scope: CrawlScope) -> Set[str]:
+    filtered = {u for u in urls if _is_crawlable_url(u) and url_under_scope(u, scope)}
+    if scope.is_scoped and len(filtered) < len(urls):
+        logger.info(
+            "Scoped crawl %s: kept %d/%d URLs under %s",
+            scope.property_slug,
+            len(filtered),
+            len(urls),
+            scope.path_prefix,
+        )
+    return filtered
+
+
 async def _collect_from_sitemap(
     client,
     sitemap_url: str,
-    seed_netloc: str,
+    scope: CrawlScope,
     *,
     depth: int = 0,
     max_depth: int = 3,
@@ -138,17 +209,22 @@ async def _collect_from_sitemap(
 
     page_locs, nested = _parse_locs_from_xml(text)
     found: Set[str] = set()
+    seed_netloc = urlparse(scope.seed_url).netloc
 
     for loc in page_locs:
         url = _clean_url(loc)
-        if _same_site(url, seed_netloc) and _is_crawlable_url(url):
+        if _same_site(url, seed_netloc) and url_under_scope(url, scope):
             found.add(url)
 
     for nested_url in nested:
+        if scope.is_scoped and not url_under_scope(nested_url, scope):
+            # Skip sitemaps for other hotels on the same domain.
+            if scope.path_prefix not in urlparse(nested_url).path:
+                continue
         nested_found = await _collect_from_sitemap(
             client,
             nested_url,
-            seed_netloc,
+            scope,
             depth=depth + 1,
             max_depth=max_depth,
         )
@@ -157,13 +233,19 @@ async def _collect_from_sitemap(
     return found
 
 
-async def _discover_from_sitemaps(
-    client,
-    base: str,
-    seed_netloc: str,
-) -> Set[str]:
+def _sitemap_candidates_for_scope(scope: CrawlScope) -> list[str]:
+    parsed = urlparse(scope.seed_url)
+    base = f"{parsed.scheme}://{parsed.netloc}"
     candidates: list[str] = []
     seen: Set[str] = set()
+
+    if scope.path_prefix:
+        prefix = scope.path_prefix.rstrip("/")
+        for name in ("sitemap.xml", "sitemap_index.xml"):
+            url = urljoin(base, f"{prefix}/{name}")
+            if url not in seen:
+                seen.add(url)
+                candidates.append(url)
 
     for path in _SITEMAP_CANDIDATES:
         url = urljoin(base, path)
@@ -171,69 +253,197 @@ async def _discover_from_sitemaps(
             seen.add(url)
             candidates.append(url)
 
-    for url in await _sitemap_urls_from_robots(client, base):
-        if url not in seen:
-            seen.add(url)
-            candidates.append(url)
+    return candidates
+
+
+async def _discover_from_sitemaps(client, scope: CrawlScope) -> Set[str]:
+    candidates = _sitemap_candidates_for_scope(scope)
+    for url in await _sitemap_urls_from_robots(
+        client, f"{urlparse(scope.seed_url).scheme}://{urlparse(scope.seed_url).netloc}"
+    ):
+        if url not in candidates:
+            candidates.insert(0, url)
 
     found: Set[str] = set()
     for sitemap_url in candidates:
-        urls = await _collect_from_sitemap(client, sitemap_url, seed_netloc)
+        if scope.is_scoped and len(found) >= _MIN_SCOPED_URLS:
+            break
+        urls = await _collect_from_sitemap(client, sitemap_url, scope)
         if urls:
-            logger.info("Sitemap %s yielded %d URLs", sitemap_url, len(urls))
+            logger.info("Sitemap %s yielded %d scoped URLs", sitemap_url, len(urls))
             found.update(urls)
-            if found:
-                break
 
     return found
 
 
-async def _fallback_seed_only(
-    client,
-    seed_url: str,
-    seed_netloc: str,
-) -> Set[str]:
-    """If no sitemap, at least crawl the seed page."""
+async def _url_exists(client, url: str) -> str | None:
+    """Return canonical URL if page exists; use GET (many sites reject HEAD)."""
+    try:
+        resp = await client.get(url, timeout=_PROBE_TIMEOUT)
+        if resp.status_code < 400:
+            return _clean_url(str(resp.url))
+    except Exception:
+        pass
+    return None
+
+
+async def _discover_scoped_path_guesses(client, scope: CrawlScope) -> Set[str]:
+    """Try a few likely subpages in parallel — only when sitemap/links found almost nothing."""
+    if not scope.path_prefix:
+        return set()
+
+    parsed = urlparse(scope.seed_url)
+    base = f"{parsed.scheme}://{parsed.netloc}"
+    prefix = scope.path_prefix.rstrip("/")
+    candidates = [urljoin(base, prefix + suffix) for suffix in _SCOPED_PATH_SUFFIXES]
+
+    results = await asyncio.gather(*(_url_exists(client, url) for url in candidates))
+    return {u for u in results if u}
+
+
+async def _discover_from_seed_links(client, scope: CrawlScope) -> Set[str]:
+    """Pull same-property links from the seed page."""
+    found: Set[str] = set()
+    html = await _fetch_text(client, scope.seed_url)
+    if not html:
+        return found
+
+    found.add(_clean_url(scope.seed_url))
+    seed_netloc = urlparse(scope.seed_url).netloc
+    for href in re.findall(r'href=["\']([^"\']+)["\']', html, re.I):
+        full = _clean_url(urljoin(scope.seed_url, href))
+        if _same_site(full, seed_netloc) and url_under_scope(full, scope) and _is_crawlable_url(full):
+            found.add(full)
+
+    return found
+
+
+def _rank_url(url: str, scope: CrawlScope) -> int:
+    path = (urlparse(url).path or "/").lower()
+    score = 0
+    if path == "/" or path == scope.path_prefix.rstrip("/"):
+        score += 120
+    if any(
+        token in path
+        for token in (
+            "our-hotel",
+            "overview",
+            "about",
+            "amenit",
+            "dining",
+            "contact",
+            "location",
+            "rooms",
+            "services",
+            "polic",
+        )
+    ):
+        score += 80
+    if any(token in path for token in ("faq", "covid-19-faq", "lorem-ipsum")):
+        score -= 40
+    if path.count("/") <= 2:
+        score += 20
+    if "faq/" in path and path.count("/") >= 4:
+        score -= 30
+    if any(token in path for token in ("privacy", "legal", "cookie", "accessibility", "ada-website")):
+        score -= 70
+    return score
+
+
+def _classify_url(url: str) -> str:
+    path = (urlparse(url).path or "/").lower()
+    if path in ("", "/") or path.endswith("/overview") or "our-hotel" in path:
+        return "core"
+    if any(token in path for token in ("amenit", "facilities", "pool", "fitness", "gym", "spa")):
+        return "amenities"
+    if any(token in path for token in ("dining", "restaurant", "bar", "breakfast")):
+        return "dining"
+    if any(token in path for token in ("rooms", "suites", "accommodation")):
+        return "rooms"
+    if any(token in path for token in ("polic", "check-in", "check-out", "terms")):
+        return "policies"
+    if any(token in path for token in ("contact", "location", "directions")):
+        return "contact"
+    if any(token in path for token in ("faq", "help")):
+        return "faq"
+    if any(token in path for token in ("offers", "deals", "rates", "book")):
+        return "offers"
+    return "general"
+
+
+def _select_urls(urls: Set[str], scope: CrawlScope, max_pages: int) -> list[str]:
+    ordered = prioritize_scoped_urls(sorted(urls), scope)
+    ranked = sorted(ordered, key=lambda u: (-_rank_url(u, scope), u))
+    selected: list[str] = []
+    counts: dict[str, int] = {}
+    for url in ranked:
+        page_type = _classify_url(url)
+        if counts.get(page_type, 0) >= _PAGE_QUOTAS.get(page_type, _PAGE_QUOTAS["general"]):
+            continue
+        counts[page_type] = counts.get(page_type, 0) + 1
+        selected.append(url)
+        if len(selected) >= max_pages:
+            break
+    return selected
+
+
+async def _fallback_seed_only(client, scope: CrawlScope) -> Set[str]:
     found: Set[str] = set()
     try:
-        resp = await client.get(seed_url)
+        resp = await client.get(scope.seed_url)
         if resp.status_code < 400:
             final = _clean_url(str(resp.url))
-            if _same_site(final, seed_netloc):
+            if url_under_scope(final, scope):
                 found.add(final)
     except Exception as e:
-        logger.debug("Seed fallback failed %s: %s", seed_url, e)
+        logger.debug("Seed fallback failed %s: %s", scope.seed_url, e)
     return found
 
 
 async def discover_urls(seed_url: str, *, max_pages: int = 30) -> list[str]:
-    """Discover pages from sitemap.xml; fall back to seed URL only if sitemap is empty."""
-    raw = (seed_url or "").strip()
-    if "://" not in raw:
-        raw = f"https://{raw}"
-    parsed = urlparse(raw)
-    base = f"{parsed.scheme}://{parsed.netloc}"
+    """Discover pages from sitemap, scoped to the hotel path when applicable."""
+    raw = normalize_seed_url(seed_url)
+    if not raw:
+        return []
 
-    async with crawl_client() as client:
-        # Resolve redirects so sitemap host matches live site (www vs apex).
-        resolved = base
+    async with crawl_client(timeout=_PROBE_TIMEOUT) as client:
+        resolved = raw
         try:
             resp = await client.get(raw)
             if resp.status_code < 400:
-                resolved = f"{urlparse(str(resp.url)).scheme}://{urlparse(str(resp.url)).netloc}"
+                resolved = _clean_url(str(resp.url))
         except Exception as e:
             logger.debug("Seed resolve failed %s: %s", raw, e)
 
-        seed_netloc = urlparse(resolved).netloc
-        found = await _discover_from_sitemaps(client, resolved, seed_netloc)
+        scope = crawl_scope_from_seed(raw, resolved_url=resolved)
+        logger.info("Discovering URLs for scope=%s", scope.path_prefix or "whole-domain")
+
+        # For brand sub-routes, homepage links are often faster/more accurate than domain sitemap.
+        if scope.is_scoped:
+            found = await _discover_from_seed_links(client, scope)
+            if len(found) < _MIN_SCOPED_URLS:
+                found.update(await _discover_from_sitemaps(client, scope))
+            if len(found) < 3:
+                logger.info("Few URLs from sitemap/links — trying scoped path guesses")
+                found.update(await _discover_scoped_path_guesses(client, scope))
+            found = _filter_for_scope(found, scope)
+        else:
+            found = await _discover_from_sitemaps(client, scope)
+            found.update(await _discover_from_seed_links(client, scope))
+            if not found:
+                logger.warning("No sitemap URLs for %s — falling back to seed page only", resolved)
+                found = await _fallback_seed_only(client, scope)
+            else:
+                found = _filter_for_scope(found, scope)
 
         if not found:
-            logger.warning(
-                "No sitemap URLs for %s — falling back to seed page only",
-                resolved,
-            )
-            found = await _fallback_seed_only(client, raw, seed_netloc)
+            found = await _fallback_seed_only(client, scope)
 
-    urls = sorted(found)[:max_pages]
-    logger.info("Discovered %d URLs from %s", len(urls), seed_url)
+    urls = _select_urls(found, scope, max_pages)
+    logger.info(
+        "Discovered %d URLs from %s (scope=%s)",
+        len(urls),
+        seed_url,
+        scope.path_prefix or "whole-domain",
+    )
     return urls

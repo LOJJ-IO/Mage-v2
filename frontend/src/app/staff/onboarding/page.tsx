@@ -38,15 +38,48 @@ type CrawlJob = {
   };
 };
 
+function pathPrefixFromUrl(input: string): string {
+  const pageSegments = new Set([
+    'amenities', 'about-amenities', 'dining', 'restaurant', 'breakfast', 'faq', 'faqs',
+    'pool', 'fitness', 'gym', 'parking', 'policies', 'contact', 'contact-us',
+    'contact-location', 'location', 'directions', 'overview', 'gallery', 'photos',
+    'rooms', 'suites', 'rates', 'offers', 'specials', 'accessibility', 'events',
+    'meetings', 'weddings', 'spa', 'bar', 'lounge',
+  ]);
+  try {
+    const url = input.includes('://') ? input : `https://${input}`;
+    const segments = new URL(url).pathname.split('/').filter(Boolean);
+    if (!segments.length) return '';
+    if (pageSegments.has(segments[segments.length - 1].toLowerCase())) {
+      segments.pop();
+    }
+    return segments.length ? `/${segments.join('/')}` : '';
+  } catch {
+    return '';
+  }
+}
+
 function propertyIdFromUrl(input: string): string {
   const raw = input.trim();
   if (!raw) return 'pilot-hotel';
   try {
     const url = raw.includes('://') ? raw : `https://${raw}`;
-    let host = new URL(url).hostname.toLowerCase();
+    const parsed = new URL(url);
+    let host = parsed.hostname.toLowerCase();
     if (host.startsWith('www.')) host = host.slice(4);
-    const slug = host.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    return (slug.slice(0, 48) || 'pilot-hotel');
+    const hostSlug = host.replace(/\./g, '-').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const prefix = pathPrefixFromUrl(url);
+    if (prefix) {
+      const pathSlug = prefix
+        .split('/')
+        .filter(Boolean)
+        .map((s) => s.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))
+        .filter(Boolean)
+        .join('-');
+      const combined = [hostSlug, pathSlug].filter(Boolean).join('-');
+      return (combined.slice(0, 64) || 'pilot-hotel');
+    }
+    return (hostSlug.slice(0, 64) || 'pilot-hotel');
   } catch {
     return 'pilot-hotel';
   }
@@ -115,6 +148,7 @@ export default function StaffOnboardingPage() {
   const [staffKey, setStaffKey] = useState('');
   const [unlocked, setUnlocked] = useState(false);
   const [propertyId, setPropertyId] = useState(DEFAULT_PROPERTY_ID);
+  const [propertyIdLocked, setPropertyIdLocked] = useState(false);
   const [crawlUrl, setCrawlUrl] = useState('');
   const [crawlJob, setCrawlJob] = useState<CrawlJob | null>(null);
   const [crawling, setCrawling] = useState(false);
@@ -245,7 +279,8 @@ export default function StaffOnboardingPage() {
       setMessage('Enter a hotel website URL to crawl.');
       return;
     }
-    const pid = propertyId.trim() || propertyIdFromUrl(seedUrl);
+    const suggestedPid = propertyIdFromUrl(seedUrl);
+    const pid = propertyIdLocked ? (propertyId.trim() || suggestedPid) : suggestedPid;
     setPropertyId(pid);
     setCrawling(true);
     setCrawlJob(null);
@@ -270,7 +305,7 @@ export default function StaffOnboardingPage() {
   };
 
   const applySuggestedPropertyId = () => {
-    if (crawlUrl.trim()) {
+    if (!propertyIdLocked && crawlUrl.trim()) {
       setPropertyId(propertyIdFromUrl(crawlUrl));
     }
   };
@@ -371,8 +406,9 @@ export default function StaffOnboardingPage() {
               Crawl hotel website
             </h2>
             <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
-              Discovers amenity, FAQ, and policy pages (HTML only — PDFs skipped). Extraction is
-              heuristic; review and edit gaps, then publish.
+              Paste the hotel&apos;s homepage URL — including brand sub-routes like{' '}
+              <span className="font-mono">marriott.com/hotels/your-hotel</span> when the property
+              shares a domain. Discovers amenity, FAQ, and policy pages under that path only.
             </p>
             <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_220px_auto]">
               <label className="block min-w-0">
@@ -382,7 +418,13 @@ export default function StaffOnboardingPage() {
                 <input
                   type="url"
                   value={crawlUrl}
-                  onChange={(e) => setCrawlUrl(e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setCrawlUrl(next);
+                    if (!propertyIdLocked) {
+                      setPropertyId(propertyIdFromUrl(next));
+                    }
+                  }}
                   onBlur={applySuggestedPropertyId}
                   placeholder="https://www.example-hotel.com"
                   className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
@@ -395,10 +437,23 @@ export default function StaffOnboardingPage() {
                 <input
                   type="text"
                   value={propertyId}
-                  onChange={(e) => setPropertyId(e.target.value)}
+                  onChange={(e) => {
+                    setPropertyIdLocked(true);
+                    setPropertyId(e.target.value);
+                  }}
                   placeholder="auto-from-domain"
                   className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
                 />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPropertyIdLocked(false);
+                    setPropertyId(propertyIdFromUrl(crawlUrl));
+                  }}
+                  className="mt-1 text-[11px] text-neutral-500 underline underline-offset-2 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+                >
+                  Auto from URL
+                </button>
               </label>
               <div className="flex items-end">
                 <button

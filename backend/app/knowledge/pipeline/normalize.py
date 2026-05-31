@@ -2,6 +2,38 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse
+
+_METHOD_WEIGHT = {
+    "json_ld": 100,
+    "selector": 85,
+    "faq": 80,
+    "labeled_regex": 70,
+    "meta": 60,
+    "regex": 40,
+}
+
+_HIGH_PRIORITY_PATH_TOKENS = (
+    "our-hotel",
+    "overview",
+    "amenit",
+    "dining",
+    "contact",
+    "location",
+    "polic",
+    "faq",
+)
+
+_LOW_PRIORITY_PATH_TOKENS = (
+    "book",
+    "reservation",
+    "rates",
+    "offers",
+    "privacy",
+    "legal",
+    "cookie",
+    "tracking",
+)
 
 
 def normalize_facts(
@@ -19,15 +51,13 @@ def normalize_facts(
                 if (fact.get("confidence") or 0) > (existing.get("confidence") or 0):
                     merged[key] = dict(fact)
             else:
+                winner, loser = _resolve_conflict(existing, fact)
                 merged[key] = {
-                    **existing,
-                    "status": "conflict",
-                    "value": existing.get("value"),
-                    "conflict_value": fact.get("value"),
-                    "confidence": min(
-                        existing.get("confidence") or 0.5,
-                        fact.get("confidence") or 0.5,
-                    ),
+                    **winner,
+                    "status": "filled",
+                    "conflict_value": loser.get("value"),
+                    "conflict_source_url": loser.get("source_url"),
+                    "conflict_confidence": loser.get("confidence"),
                 }
     return merged
 
@@ -56,3 +86,41 @@ def _values_equal(a: Any, b: Any) -> bool:
     if a is None and b is None:
         return True
     return str(a).strip().lower() == str(b).strip().lower()
+
+
+def _source_score(fact: dict[str, Any]) -> float:
+    confidence = float(fact.get("confidence") or 0)
+    method = str(fact.get("extraction_method") or "regex")
+    return confidence * 100 + _METHOD_WEIGHT.get(method, 0)
+
+
+def _page_priority(source_url: str | None) -> int:
+    if not source_url:
+        return 0
+    path = (urlparse(source_url).path or "/").lower()
+    score = 0
+    if path in ("", "/"):
+        score += 20
+    score += sum(10 for token in _HIGH_PRIORITY_PATH_TOKENS if token in path)
+    score -= sum(12 for token in _LOW_PRIORITY_PATH_TOKENS if token in path)
+    if "/faq/" in path:
+        score -= 10
+    return score
+
+
+def _resolve_conflict(
+    existing: dict[str, Any],
+    incoming: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    existing_score = _source_score(existing)
+    incoming_score = _source_score(incoming)
+    if incoming_score > existing_score:
+        return dict(incoming), dict(existing)
+    if incoming_score < existing_score:
+        return dict(existing), dict(incoming)
+
+    existing_page_priority = _page_priority(existing.get("source_url"))
+    incoming_page_priority = _page_priority(incoming.get("source_url"))
+    if incoming_page_priority > existing_page_priority:
+        return dict(incoming), dict(existing)
+    return dict(existing), dict(incoming)
