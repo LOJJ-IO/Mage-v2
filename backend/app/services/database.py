@@ -46,6 +46,9 @@ class DatabaseProtocol(Protocol):
     def get_property(self, property_id: str) -> Optional[Property]:
         ...
 
+    def upsert_property(self, prop: Property) -> Property:
+        ...
+
     def set_property_published_snapshot(self, property_id: str, snapshot_id: str) -> None:
         ...
 

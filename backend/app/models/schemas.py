@@ -190,8 +190,8 @@ class PropertyFactPatch(BaseModel):
 
 class CrawlJobRequest(BaseModel):
     """Start a discover/extract crawl for a property."""
-    property_id: str
     seed_url: str
+    property_id: Optional[str] = None
 
 
 class Ticket(BaseModel):

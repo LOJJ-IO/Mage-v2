@@ -73,6 +73,40 @@ class PropertyStoreSupabase:
             logger.error("Error getting property: %s", e)
             return None
 
+    def upsert_property(self, prop: Property) -> Property:
+        row = {
+            "id": prop.id,
+            "name": prop.name,
+            "slug": prop.slug,
+            "timezone": prop.timezone,
+            "profile": prop.profile.value,
+            "pms_type": prop.pms_type,
+            "knowledge_mode": prop.knowledge_mode.value,
+            "published_snapshot_id": prop.published_snapshot_id,
+        }
+        try:
+            existing = self.get_property(prop.id)
+            if existing:
+                response = (
+                    self.client.table("properties")
+                    .update({k: v for k, v in row.items() if k != "id"})
+                    .eq("id", prop.id)
+                    .execute()
+                )
+            else:
+                response = self.client.table("properties").insert(row).execute()
+            if response.data:
+                data = response.data[0]
+                if isinstance(data.get("knowledge_mode"), str):
+                    data["knowledge_mode"] = KnowledgeMode(data["knowledge_mode"])
+                if isinstance(data.get("profile"), str):
+                    data["profile"] = PropertyProfile(data["profile"])
+                return Property(**data)
+            return prop
+        except Exception as e:
+            logger.error("Error upserting property: %s", e)
+            raise
+
     def set_property_published_snapshot(self, property_id: str, snapshot_id: str) -> None:
         try:
             self.client.table("properties").update(

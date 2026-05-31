@@ -65,6 +65,10 @@ class PropertyStoreMixin:
     def get_property(self, property_id: str) -> Optional[Property]:
         return self.properties.get(property_id)
 
+    def upsert_property(self, prop: Property) -> Property:
+        self.properties[prop.id] = prop
+        return prop
+
     def set_property_published_snapshot(self, property_id: str, snapshot_id: str) -> None:
         prop = self.properties.get(property_id)
         if prop:

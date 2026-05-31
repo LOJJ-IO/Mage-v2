@@ -4,8 +4,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-import httpx
-
+from app.knowledge.pipeline.crawl_http import crawl_client
 from app.knowledge.pipeline.discover import discover_urls
 from app.knowledge.pipeline.extract import extract_facts_from_page
 from app.knowledge.pipeline.normalize import gap_report, normalize_facts
@@ -30,11 +29,15 @@ async def run_crawl_job(job_id: str) -> dict:
         db.update_crawl_job(job_id, pages_discovered=len(urls))
         batches = []
 
-        async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
+        pages_blocked = 0
+        async with crawl_client() as client:
             for url in urls:
                 page_id = db.create_crawl_page(job_id, url)
                 try:
                     resp = await client.get(url)
+                    if resp.status_code == 403:
+                        pages_blocked += 1
+                        logger.warning("Blocked fetching page %s (HTTP 403)", url)
                     html = resp.text if resp.status_code == 200 else ""
                     db.update_crawl_page(page_id, status="fetched", raw_html=html[:50000])
                     facts = extract_facts_from_page(url, html)
@@ -44,6 +47,13 @@ async def run_crawl_job(job_id: str) -> dict:
                 except Exception as e:
                     logger.warning("Page fetch failed %s: %s", url, e)
                     db.update_crawl_page(page_id, status="error")
+
+        if pages_blocked:
+            logger.warning(
+                "Crawl blocked on %d/%d pages (HTTP 403 — site may rate-limit rapid requests)",
+                pages_blocked,
+                len(urls),
+            )
 
         merged = normalize_facts(batches)
         for key, fact in merged.items():
@@ -67,6 +77,8 @@ async def run_crawl_job(job_id: str) -> dict:
             job_id,
             status="completed",
             pages_extracted=len(batches),
+            facts_merged=len(merged),
+            gap_report=report,
             completed_at=datetime.utcnow(),
         )
         return {"job_id": job_id, "urls": len(urls), "facts_merged": len(merged), "gap_report": report}
