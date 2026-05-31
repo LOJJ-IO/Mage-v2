@@ -1,30 +1,22 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.api.staff import verify_staff_key
 from app.models.schemas import GuestProfile
 from app.services.database import get_database
+from app.services.guest_session import get_current_guest_profile
 
 router = APIRouter(prefix="/guests", tags=["guests"])
 
 
-@router.get("/{guest_id}", response_model=GuestProfile)
-async def get_guest(guest_id: str):
-    """Get guest profile by ID."""
-    
-    db = get_database()
-    guest = db.get_guest(guest_id)
-    if not guest:
-        raise HTTPException(status_code=404, detail="Guest not found")
-    
+@router.get("/me", response_model=GuestProfile)
+async def get_current_guest_me(guest: GuestProfile = Depends(get_current_guest_profile)):
+    """Return authenticated guest from session cookie."""
     return guest
 
 
-@router.get("/booking/{booking_id}", response_model=GuestProfile)
-async def get_guest_by_booking(booking_id: str):
-    """Get guest profile by booking ID."""
-    
-    db = get_database()
-    guest = db.get_guest_by_booking(booking_id)
-    if not guest:
-        raise HTTPException(status_code=404, detail="Guest not found")
-    
+@router.get("/{guest_id}", response_model=GuestProfile)
+async def get_guest(guest_id: str, guest: GuestProfile = Depends(get_current_guest_profile)):
+    """Get guest profile by ID (session must match)."""
+    if guest.id != guest_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     return guest

@@ -135,6 +135,30 @@ class ConversationHistoryResponse(BaseModel):
     messages: List[Message]
 
 
+class KnowledgeMode(str, Enum):
+    """How a property loads guest-facing knowledge."""
+    DEMO_FILE = "demo_file"
+    PUBLISHED_SNAPSHOT = "published_snapshot"
+
+
+class PropertyProfile(str, Enum):
+    """Hotel service profile."""
+    LIMITED_SERVICE = "limited_service"
+    FULL_SERVICE = "full_service"
+
+
+class Property(BaseModel):
+    """Multi-tenant property hub."""
+    id: str
+    name: str
+    slug: str
+    timezone: str = "America/Edmonton"
+    profile: PropertyProfile = PropertyProfile.FULL_SERVICE
+    pms_type: str = "mock"
+    knowledge_mode: KnowledgeMode = KnowledgeMode.DEMO_FILE
+    published_snapshot_id: Optional[str] = None
+
+
 class GuestProfile(BaseModel):
     """Guest profile model."""
     id: str
@@ -146,6 +170,28 @@ class GuestProfile(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     membership_tier: Optional[str] = None
+    property_id: Optional[str] = None
+    pms_booking_id: Optional[str] = None
+    pms_guest_id: Optional[str] = None
+
+
+class MagicLinkRequest(BaseModel):
+    """Internal/webhook: send magic link for a booking."""
+    property_id: str
+    booking_id: str
+    email: Optional[str] = None
+
+
+class PropertyFactPatch(BaseModel):
+    """Staff edit of a single knowledge slot."""
+    value: Optional[object] = None
+    status: Optional[str] = None
+
+
+class CrawlJobRequest(BaseModel):
+    """Start a discover/extract crawl for a property."""
+    property_id: str
+    seed_url: str
 
 
 class Ticket(BaseModel):

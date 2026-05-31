@@ -107,7 +107,22 @@ class Settings(BaseSettings):
     hotel_front_desk_phone: str = os.getenv("HOTEL_FRONT_DESK_PHONE", "")
 
     staff_access_key: str = os.getenv("STAFF_ACCESS_KEY", "mage-staff-dev")
-    
+
+    # Multi-tenant / property scope (single-hotel pilots set PROPERTY_ID)
+    property_id: str = os.getenv("PROPERTY_ID", "grand-horizon")
+
+    # Guest auth
+    auth_secret: str = os.getenv("AUTH_SECRET", "")
+    auth_token_ttl_hours: int = int(os.getenv("AUTH_TOKEN_TTL_HOURS", "48"))
+    session_ttl_hours: int = int(os.getenv("SESSION_TTL_HOURS", "168"))
+    stay_grace_hours: int = int(os.getenv("STAY_GRACE_HOURS", "12"))
+    frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    email_provider: str = os.getenv("EMAIL_PROVIDER", "")
+    allow_dev_guest_login: bool = os.getenv(
+        "ALLOW_DEV_GUEST_LOGIN", os.getenv("DEBUG", "true")
+    ).lower() in ("1", "true", "yes")
+    webhook_secret: str = os.getenv("WEBHOOK_SECRET", "")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
