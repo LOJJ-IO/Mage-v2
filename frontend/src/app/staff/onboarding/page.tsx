@@ -26,6 +26,7 @@ type CrawlJob = {
   id: string;
   property_id?: string;
   seed_url: string;
+  seed_urls?: string[];
   status: string;
   pages_discovered?: number;
   pages_extracted?: number;
@@ -91,6 +92,21 @@ function normalizeSeedUrl(input: string): string {
   return raw.includes('://') ? raw : `https://${raw}`;
 }
 
+function parseSeedUrls(input: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const line of input.split(/\r?\n/)) {
+    const raw = line.trim();
+    if (!raw || raw.startsWith('#')) continue;
+    const url = normalizeSeedUrl(raw);
+    if (url && !seen.has(url)) {
+      seen.add(url);
+      out.push(url);
+    }
+  }
+  return out;
+}
+
 function staffFetch(path: string, staffKey: string, init?: RequestInit) {
   return fetch(path, {
     ...init,
@@ -149,7 +165,7 @@ export default function StaffOnboardingPage() {
   const [unlocked, setUnlocked] = useState(false);
   const [propertyId, setPropertyId] = useState(DEFAULT_PROPERTY_ID);
   const [propertyIdLocked, setPropertyIdLocked] = useState(false);
-  const [crawlUrl, setCrawlUrl] = useState('');
+  const [crawlUrlsText, setCrawlUrlsText] = useState('');
   const [crawlJob, setCrawlJob] = useState<CrawlJob | null>(null);
   const [crawling, setCrawling] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -274,21 +290,26 @@ export default function StaffOnboardingPage() {
   };
 
   const startCrawl = async () => {
-    const seedUrl = normalizeSeedUrl(crawlUrl);
-    if (!seedUrl) {
-      setMessage('Enter a hotel website URL to crawl.');
+    const seedUrls = parseSeedUrls(crawlUrlsText);
+    if (!seedUrls.length) {
+      setMessage('Enter at least one hotel URL to crawl (one per line).');
       return;
     }
-    const suggestedPid = propertyIdFromUrl(seedUrl);
+    const primarySeed = seedUrls[0];
+    const suggestedPid = propertyIdFromUrl(primarySeed);
     const pid = propertyIdLocked ? (propertyId.trim() || suggestedPid) : suggestedPid;
     setPropertyId(pid);
     setCrawling(true);
     setCrawlJob(null);
-    setMessage('Crawl started — discovering pages…');
+    setMessage(
+      seedUrls.length > 1
+        ? `Crawl started — ${seedUrls.length} sources, discovering pages…`
+        : 'Crawl started — discovering pages…',
+    );
 
     const res = await staffFetch('/api/staff/knowledge/crawl', staffKey, {
       method: 'POST',
-      body: JSON.stringify({ seed_url: seedUrl, property_id: pid }),
+      body: JSON.stringify({ seed_urls: seedUrls, property_id: pid }),
     });
 
     if (!res.ok) {
@@ -305,8 +326,9 @@ export default function StaffOnboardingPage() {
   };
 
   const applySuggestedPropertyId = () => {
-    if (!propertyIdLocked && crawlUrl.trim()) {
-      setPropertyId(propertyIdFromUrl(crawlUrl));
+    const seedUrls = parseSeedUrls(crawlUrlsText);
+    if (!propertyIdLocked && seedUrls.length) {
+      setPropertyId(propertyIdFromUrl(seedUrls[0]));
     }
   };
 
@@ -403,72 +425,81 @@ export default function StaffOnboardingPage() {
 
           <section className="mt-6 rounded-xl border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900/50">
             <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
-              Crawl hotel website
+              Crawl hotel sources
             </h2>
             <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
-              Paste the hotel&apos;s homepage URL — including brand sub-routes like{' '}
-              <span className="font-mono">marriott.com/hotels/your-hotel</span> when the property
-              shares a domain. Discovers amenity, FAQ, and policy pages under that path only.
+              Paste one URL per line. The first line is the hotel website (including brand sub-routes
+              like <span className="font-mono">marriott.com/hotels/your-hotel</span>). Add Booking.com,
+              TripAdvisor, or other listing pages on extra lines — only those pages are fetched, not
+              the whole review site.
             </p>
-            <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_220px_auto]">
+            <div className="mt-4 space-y-3">
               <label className="block min-w-0">
                 <span className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">
-                  Website URL
+                  Source URLs
                 </span>
-                <input
-                  type="url"
-                  value={crawlUrl}
+                <textarea
+                  value={crawlUrlsText}
                   onChange={(e) => {
                     const next = e.target.value;
-                    setCrawlUrl(next);
+                    setCrawlUrlsText(next);
                     if (!propertyIdLocked) {
-                      setPropertyId(propertyIdFromUrl(next));
+                      const first = parseSeedUrls(next)[0];
+                      if (first) setPropertyId(propertyIdFromUrl(first));
                     }
                   }}
                   onBlur={applySuggestedPropertyId}
-                  placeholder="https://www.example-hotel.com"
-                  className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+                  rows={4}
+                  placeholder={'https://www.example-hotel.com\nhttps://www.booking.com/hotel/example.html'}
+                  className="w-full resize-y rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
                 />
               </label>
-              <label className="block min-w-0">
-                <span className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">
-                  Property ID
-                </span>
-                <input
-                  type="text"
-                  value={propertyId}
-                  onChange={(e) => {
-                    setPropertyIdLocked(true);
-                    setPropertyId(e.target.value);
-                  }}
-                  placeholder="auto-from-domain"
-                  className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPropertyIdLocked(false);
-                    setPropertyId(propertyIdFromUrl(crawlUrl));
-                  }}
-                  className="mt-1 text-[11px] text-neutral-500 underline underline-offset-2 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-                >
-                  Auto from URL
-                </button>
-              </label>
-              <div className="flex items-end">
-                <button
-                  type="button"
-                  onClick={startCrawl}
-                  disabled={crawling}
-                  className="w-full rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-900 lg:w-auto lg:whitespace-nowrap"
-                >
-                  {crawling ? 'Crawling…' : 'Start crawl'}
-                </button>
+              <div className="grid gap-3 sm:grid-cols-[1fr_220px_auto]">
+                <div className="hidden sm:block" aria-hidden />
+                <label className="block min-w-0">
+                  <span className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">
+                    Property ID
+                  </span>
+                  <input
+                    type="text"
+                    value={propertyId}
+                    onChange={(e) => {
+                      setPropertyIdLocked(true);
+                      setPropertyId(e.target.value);
+                    }}
+                    placeholder="auto-from-domain"
+                    className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPropertyIdLocked(false);
+                      const first = parseSeedUrls(crawlUrlsText)[0];
+                      if (first) setPropertyId(propertyIdFromUrl(first));
+                    }}
+                    className="mt-1 text-[11px] text-neutral-500 underline underline-offset-2 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+                  >
+                    Auto from URL
+                  </button>
+                </label>
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={startCrawl}
+                    disabled={crawling}
+                    className="w-full rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-900 sm:w-auto sm:whitespace-nowrap"
+                  >
+                    {crawling ? 'Crawling…' : 'Start crawl'}
+                  </button>
+                </div>
               </div>
             </div>
             {crawlJob && (
               <div className="mt-3 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
                 <span className="font-medium capitalize">{crawlJob.status.replace(/_/g, ' ')}</span>
+                {(crawlJob.seed_urls?.length ?? 0) > 1 && (
+                  <span className="ml-2">· {crawlJob.seed_urls!.length} sources</span>
+                )}
                 {crawlJob.pages_discovered != null && (
                   <span className="ml-2">· {crawlJob.pages_discovered} pages found</span>
                 )}

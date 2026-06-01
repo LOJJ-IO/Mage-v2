@@ -45,6 +45,32 @@ _PAGE_SEGMENTS = frozenset(
 
 _GENERIC_PATH_SEGMENTS = frozenset({"en", "en-us", "en-gb", "fr", "de", "es", "hotels", "hotel", "properties"})
 
+# Review / OTA listing pages — crawl the pasted URL only, not the whole site.
+_AGGREGATOR_HOSTS = frozenset(
+    {
+        "booking.com",
+        "tripadvisor.com",
+        "tripadvisor.ca",
+        "expedia.com",
+        "expedia.ca",
+        "hotels.com",
+        "agoda.com",
+        "kayak.com",
+        "priceline.com",
+        "hotwire.com",
+        "trivago.com",
+        "google.com",
+        "google.ca",
+        "yelp.com",
+        "hotels.ca",
+        "travelocity.com",
+        "orbitz.com",
+        "hostelworld.com",
+        "vrbo.com",
+        "airbnb.com",
+    }
+)
+
 
 @dataclass(frozen=True)
 class CrawlScope:
@@ -65,6 +91,37 @@ def normalize_seed_url(raw: str) -> str:
     if "://" not in text:
         text = f"https://{text}"
     return text
+
+
+def is_aggregator_url(url: str) -> bool:
+    """True for OTA/review listing domains where we only crawl the pasted page."""
+    parsed = urlparse(normalize_seed_url(url))
+    host = _normalize_host(parsed.netloc)
+    if host in _AGGREGATOR_HOSTS:
+        return True
+    return any(host.endswith(f".{agg}") for agg in _AGGREGATOR_HOSTS)
+
+
+def collect_seed_urls(
+    seed_url: str | None = None,
+    seed_urls: list[str] | None = None,
+) -> list[str]:
+    """Merge seed_url + seed_urls, normalize, dedupe (order preserved)."""
+    raw: list[str] = []
+    if seed_url and seed_url.strip():
+        raw.append(seed_url.strip())
+    for item in seed_urls or []:
+        if item and item.strip():
+            raw.append(item.strip())
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in raw:
+        normalized = normalize_seed_url(item)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        out.append(normalized)
+    return out
 
 
 def _normalize_host(netloc: str) -> str:

@@ -85,6 +85,46 @@ def test_json_ld_beats_regex_extraction():
     assert facts["property.check_out.time"]["value"] == "11:00 AM"
 
 
+def test_comfort_inn_policy_box_check_in():
+    html = """
+    <html><body>
+    <header><p>Check-in: 3:00 PM Book now</p></header>
+    <section class="about-info-wrap">
+      <div class="about-info-desc">Check-In:</div>
+      <div class="about-info-value">4:00 pm</div>
+      <div class="about-info-desc">Check-Out:</div>
+      <div class="about-info-value">11:00 am</div>
+    </section>
+    </body></html>
+    """
+    facts = extract_facts_from_page("https://www.comfortinnedmonton.com/about-amenities", html)
+    assert facts["property.check_in.time"]["value"] == "4:00 PM"
+    assert facts["property.check_in.time"]["extraction_method"] == "policy_box"
+    assert facts["property.check_out.time"]["value"] == "11:00 AM"
+
+
+def test_comfort_inn_policy_box_wins_over_homepage_widget():
+    homepage = """
+    <html><body>
+    <div class="booking-bar">Check-in: 3:00 PM Select dates Book now</div>
+    </body></html>
+    """
+    amenities = """
+    <html><body>
+    <div class="about-info-desc">Check-In:</div>
+    <div class="about-info-value">4:00 pm</div>
+    </body></html>
+    """
+    merged = normalize_facts(
+        [
+            extract_facts_from_page("https://www.comfortinnedmonton.com/", homepage),
+            extract_facts_from_page("https://www.comfortinnedmonton.com/about-amenities", amenities),
+        ]
+    )
+    assert merged["property.check_in.time"]["value"] == "4:00 PM"
+    assert merged["property.check_in.time"]["extraction_method"] == "policy_box"
+
+
 def test_booking_widget_context_is_ignored_for_times():
     html = """
     <html><body>
@@ -151,3 +191,95 @@ def test_select_urls_applies_faq_quota():
     faq_urls = [url for url in selected if "/faq/" in url]
     assert len(faq_urls) <= 6
     assert "https://hotel.com/about-amenities" in selected
+
+
+def test_collect_seed_urls_dedupes_and_normalizes():
+    from app.knowledge.pipeline.crawl_scope import collect_seed_urls
+
+    urls = collect_seed_urls(
+        "www.hotel.com",
+        ["https://www.hotel.com", "https://booking.com/hotel/example.html"],
+    )
+    assert urls == [
+        "https://www.hotel.com",
+        "https://booking.com/hotel/example.html",
+    ]
+
+
+def test_is_aggregator_url():
+    from app.knowledge.pipeline.crawl_scope import is_aggregator_url
+
+    assert is_aggregator_url("https://www.booking.com/hotel/example.html")
+    assert is_aggregator_url("https://tripadvisor.com/Hotel_Review-g123")
+    assert not is_aggregator_url("https://www.comfortinnedmonton.com/")
+
+
+def test_discover_urls_from_seeds_assigns_budgets(monkeypatch):
+    import asyncio
+
+    from app.knowledge.pipeline.discover import discover_urls_from_seeds
+
+    calls: list[tuple[str, int]] = []
+
+    async def fake_discover(seed: str, *, max_pages: int = 30) -> list[str]:
+        calls.append((seed, max_pages))
+        return [seed]
+
+    monkeypatch.setattr(
+        "app.knowledge.pipeline.discover.discover_urls",
+        fake_discover,
+    )
+
+    result = asyncio.run(
+        discover_urls_from_seeds(
+            [
+                "https://hotel.com",
+                "https://booking.com/hotel/example.html",
+            ]
+        )
+    )
+    assert result == [
+        "https://hotel.com",
+        "https://booking.com/hotel/example.html",
+    ]
+    assert calls[0] == ("https://hotel.com", 30)
+    assert calls[1] == ("https://booking.com/hotel/example.html", 1)
+
+
+def test_open_graph_description_extracts_check_in():
+    html = """
+    <html><head>
+      <meta content="Comfort Inn Downtown Edmonton | Booking.com" property="og:title">
+      <meta property="og:description" content="Check-in from 4:00 PM. Check-out until 11:00 AM. Free breakfast and indoor pool.">
+    </head><body></body></html>
+    """
+    facts = extract_facts_from_page("https://www.booking.com/hotel/example.html", html)
+    assert facts["property.name"]["value"] == "Comfort Inn Downtown Edmonton"
+    assert facts["property.name"]["extraction_method"] == "open_graph"
+    assert facts["property.check_in.time"]["value"] == "4:00 PM"
+    assert facts["property.check_out.time"]["value"] == "11:00 AM"
+
+
+def test_open_graph_meta_attribute_order():
+    html = """
+    <html><head>
+      <meta content="Sandman Hotel Edmonton West" property="og:site_name">
+    </head><body></body></html>
+    """
+    facts = extract_facts_from_page("https://example.com/", html)
+    assert facts["property.name"]["value"] == "Sandman Hotel Edmonton West"
+
+
+def test_open_graph_address_tags():
+    html = """
+    <html><head>
+      <meta property="og:street-address" content="10405 Jasper Avenue">
+      <meta property="og:locality" content="Edmonton">
+      <meta property="og:region" content="AB">
+      <meta property="og:postal-code" content="T5J 3N8">
+      <meta property="og:country-name" content="Canada">
+    </head><body></body></html>
+    """
+    facts = extract_facts_from_page("https://example.com/", html)
+    assert "10405 Jasper Avenue" in facts["property.location"]["value"]
+    assert "Edmonton" in facts["property.location"]["value"]

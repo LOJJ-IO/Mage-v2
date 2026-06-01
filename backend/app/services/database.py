@@ -114,7 +114,13 @@ class DatabaseProtocol(Protocol):
         ...
 
     # Crawl jobs
-    def create_crawl_job(self, property_id: str, seed_url: str) -> dict:
+    def create_crawl_job(
+        self,
+        property_id: str,
+        seed_url: str,
+        *,
+        seed_urls: list[str] | None = None,
+    ) -> dict:
         ...
 
     def get_crawl_job(self, job_id: str) -> Optional[dict]:

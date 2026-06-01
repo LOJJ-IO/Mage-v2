@@ -6,11 +6,14 @@ from urllib.parse import urlparse
 
 _METHOD_WEIGHT = {
     "json_ld": 100,
+    "policy_box": 95,
+    "open_graph": 78,
     "selector": 85,
     "faq": 80,
     "labeled_regex": 70,
     "meta": 60,
     "regex": 40,
+    "booking_widget": 5,
 }
 
 _HIGH_PRIORITY_PATH_TOKENS = (

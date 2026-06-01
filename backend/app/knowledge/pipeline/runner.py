@@ -1,11 +1,12 @@
 """Orchestrate crawl jobs: discover → extract → normalize → upsert facts."""
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 
 from app.knowledge.pipeline.crawl_http import crawl_client
-from app.knowledge.pipeline.discover import discover_urls
+from app.knowledge.pipeline.discover import discover_urls_from_seeds
 from app.knowledge.pipeline.extract import extract_facts_from_page
 from app.knowledge.pipeline.normalize import gap_report, normalize_facts
 from app.knowledge.schema_loader import tier_keys
@@ -21,11 +22,16 @@ async def run_crawl_job(job_id: str) -> dict:
         raise ValueError(f"Unknown crawl job: {job_id}")
 
     property_id = job["property_id"]
-    seed_url = job["seed_url"]
+    seed_urls = job.get("seed_urls") or [job["seed_url"]]
+    if isinstance(seed_urls, str):
+        try:
+            seed_urls = json.loads(seed_urls)
+        except json.JSONDecodeError:
+            seed_urls = [job["seed_url"]]
     db.update_crawl_job(job_id, status="running", started_at=datetime.utcnow())
 
     try:
-        urls = await discover_urls(seed_url)
+        urls = await discover_urls_from_seeds(seed_urls)
         db.update_crawl_job(job_id, pages_discovered=len(urls))
         batches = []
 
