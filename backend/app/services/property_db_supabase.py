@@ -328,12 +328,20 @@ class PropertyStoreSupabase:
             logger.error("Error getting snapshot: %s", e)
             return None
 
-    def create_crawl_job(self, property_id: str, seed_url: str) -> dict:
+    def create_crawl_job(
+        self,
+        property_id: str,
+        seed_url: str,
+        *,
+        seed_urls: list[str] | None = None,
+    ) -> dict:
         job_id = str(uuid.uuid4())
+        urls = seed_urls or [seed_url]
         row = {
             "id": job_id,
             "property_id": property_id,
             "seed_url": seed_url,
+            "seed_urls": urls,
             "status": "pending",
         }
         try:

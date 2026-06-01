@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS crawl_jobs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   property_id VARCHAR(64) NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
   seed_url TEXT NOT NULL,
+  seed_urls JSONB,
   status VARCHAR(32) NOT NULL DEFAULT 'pending',
   pages_discovered INT NOT NULL DEFAULT 0,
   pages_extracted INT NOT NULL DEFAULT 0,
@@ -176,3 +177,6 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO property_integrations (property_id, pms_type, config_json)
 VALUES ('grand-horizon', 'mock', '{"fixture": "default"}')
 ON CONFLICT (property_id, pms_type) DO NOTHING;
+
+-- Multi-source crawl jobs (hotel site + OTA listing URLs)
+ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS seed_urls JSONB;

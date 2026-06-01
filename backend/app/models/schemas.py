@@ -190,7 +190,8 @@ class PropertyFactPatch(BaseModel):
 
 class CrawlJobRequest(BaseModel):
     """Start a discover/extract crawl for a property."""
-    seed_url: str
+    seed_url: Optional[str] = None
+    seed_urls: Optional[list[str]] = None
     property_id: Optional[str] = None
 
 

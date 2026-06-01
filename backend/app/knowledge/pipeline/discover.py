@@ -12,6 +12,7 @@ from app.knowledge.pipeline.crawl_http import crawl_client
 from app.knowledge.pipeline.crawl_scope import (
     CrawlScope,
     crawl_scope_from_seed,
+    is_aggregator_url,
     normalize_seed_url,
     prioritize_scoped_urls,
     url_under_scope,
@@ -400,11 +401,29 @@ async def _fallback_seed_only(client, scope: CrawlScope) -> Set[str]:
     return found
 
 
+async def _discover_single_page(client, raw: str) -> list[str]:
+    """Resolve redirects and return only the listing page (OTAs, review sites)."""
+    try:
+        resp = await client.get(raw)
+        if resp.status_code < 400:
+            return [_clean_url(str(resp.url))]
+    except Exception as e:
+        logger.debug("Single-page resolve failed %s: %s", raw, e)
+    cleaned = _clean_url(normalize_seed_url(raw))
+    return [cleaned] if cleaned else []
+
+
 async def discover_urls(seed_url: str, *, max_pages: int = 30) -> list[str]:
     """Discover pages from sitemap, scoped to the hotel path when applicable."""
     raw = normalize_seed_url(seed_url)
     if not raw:
         return []
+
+    if is_aggregator_url(raw):
+        async with crawl_client(timeout=_PROBE_TIMEOUT) as client:
+            urls = await _discover_single_page(client, raw)
+        logger.info("Aggregator seed %s — single page only", raw)
+        return urls[:max_pages]
 
     async with crawl_client(timeout=_PROBE_TIMEOUT) as client:
         resolved = raw
@@ -447,3 +466,58 @@ async def discover_urls(seed_url: str, *, max_pages: int = 30) -> list[str]:
         scope.path_prefix or "whole-domain",
     )
     return urls
+
+
+async def discover_urls_from_seeds(
+    seed_urls: list[str],
+    *,
+    max_pages: int = 40,
+) -> list[str]:
+    """Discover crawl targets from one or more seed URLs (hotel site + OTA listings)."""
+    seeds = [normalize_seed_url(u) for u in seed_urls if normalize_seed_url(u)]
+    if not seeds:
+        return []
+
+    primary_host = urlparse(seeds[0]).netloc
+    merged: list[str] = []
+    seen: set[str] = set()
+
+    for idx, seed in enumerate(seeds):
+        remaining = max_pages - len(merged)
+        if remaining <= 0:
+            break
+
+        is_primary = idx == 0
+        seed_host = urlparse(seed).netloc
+        same_site = _normalize_host(seed_host) == _normalize_host(primary_host)
+
+        if is_aggregator_url(seed):
+            budget = 1
+        elif is_primary:
+            budget = min(30, remaining)
+        elif same_site:
+            budget = min(10, remaining)
+        else:
+            budget = min(3, remaining)
+
+        found = await discover_urls(seed, max_pages=budget)
+        for url in found:
+            if url not in seen:
+                seen.add(url)
+                merged.append(url)
+            if len(merged) >= max_pages:
+                break
+
+    logger.info(
+        "Discovered %d URLs from %d seed(s)",
+        len(merged),
+        len(seeds),
+    )
+    return merged[:max_pages]
+
+
+def _normalize_host(netloc: str) -> str:
+    host = (netloc or "").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    return host

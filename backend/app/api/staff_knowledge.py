@@ -6,7 +6,7 @@ from urllib.parse import unquote
 
 from app.api.staff import verify_staff_key
 from app.core.config import get_settings
-from app.knowledge.pipeline.crawl_scope import property_id_from_url
+from app.knowledge.pipeline.crawl_scope import collect_seed_urls, property_id_from_url
 from app.knowledge.property_helpers import ensure_property_for_crawl
 from app.knowledge.pipeline.runner import run_crawl_job
 from app.knowledge.schema_loader import get_slots, slot_by_key
@@ -104,20 +104,21 @@ async def start_crawl(
     _: None = Depends(verify_staff_key),
 ):
     db = get_database()
-    seed = (body.seed_url or "").strip()
-    if not seed:
-        raise HTTPException(status_code=400, detail="seed_url is required")
+    seeds = collect_seed_urls(body.seed_url, body.seed_urls)
+    if not seeds:
+        raise HTTPException(status_code=400, detail="At least one seed URL is required")
 
-    suggested_property_id = property_id_from_url(seed)
+    primary_seed = seeds[0]
+    suggested_property_id = property_id_from_url(primary_seed)
     requested_property_id = (body.property_id or "").strip()
     property_id = (
         suggested_property_id
         if requested_property_id.lower() in _AUTO_PROPERTY_IDS
         else requested_property_id
     ) or suggested_property_id
-    ensure_property_for_crawl(db, property_id, seed)
+    ensure_property_for_crawl(db, property_id, primary_seed)
 
-    job = db.create_crawl_job(property_id, seed if "://" in seed else f"https://{seed}")
+    job = db.create_crawl_job(property_id, primary_seed, seed_urls=seeds)
     background_tasks.add_task(run_crawl_job, job["id"])
     return {**job, "property_id": property_id}
 

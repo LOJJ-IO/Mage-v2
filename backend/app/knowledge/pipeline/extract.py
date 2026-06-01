@@ -172,20 +172,73 @@ def _extract_hours_near(
     return best_range or best_single
 
 
+def _time_context_score(context: str) -> int:
+    lower = context.lower()
+    score = 0
+    if "about-info-value" in lower or "about-info-desc" in lower:
+        score += 120
+    if "information" in lower and "polic" in lower:
+        score += 80
+    if _looks_like_booking_widget_context(context):
+        score -= 100
+    if any(token in lower for token in ("book now", "get reservation", "booking widget", "close booking")):
+        score -= 80
+    return score
+
+
 def _extract_labeled_time(text: str, labels: list[str]) -> str | None:
+    best_value: str | None = None
+    best_score = -999
     for label in labels:
         pattern = re.compile(
             rf"(?i){re.escape(label)}[^.\n]{{0,50}}?({_TIME}(?:\s*(?:[-–—]|to|until|through)\s*{_TIME})?)",
         )
-        match = pattern.search(text)
-        if match:
-            context = text[max(0, match.start() - 120) : match.end() + 120]
-            if _looks_like_booking_widget_context(context):
-                continue
+        for match in pattern.finditer(text):
+            context = text[max(0, match.start() - 160) : match.end() + 160]
             value = _normalize_time_token(match.group(1))
-            if _is_valid_time_value(value):
-                return value
-    return None
+            if not _is_valid_time_value(value):
+                continue
+            score = _time_context_score(context)
+            if score > best_score:
+                best_score = score
+                best_value = value
+    if best_score < 0:
+        return None
+    return best_value
+
+
+_POLICY_LABEL_SLOTS: dict[str, str] = {
+    "check-in": "property.check_in.time",
+    "check in": "property.check_in.time",
+    "check-out": "property.check_out.time",
+    "check out": "property.check_out.time",
+    "pets allowed": "policies.pets.allowed",
+    "valet parking": "parking.valet.available",
+}
+
+
+def _extract_policy_info_boxes(html: str) -> dict[str, tuple[Any, float]]:
+    """Parse structured hotel policy blocks (e.g. Choice Hotels about-info boxes)."""
+    facts: dict[str, tuple[Any, float]] = {}
+    for match in re.finditer(
+        r'(?is)<div[^>]+class=["\'][^"\']*about-info-desc[^"\']*["\'][^>]*>(.*?)</div>\s*'
+        r'<div[^>]+class=["\'][^"\']*about-info-value[^"\']*["\'][^>]*>(.*?)</div>',
+        html,
+    ):
+        label = _clean_html_text(match.group(1)).rstrip(":").strip().lower()
+        value = _clean_html_text(match.group(2))
+        slot = _POLICY_LABEL_SLOTS.get(label)
+        if not slot or not value:
+            continue
+        if slot.endswith(".time"):
+            normalized = _normalize_time_value(value)
+            if normalized:
+                facts[slot] = (normalized, 0.93)
+        elif slot == "parking.valet.available":
+            facts[slot] = (value.lower() in ("yes", "true", "available"), 0.85)
+        else:
+            facts[slot] = (value, 0.88)
+    return facts
 
 
 def _normalize_time_value(raw: str) -> str | None:
@@ -316,20 +369,159 @@ def _clean_property_name(name: str) -> str | None:
     return cleaned
 
 
-def _extract_meta_facts(html: str) -> dict[str, tuple[Any, float]]:
-    facts: dict[str, tuple[Any, float]] = {}
-    for pattern in (
-        r'(?is)<meta[^>]+property=["\']og:site_name["\'][^>]+content=["\']([^"\']+)["\']',
-        r'(?is)<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)["\']',
-        r'(?is)<meta[^>]+name=["\']twitter:title["\'][^>]+content=["\']([^"\']+)["\']',
-    ):
-        match = re.search(pattern, html)
-        if match:
-            name = _clean_property_name(_clean_html_text(match.group(1)))
-            if name:
-                facts["property.name"] = (name, 0.75)
+def _parse_meta_tags(html: str) -> dict[str, str]:
+    """Parse meta name/property/itemprop → content (attribute order agnostic)."""
+    tags: dict[str, str] = {}
+    for match in re.finditer(r"(?is)<meta\b[^>]*>", html):
+        tag = match.group(0)
+        key: str | None = None
+        for attr in ("property", "name", "itemprop"):
+            attr_match = re.search(rf'(?is)\b{attr}=["\']([^"\']+)["\']', tag)
+            if attr_match:
+                key = attr_match.group(1).strip().lower()
                 break
+        if not key:
+            continue
+        content_match = re.search(r'(?is)\bcontent=["\']([^"\']*)["\']', tag)
+        if not content_match:
+            continue
+        content = _clean_html_text(content_match.group(1))
+        if content:
+            tags[key] = content
+    return tags
+
+
+_OG_TITLE_SUFFIX_RE = re.compile(
+    r"(?i)\s*[|\-–—]\s*(?:"
+    r"booking\.com|tripadvisor|expedia|hotels\.com|agoda|kayak|google|official site|book direct"
+    r").*$",
+)
+
+
+def _clean_og_title(title: str) -> str | None:
+    trimmed = _OG_TITLE_SUFFIX_RE.sub("", title or "").strip()
+    return _clean_property_name(trimmed)
+
+
+def _extract_facts_from_rich_text(
+    text: str,
+    *,
+    base_confidence: float = 0.76,
+) -> dict[str, tuple[Any, float]]:
+    """Pull slot values from OG descriptions and other compact meta text."""
+    facts: dict[str, tuple[Any, float]] = {}
+    if not text or len(text) < 12:
+        return facts
+
+    check_in = _extract_labeled_time(text, ["check-in", "check in", "checkin", "arrival from", "arrival"])
+    if check_in:
+        facts["property.check_in.time"] = (check_in, base_confidence + 0.04)
+    check_out = _extract_labeled_time(
+        text,
+        ["check-out", "check out", "checkout", "departure until", "departure"],
+    )
+    if check_out:
+        facts["property.check_out.time"] = (check_out, base_confidence + 0.04)
+
+    rich_slots = (
+        "dining.breakfast.hours",
+        "amenities.pool.hours",
+        "amenities.fitness.hours",
+        "property.front_desk.phone",
+    )
+    for slot_key in rich_slots:
+        keywords = _SLOT_KEYWORDS.get(slot_key, [])
+        if slot_key.endswith(".hours"):
+            hours = _extract_hours_near(text, keywords, require_range=True)
+            if hours:
+                facts[slot_key] = (hours, base_confidence)
+        elif slot_key == "property.front_desk.phone":
+            phone = _extract_phone_near(text, keywords) or _extract_phone_near(text, ["phone", "tel", "call"])
+            if phone:
+                facts[slot_key] = (phone, base_confidence)
+
+    pet = _extract_pet_policy(text)
+    if pet:
+        facts["policies.pets.allowed"] = (pet, base_confidence - 0.04)
+    for key, value in _extract_parking(text).items():
+        facts[key] = (value, base_confidence - 0.06)
     return facts
+
+
+def _extract_open_graph_facts(html: str) -> dict[str, tuple[Any, float]]:
+    """Extract hotel facts from Open Graph, Twitter Card, and standard meta tags."""
+    meta = _parse_meta_tags(html)
+    if not meta:
+        return {}
+
+    facts: dict[str, tuple[Any, float]] = {}
+
+    for name_key, confidence in (
+        ("og:site_name", 0.86),
+        ("application-name", 0.84),
+        ("og:title", 0.8),
+        ("twitter:title", 0.78),
+        ("twitter:site", 0.72),
+    ):
+        raw = meta.get(name_key)
+        if not raw:
+            continue
+        name = _clean_og_title(raw) if "title" in name_key else _clean_property_name(raw)
+        if name:
+            facts["property.name"] = (name, confidence)
+            break
+
+    description = (
+        meta.get("og:description")
+        or meta.get("twitter:description")
+        or meta.get("description")
+    )
+    if description:
+        for key, (value, confidence) in _extract_facts_from_rich_text(description).items():
+            facts.setdefault(key, (value, confidence))
+
+    address_parts = [
+        meta.get("og:street-address"),
+        meta.get("og:locality"),
+        meta.get("og:region"),
+        meta.get("og:postal-code"),
+        meta.get("og:country-name"),
+    ]
+    location = ", ".join(str(part).strip() for part in address_parts if part and str(part).strip())
+    if location:
+        facts["property.location"] = (location, 0.84)
+
+    lat = meta.get("place:location:latitude") or meta.get("og:latitude")
+    lng = meta.get("place:location:longitude") or meta.get("og:longitude")
+    if not lat and meta.get("geo.position"):
+        parts = meta["geo.position"].split(";")
+        if parts:
+            lat = parts[0].strip()
+            lng = parts[1].strip() if len(parts) > 1 else lng
+    if lat and lng:
+        facts["property.location"] = (f"{lat}, {lng}", 0.8)
+
+    for meta_key, content in meta.items():
+        key_lower = meta_key.lower()
+        if re.search(r"check[_-]?in(?:time)?|checkintime", key_lower):
+            normalized = _normalize_time_value(content)
+            if normalized:
+                facts["property.check_in.time"] = (normalized, 0.9)
+        elif re.search(r"check[_-]?out(?:time)?|checkouttime", key_lower):
+            normalized = _normalize_time_value(content)
+            if normalized:
+                facts["property.check_out.time"] = (normalized, 0.9)
+        elif re.search(r"telephone|phone(?:number)?", key_lower) and "iphone" not in key_lower:
+            phone = _extract_phone_near(content, ["phone", "tel"]) or content.strip()
+            if phone and _PHONE.search(phone):
+                facts["property.front_desk.phone"] = (phone, 0.86)
+
+    return facts
+
+
+def _extract_meta_facts(html: str) -> dict[str, tuple[Any, float]]:
+    """Backward-compatible alias for Open Graph/meta extraction."""
+    return _extract_open_graph_facts(html)
 
 
 def _extract_attr_value(tag: str) -> str:
@@ -494,16 +686,14 @@ def _extract_amenities_summary(html: str, text: str) -> str | None:
 
 
 def _extract_property_name(html: str, url: str) -> str | None:
-    # Prefer explicit social metadata when available.
-    for pattern in (
-        r'(?is)<meta[^>]+property=["\']og:site_name["\'][^>]+content=["\']([^"\']+)["\']',
-        r'(?is)<meta[^>]+name=["\']og:site_name["\'][^>]+content=["\']([^"\']+)["\']',
-    ):
-        match = re.search(pattern, html)
-        if match:
-            name = _strip_html(match.group(1)).strip()
-            if 3 < len(name) < 120:
-                return name
+    meta = _parse_meta_tags(html)
+    for key in ("og:site_name", "application-name", "og:title", "twitter:title"):
+        raw = meta.get(key)
+        if not raw:
+            continue
+        name = _clean_og_title(raw) if "title" in key else _clean_property_name(raw)
+        if name:
+            return name
 
     title = re.search(r"(?is)<title[^>]*>(.*?)</title>", html)
     if not title:
@@ -616,8 +806,9 @@ def extract_facts_from_page(
 
     for method_name, structured_facts in (
         ("json_ld", _extract_json_ld(html)),
+        ("policy_box", _extract_policy_info_boxes(html)),
+        ("open_graph", _extract_open_graph_facts(html)),
         ("selector", _extract_selector_facts(html)),
-        ("meta", _extract_meta_facts(html)),
     ):
         for key, (value, confidence) in structured_facts.items():
             set_slot(key, value, confidence, extraction_method=method_name)
@@ -644,7 +835,16 @@ def extract_facts_from_page(
             hours = _extract_hours_near(text, keywords, require_range=slot_key.endswith(".hours"))
             if hours:
                 conf = 0.75 if page_type in slot_key.split(".")[0] else 0.65
-                set_slot(slot_key, hours, conf)
+                method = "regex"
+                if slot_key in ("property.check_in.time", "property.check_out.time"):
+                    sample = text.lower()
+                    idx = sample.find(keywords[0]) if keywords else -1
+                    if idx >= 0:
+                        ctx = text[max(0, idx - 160) : idx + 220]
+                        if _time_context_score(ctx) < 0:
+                            method = "booking_widget"
+                            conf = 0.2
+                set_slot(slot_key, hours, conf, extraction_method=method)
         elif slot_key == "property.front_desk.phone":
             phone = _extract_phone_near(text, keywords)
             if phone:
