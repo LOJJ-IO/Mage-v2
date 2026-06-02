@@ -106,6 +106,9 @@ class Settings(BaseSettings):
     hotel_timezone: str = os.getenv("HOTEL_TIMEZONE", "America/Edmonton")
     hotel_front_desk_phone: str = os.getenv("HOTEL_FRONT_DESK_PHONE", "")
 
+    # Google Places API key for hotel pre-enrichment (optional).
+    google_places_api_key: str = os.getenv("GOOGLE_PLACES_API_KEY", "")
+
     staff_access_key: str = os.getenv("STAFF_ACCESS_KEY", "mage-staff-dev")
 
     # Multi-tenant / property scope (single-hotel pilots set PROPERTY_ID)
