@@ -143,6 +143,7 @@ CREATE TABLE IF NOT EXISTS crawl_jobs (
   pages_discovered INT NOT NULL DEFAULT 0,
   pages_extracted INT NOT NULL DEFAULT 0,
   error_message TEXT,
+  notes TEXT,
   started_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

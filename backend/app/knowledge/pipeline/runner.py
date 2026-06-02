@@ -9,8 +9,10 @@ from app.knowledge.pipeline.crawl_http import crawl_client
 from app.knowledge.pipeline.discover import discover_urls_from_seeds
 from app.knowledge.pipeline.extract import extract_facts_from_page
 from app.knowledge.pipeline.normalize import gap_report, normalize_facts
+from app.knowledge.pipeline.places_enrichment import enrich_from_places
 from app.knowledge.schema_loader import tier_keys
 from app.services.database import get_database
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +33,36 @@ async def run_crawl_job(job_id: str) -> dict:
     db.update_crawl_job(job_id, status="running", started_at=datetime.utcnow())
 
     try:
+        batches = []
+
+        # Step 0: Pre-enrichment from Google Places API
+        # Non-fatal: even if Places fails, crawling still proceeds.
+        settings = get_settings()
+        places_api_key = getattr(settings, "google_places_api_key", "") or ""
+        if places_api_key:
+            try:
+                places_facts = await enrich_from_places(
+                    seed_url=seed_urls[0],
+                    api_key=places_api_key,
+                )
+                if places_facts:
+                    batches.append(places_facts)
+                    logger.info("Places pre-enrichment: %d facts for job %s", len(places_facts), job_id)
+                    # Best-effort: record enrichment status for the UI.
+                    # (If `notes` column doesn't exist yet, the DB layer will just log the error.)
+                    try:
+                        db.update_crawl_job(
+                            job_id,
+                            notes=f"places_enriched:{len(places_facts)}_slots",
+                        )
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.warning("Places enrichment failed (non-fatal): %s", e)
+
+        # Step 1: Discover URLs for crawling
         urls = await discover_urls_from_seeds(seed_urls)
         db.update_crawl_job(job_id, pages_discovered=len(urls))
-        batches = []
 
         pages_blocked = 0
         pages_with_facts = 0
