@@ -1,0 +1,390 @@
+.knowledge-onboarding {
+  --color-border-secondary: #d4d4d4;
+  --color-border-tertiary: #e5e5e5;
+  --color-text-primary: #171717;
+  --color-text-secondary: #525252;
+  --color-text-tertiary: #737373;
+  --color-background-secondary: #f5f5f5;
+  --color-background-info: #eff6ff;
+  --color-text-info: #1d4ed8;
+  --color-border-info: #93c5fd;
+  --border-radius-md: 8px;
+}
+
+.dark .knowledge-onboarding {
+  --color-border-secondary: #404040;
+  --color-border-tertiary: #333333;
+  --color-text-primary: #fafafa;
+  --color-text-secondary: #a3a3a3;
+  --color-text-tertiary: #737373;
+  --color-background-secondary: #262626;
+  --color-background-info: #1e3a5f;
+  --color-text-info: #93c5fd;
+  --color-border-info: #2563eb;
+}
+
+.knowledge-onboarding .tog {
+  font-size: 13px;
+  padding: 5px 14px;
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.knowledge-onboarding .tog.active-yes {
+  background: #e1f5ee;
+  color: #0f6e56;
+  border-color: #1d9e75;
+}
+
+.knowledge-onboarding .tog.active-no {
+  background: #fcebeb;
+  color: #a32d2d;
+  border-color: #e24b4a;
+}
+
+.knowledge-onboarding .time-input {
+  width: 52px;
+  font-size: 14px;
+  padding: 4px 6px;
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  text-align: center;
+}
+
+.knowledge-onboarding .text-input {
+  flex: 1;
+  font-size: 14px;
+  padding: 6px 10px;
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+.knowledge-onboarding .ampm {
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.knowledge-onboarding .ampm.active {
+  background: var(--color-background-info);
+  color: var(--color-text-info);
+  border-color: var(--color-border-info);
+}
+
+.knowledge-onboarding .preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.knowledge-onboarding .preset {
+  font-size: 11px;
+  padding: 3px 8px;
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.knowledge-onboarding .preset:hover {
+  background: var(--color-background-secondary);
+}
+
+.knowledge-onboarding .time-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.knowledge-onboarding .mc-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.knowledge-onboarding .mc-option {
+  text-align: left;
+  font-size: 13px;
+  padding: 8px 12px;
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.knowledge-onboarding .mc-option:hover {
+  background: var(--color-background-secondary);
+}
+
+.knowledge-onboarding .mc-option.mc-selected {
+  background: #e1f5ee;
+  color: #0f6e56;
+  border-color: #1d9e75;
+}
+
+.knowledge-onboarding .field-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  border-radius: 12px;
+  border: 0.5px solid var(--color-border-secondary);
+  background: white;
+  padding: 1rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.dark .knowledge-onboarding .field-card {
+  background: #171717;
+}
+
+.knowledge-onboarding .field-card.green {
+  border-left: 3px solid #1d9e75;
+}
+
+.knowledge-onboarding .field-card.yellow {
+  border-left: 3px solid #ba7517;
+}
+
+.knowledge-onboarding .field-card.empty {
+  border-left: 3px solid var(--color-border-tertiary);
+}
+
+.knowledge-onboarding .field-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.knowledge-onboarding .field-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.knowledge-onboarding .tier-pill {
+  margin-left: 0.5rem;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-tertiary);
+}
+
+.knowledge-onboarding .badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.knowledge-onboarding .badge.confirmed {
+  background: #e1f5ee;
+  color: #0f6e56;
+}
+
+.knowledge-onboarding .badge.verify {
+  background: #faeeda;
+  color: #854f0b;
+}
+
+.knowledge-onboarding .badge.unknown {
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary);
+}
+
+.knowledge-onboarding .field-value {
+  font-size: 14px;
+  color: var(--color-text-primary);
+}
+
+.knowledge-onboarding .field-source {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledge-onboarding .field-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.knowledge-onboarding .btn-confirm {
+  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: var(--border-radius-md);
+  background: #1d9e75;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.knowledge-onboarding .btn-confirm:hover {
+  background: #0f6e56;
+}
+
+.knowledge-onboarding .btn-edit {
+  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: var(--border-radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: 0.5px solid var(--color-border-secondary);
+  cursor: pointer;
+}
+
+.knowledge-onboarding .skip-link {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  text-decoration: underline;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.knowledge-onboarding .progress-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.knowledge-onboarding .prog-block {
+  flex: 1;
+  min-width: 160px;
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-md);
+  padding: 0.75rem 1rem;
+}
+
+.knowledge-onboarding .prog-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.35rem;
+}
+
+.knowledge-onboarding .prog-bar-bg {
+  height: 6px;
+  background: var(--color-border-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.knowledge-onboarding .prog-bar {
+  height: 6px;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.knowledge-onboarding .prog-count {
+  margin-top: 0.35rem;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.knowledge-onboarding .staff-knowledge-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 0.5px solid var(--color-border-tertiary);
+}
+
+.knowledge-onboarding .field-question {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.25rem;
+}
+
+.knowledge-onboarding .section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.knowledge-onboarding .confirm-all-btn {
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: var(--border-radius-md);
+  background: #e1f5ee;
+  color: #0f6e56;
+  border: 0.5px solid #1d9e75;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.knowledge-onboarding .confirm-all-btn:hover {
+  background: #c8ebe0;
+}
+
+.crawl-complete-banner {
+  background: #e1f5ee;
+  border: 0.5px solid #1d9e75;
+  border-radius: var(--border-radius-md);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: #0f6e56;
+  font-size: 14px;
+}
+
+.crawl-complete-banner button {
+  font-size: 13px;
+  padding: 4px 12px;
+  border: 0.5px solid #1d9e75;
+  border-radius: var(--border-radius-md);
+  background: transparent;
+  color: #0f6e56;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.knowledge-onboarding .nav-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.knowledge-onboarding .nav-link:hover {
+  background: white;
+  color: var(--color-text-primary);
+}
+
+.knowledge-onboarding .branch-child {
+  margin-left: 1rem;
+  border-left: 2px solid var(--color-border-tertiary);
+  padding-left: 0.75rem;
+}

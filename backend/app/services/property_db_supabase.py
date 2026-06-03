@@ -248,6 +248,7 @@ class PropertyStoreSupabase:
         confidence: Optional[float] = None,
         source_url: Optional[str] = None,
         source_snippet: Optional[str] = None,
+        extraction_method: Optional[str] = None,
         updated_by: Optional[str] = None,
     ) -> dict:
         row = {
@@ -261,6 +262,8 @@ class PropertyStoreSupabase:
             "updated_at": datetime.utcnow().isoformat(),
             "updated_by": updated_by,
         }
+        if extraction_method is not None:
+            row["extraction_method"] = extraction_method
         try:
             existing = (
                 self.client.table("property_facts")
