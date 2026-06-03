@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +13,14 @@ from app.services import transcription_service
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+# Playwright requires subprocess-capable event loops on Windows.
+# Force Proactor policy to avoid NotImplementedError from Selector loops.
+if sys.platform == "win32":
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    except Exception:
+        pass
 
 # Ensure app loggers (e.g. llm_service, database) show in the terminal
 logging.basicConfig(

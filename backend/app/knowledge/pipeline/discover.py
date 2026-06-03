@@ -8,7 +8,7 @@ from typing import Set
 from urllib.parse import urljoin, urlparse, urlunparse
 from xml.etree import ElementTree
 
-from app.knowledge.pipeline.crawl_http import crawl_client
+from app.knowledge.pipeline.crawl_http import crawl_client, fetch_page
 from app.knowledge.pipeline.crawl_scope import (
     CrawlScope,
     crawl_scope_from_seed,
@@ -121,6 +121,34 @@ def _is_crawlable_url(url: str) -> bool:
     return True
 
 
+def _parse_urls_from_text(text: str) -> list[str]:
+    """Extract http(s) URLs from plain text or markdown (e.g. Jina-rendered sitemap)."""
+    return re.findall(r"https?://[^\s<>\"']+", text or "")
+
+
+def _is_page_sitemap_url(url: str) -> bool:
+    lower = url.lower()
+    if "image" in lower and "sitemap" in lower:
+        return False
+    return lower.endswith(".xml") or "sitemap" in lower
+
+
+def _sort_sitemap_candidates(urls: list[str]) -> list[str]:
+    """Prefer standard sitemap.xml over image/other variants."""
+
+    def rank(u: str) -> tuple[int, str]:
+        path = urlparse(u).path.lower()
+        if path.endswith("/sitemap.xml") or path == "/sitemap.xml":
+            return (0, u)
+        if "sitemap_index" in path or "sitemap-index" in path:
+            return (1, u)
+        if "image" in path:
+            return (9, u)
+        return (2, u)
+
+    return sorted(dict.fromkeys(urls), key=rank)
+
+
 def _parse_locs_from_xml(text: str) -> tuple[list[str], list[str]]:
     page_locs: list[str] = []
     sitemap_locs: list[str] = []
@@ -153,15 +181,19 @@ def _parse_locs_from_xml(text: str) -> tuple[list[str], list[str]]:
 
 async def _fetch_text(client, url: str) -> str | None:
     try:
-        resp = await client.get(url)
-        if resp.status_code != 200 or not resp.text:
-            if resp.status_code in (403, 503):
-                logger.warning("Blocked fetching %s (HTTP %s)", url, resp.status_code)
+        res = await fetch_page(client, url, allow_playwright_fallback=True)
+        if res.status_code != 200 or not res.text:
+            logger.debug(
+                "Fetch not usable for %s (status=%s, method=%s, chars=%d)",
+                url,
+                res.status_code,
+                res.method,
+                len(res.text or ""),
+            )
             return None
-        if "Attention Required!" in resp.text and "Cloudflare" in resp.text:
-            logger.warning("Cloudflare challenge when fetching %s", url)
-            return None
-        return resp.text
+        if res.method not in ("httpx", "httpx_googlebot", "httpx_browser"):
+            logger.info("Fallback fetch via %s succeeded for %s", res.method, url)
+        return res.text
     except Exception as e:
         logger.debug("Fetch failed %s: %s", url, e)
     return None
@@ -175,9 +207,9 @@ async def _sitemap_urls_from_robots(client, base: str) -> list[str]:
     for line in text.splitlines():
         if line.lower().startswith("sitemap:"):
             candidate = line.split(":", 1)[1].strip()
-            if candidate:
+            if candidate and _is_page_sitemap_url(candidate):
                 urls.append(candidate)
-    return urls
+    return _sort_sitemap_candidates(urls)
 
 
 def _filter_for_scope(urls: Set[str], scope: CrawlScope) -> Set[str]:
@@ -208,9 +240,17 @@ async def _collect_from_sitemap(
     if not text:
         return set()
 
-    page_locs, nested = _parse_locs_from_xml(text)
-    found: Set[str] = set()
     seed_netloc = urlparse(scope.seed_url).netloc
+    page_locs, nested = _parse_locs_from_xml(text)
+    if not page_locs and not nested:
+        for raw_url in _parse_urls_from_text(text):
+            cleaned = _clean_url(raw_url)
+            if cleaned.lower().endswith(".xml") and "sitemap" in cleaned.lower():
+                nested.append(cleaned)
+            elif _same_site(cleaned, seed_netloc):
+                page_locs.append(cleaned)
+
+    found: Set[str] = set()
 
     for loc in page_locs:
         url = _clean_url(loc)
@@ -258,10 +298,9 @@ def _sitemap_candidates_for_scope(scope: CrawlScope) -> list[str]:
 
 
 async def _discover_from_sitemaps(client, scope: CrawlScope) -> Set[str]:
-    candidates = _sitemap_candidates_for_scope(scope)
-    for url in await _sitemap_urls_from_robots(
-        client, f"{urlparse(scope.seed_url).scheme}://{urlparse(scope.seed_url).netloc}"
-    ):
+    base = f"{urlparse(scope.seed_url).scheme}://{urlparse(scope.seed_url).netloc}"
+    candidates = _sort_sitemap_candidates(_sitemap_candidates_for_scope(scope))
+    for url in await _sitemap_urls_from_robots(client, base):
         if url not in candidates:
             candidates.insert(0, url)
 
@@ -278,14 +317,25 @@ async def _discover_from_sitemaps(client, scope: CrawlScope) -> Set[str]:
 
 
 async def _url_exists(client, url: str) -> str | None:
-    """Return canonical URL if page exists; use GET (many sites reject HEAD)."""
+    """Return canonical URL if page exists; use fetch_page with fallbacks."""
     try:
-        resp = await client.get(url, timeout=_PROBE_TIMEOUT)
-        if resp.status_code < 400:
-            return _clean_url(str(resp.url))
+        res = await fetch_page(client, url, allow_playwright_fallback=True)
+        if res.status_code == 200 and res.text:
+            return _clean_url(res.final_url)
     except Exception:
         pass
     return None
+
+
+async def _discover_whole_domain_path_guesses(client, scope: CrawlScope) -> Set[str]:
+    """Try common hotel subpages at domain root when sitemap/seed links fail."""
+    parsed = urlparse(scope.seed_url)
+    base = f"{parsed.scheme}://{parsed.netloc}"
+    candidates = [urljoin(base, suffix) for suffix in _SCOPED_PATH_SUFFIXES]
+    candidates.append(_clean_url(scope.seed_url))
+
+    results = await asyncio.gather(*(_url_exists(client, url) for url in candidates))
+    return {u for u in results if u}
 
 
 async def _discover_scoped_path_guesses(client, scope: CrawlScope) -> Set[str]:
@@ -391,9 +441,9 @@ def _select_urls(urls: Set[str], scope: CrawlScope, max_pages: int) -> list[str]
 async def _fallback_seed_only(client, scope: CrawlScope) -> Set[str]:
     found: Set[str] = set()
     try:
-        resp = await client.get(scope.seed_url)
-        if resp.status_code < 400:
-            final = _clean_url(str(resp.url))
+        res = await fetch_page(client, scope.seed_url, allow_playwright_fallback=True)
+        if res.status_code == 200 and res.text:
+            final = _clean_url(res.final_url)
             if url_under_scope(final, scope):
                 found.add(final)
     except Exception as e:
@@ -404,9 +454,9 @@ async def _fallback_seed_only(client, scope: CrawlScope) -> Set[str]:
 async def _discover_single_page(client, raw: str) -> list[str]:
     """Resolve redirects and return only the listing page (OTAs, review sites)."""
     try:
-        resp = await client.get(raw)
-        if resp.status_code < 400:
-            return [_clean_url(str(resp.url))]
+        res = await fetch_page(client, raw, allow_playwright_fallback=True)
+        if res.status_code == 200 and res.text:
+            return [_clean_url(res.final_url)]
     except Exception as e:
         logger.debug("Single-page resolve failed %s: %s", raw, e)
     cleaned = _clean_url(normalize_seed_url(raw))
@@ -428,9 +478,9 @@ async def discover_urls(seed_url: str, *, max_pages: int = 30) -> list[str]:
     async with crawl_client(timeout=_PROBE_TIMEOUT) as client:
         resolved = raw
         try:
-            resp = await client.get(raw)
-            if resp.status_code < 400:
-                resolved = _clean_url(str(resp.url))
+            res = await fetch_page(client, raw, allow_playwright_fallback=True)
+            if res.status_code == 200 and res.text:
+                resolved = _clean_url(res.final_url)
         except Exception as e:
             logger.debug("Seed resolve failed %s: %s", raw, e)
 
@@ -449,6 +499,9 @@ async def discover_urls(seed_url: str, *, max_pages: int = 30) -> list[str]:
         else:
             found = await _discover_from_sitemaps(client, scope)
             found.update(await _discover_from_seed_links(client, scope))
+            if len(found) < _MIN_SCOPED_URLS:
+                logger.info("Few URLs from sitemap/links — trying whole-domain path guesses")
+                found.update(await _discover_whole_domain_path_guesses(client, scope))
             if not found:
                 logger.warning("No sitemap URLs for %s — falling back to seed page only", resolved)
                 found = await _fallback_seed_only(client, scope)

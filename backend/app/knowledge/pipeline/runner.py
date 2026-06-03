@@ -5,7 +5,7 @@ import json
 import logging
 from datetime import datetime
 
-from app.knowledge.pipeline.crawl_http import crawl_client
+from app.knowledge.pipeline.crawl_http import crawl_client, fetch_page
 from app.knowledge.pipeline.discover import discover_urls_from_seeds
 from app.knowledge.pipeline.extract import extract_facts_from_page
 from app.knowledge.pipeline.normalize import gap_report, normalize_facts
@@ -66,16 +66,23 @@ async def run_crawl_job(job_id: str) -> dict:
 
         pages_blocked = 0
         pages_with_facts = 0
+        pages_via_playwright = 0
         async with crawl_client() as client:
             for url in urls:
                 page_id = db.create_crawl_page(job_id, url)
                 try:
-                    resp = await client.get(url)
-                    if resp.status_code == 403:
+                    res = await fetch_page(client, url, allow_playwright_fallback=True)
+                    if res.blocked:
                         pages_blocked += 1
-                        logger.warning("Blocked fetching page %s (HTTP 403)", url)
-                    html = resp.text if resp.status_code == 200 else ""
-                    db.update_crawl_page(page_id, status="fetched", raw_html=html[:50000])
+                        logger.warning("Blocked fetching page %s (method=%s)", url, res.method)
+                    if res.method == "playwright" and res.status_code == 200 and res.text:
+                        pages_via_playwright += 1
+                    html = res.text if res.text and not res.blocked else ""
+                    db.update_crawl_page(
+                        page_id,
+                        status="fetched",
+                        raw_html=html[:50000],
+                    )
                     facts = extract_facts_from_page(url, html)
                     db.update_crawl_page(page_id, status="extracted", extracted_facts=facts)
                     if facts:
@@ -87,9 +94,14 @@ async def run_crawl_job(job_id: str) -> dict:
 
         if pages_blocked:
             logger.warning(
-                "Crawl blocked on %d/%d pages (HTTP 403 — site may rate-limit rapid requests)",
+                "Crawl blocked on %d/%d pages (site protections/challenges)",
                 pages_blocked,
                 len(urls),
+            )
+        if pages_via_playwright:
+            logger.info(
+                "Playwright fallback fetched %d page(s) successfully",
+                pages_via_playwright,
             )
 
         merged = normalize_facts(batches)

@@ -109,6 +109,15 @@ class Settings(BaseSettings):
     # Google Places API key for hotel pre-enrichment (optional).
     google_places_api_key: str = os.getenv("GOOGLE_PLACES_API_KEY", "")
 
+    # Crawl/browser fallback settings
+    crawl_playwright_enabled: bool = os.getenv(
+        "CRAWL_PLAYWRIGHT_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    crawl_playwright_timeout_ms: int = int(
+        os.getenv("CRAWL_PLAYWRIGHT_TIMEOUT_MS", "20000")
+    )
+    crawl_playwright_wait_ms: int = int(os.getenv("CRAWL_PLAYWRIGHT_WAIT_MS", "1200"))
+
     staff_access_key: str = os.getenv("STAFF_ACCESS_KEY", "mage-staff-dev")
 
     # Multi-tenant / property scope (single-hotel pilots set PROPERTY_ID)
