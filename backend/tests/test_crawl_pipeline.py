@@ -346,3 +346,59 @@ def test_jina_markdown_beats_regex_pet_fragment():
         _BOOKING_JINA_MARKDOWN,
     )
     assert facts["policies.pets.allowed"]["extraction_method"] == "jina_markdown"
+
+
+def test_finalize_discovered_urls_keeps_seed_first():
+    from app.knowledge.pipeline.discover import _finalize_discovered_urls
+
+    scope = crawl_scope_from_seed("https://brand.com/hotels/downtown-edmonton")
+    ordered = [
+        "https://brand.com/hotels/downtown-edmonton",
+        "https://brand.com/hotels/downtown-edmonton/amenities",
+        "https://brand.com/hotels/downtown-edmonton/faq/item-1",
+    ]
+    result = _finalize_discovered_urls(ordered, scope, max_pages=2)
+    assert result[0] == ordered[0]
+    assert len(result) == 2
+
+
+def test_discover_urls_seed_first_without_path_guessing(monkeypatch):
+    import asyncio
+
+    from app.knowledge.pipeline.discover import discover_urls
+
+    fetch_calls: list[str] = []
+    sitemap_called = {"value": False}
+
+    async def fake_fetch_page(client, url, **kwargs):
+        fetch_calls.append(url)
+
+        class Res:
+            status_code = 200
+            final_url = url
+            text = """
+            <html><body>
+            <a href="/hotels/downtown-edmonton/amenities">Amenities</a>
+            </body></html>
+            """
+            method = "httpx"
+
+        return Res()
+
+    async def fake_sitemap(client, scope):
+        sitemap_called["value"] = True
+        return set()
+
+    monkeypatch.setattr("app.knowledge.pipeline.discover.fetch_page", fake_fetch_page)
+    monkeypatch.setattr("app.knowledge.pipeline.discover.crawl_throttle", lambda: asyncio.sleep(0))
+    monkeypatch.setattr("app.knowledge.pipeline.discover._discover_from_sitemaps", fake_sitemap)
+
+    result = asyncio.run(
+        discover_urls("https://brand.com/hotels/downtown-edmonton", max_pages=10)
+    )
+
+    assert result[0] == "https://brand.com/hotels/downtown-edmonton"
+    assert "https://brand.com/hotels/downtown-edmonton/amenities" in result
+    assert sitemap_called["value"] is False
+    assert len(fetch_calls) == 1
+    assert fetch_calls[0] == "https://brand.com/hotels/downtown-edmonton"

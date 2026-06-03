@@ -32,6 +32,13 @@ type CrawlJob = {
   pages_extracted?: number;
   facts_merged?: number;
   error_message?: string;
+  booking_augment?: {
+    added?: string | null;
+    search_url?: string | null;
+    search_query?: string | null;
+    source?: string | null;
+    verified?: boolean;
+  };
   gap_report?: {
     tier_a_missing?: string[];
     tier_b_missing?: string[];
@@ -107,6 +114,36 @@ function parseSeedUrls(input: string): string[] {
   return out;
 }
 
+type UrlField = { id: string; value: string };
+
+function newUrlField(value = ''): UrlField {
+  const id =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `url-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  return { id, value };
+}
+
+function collectSeedUrlsFromFields(fields: UrlField[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const field of fields) {
+    const url = normalizeSeedUrl(field.value);
+    if (url && !seen.has(url)) {
+      seen.add(url);
+      out.push(url);
+    }
+  }
+  return out;
+}
+
+type BookingSuggest = {
+  search_query?: string;
+  search_url?: string;
+  hotel_url?: string | null;
+  source?: string | null;
+};
+
 function staffFetch(path: string, staffKey: string, init?: RequestInit) {
   return fetch(path, {
     ...init,
@@ -165,7 +202,8 @@ export default function StaffOnboardingPage() {
   const [unlocked, setUnlocked] = useState(false);
   const [propertyId, setPropertyId] = useState(DEFAULT_PROPERTY_ID);
   const [propertyIdLocked, setPropertyIdLocked] = useState(false);
-  const [crawlUrlsText, setCrawlUrlsText] = useState('');
+  const [crawlUrlFields, setCrawlUrlFields] = useState<UrlField[]>(() => [newUrlField()]);
+  const [bookingHint, setBookingHint] = useState<BookingSuggest | null>(null);
   const [crawlJob, setCrawlJob] = useState<CrawlJob | null>(null);
   const [crawling, setCrawling] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -290,9 +328,9 @@ export default function StaffOnboardingPage() {
   };
 
   const startCrawl = async () => {
-    const seedUrls = parseSeedUrls(crawlUrlsText);
+    const seedUrls = collectSeedUrlsFromFields(crawlUrlFields);
     if (!seedUrls.length) {
-      setMessage('Enter at least one hotel URL to crawl (one per line).');
+      setMessage('Enter at least one hotel URL to crawl.');
       return;
     }
     const primarySeed = seedUrls[0];
@@ -322,11 +360,67 @@ export default function StaffOnboardingPage() {
     const job: CrawlJob = await res.json();
     if (job.property_id) setPropertyId(job.property_id);
     setCrawlJob(job);
+    if (job.booking_augment?.added) {
+      setMessage(
+        `Crawl started — added Booking.com listing automatically (${job.booking_augment.added}).`
+      );
+    }
     pollCrawlJob(job.id, job.property_id || pid);
   };
 
+  const refreshBookingHint = useCallback(
+    async (primaryRaw: string) => {
+      const primary = normalizeSeedUrl(primaryRaw);
+      if (!staffKey || !primary) {
+        setBookingHint(null);
+        return;
+      }
+      if (primary.includes('booking.com')) {
+        setBookingHint(null);
+        return;
+      }
+      try {
+        const res = await staffFetch(
+          `/api/staff/knowledge/booking-suggest?seed_url=${encodeURIComponent(primary)}`,
+          staffKey
+        );
+        if (res.ok) {
+          setBookingHint(await res.json());
+        }
+      } catch {
+        setBookingHint(null);
+      }
+    },
+    [staffKey]
+  );
+
+  const addUrlField = () => {
+    setCrawlUrlFields((prev) => [...prev, newUrlField()]);
+  };
+
+  const removeUrlField = (id: string) => {
+    setCrawlUrlFields((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((field) => field.id !== id);
+    });
+  };
+
+  const updateUrlField = (id: string, value: string) => {
+    setCrawlUrlFields((prev) => {
+      const next = prev.map((field) => (field.id === id ? { ...field, value } : field));
+      const first = next[0];
+      if (first?.id === id) {
+        if (!propertyIdLocked && value.trim()) {
+          setPropertyId(propertyIdFromUrl(value));
+        }
+        void refreshBookingHint(value);
+      }
+      return next;
+    });
+  };
+
   const applySuggestedPropertyId = () => {
-    const seedUrls = parseSeedUrls(crawlUrlsText);
+    const seedUrls = collectSeedUrlsFromFields(crawlUrlFields);
     if (!propertyIdLocked && seedUrls.length) {
       setPropertyId(propertyIdFromUrl(seedUrls[0]));
     }
@@ -428,32 +522,69 @@ export default function StaffOnboardingPage() {
               Crawl hotel sources
             </h2>
             <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
-              Paste one URL per line. The first line is the hotel website (including brand sub-routes
-              like <span className="font-mono">marriott.com/hotels/your-hotel</span>). Add Booking.com,
-              TripAdvisor, or other listing pages on extra lines — only those pages are fetched, not
-              the whole review site.
+              The first URL is the hotel website (brand sub-routes like{' '}
+              <span className="font-mono">marriott.com/hotels/your-hotel</span> work). Add optional
+              listing pages with extra fields. If you omit Booking.com, we try to find its listing
+              from your hotel URL when the crawl starts.
             </p>
             <div className="mt-4 space-y-3">
-              <label className="block min-w-0">
-                <span className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">
+              <div className="space-y-2">
+                <span className="block text-xs font-medium text-neutral-700 dark:text-neutral-300">
                   Source URLs
                 </span>
-                <textarea
-                  value={crawlUrlsText}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setCrawlUrlsText(next);
-                    if (!propertyIdLocked) {
-                      const first = parseSeedUrls(next)[0];
-                      if (first) setPropertyId(propertyIdFromUrl(first));
-                    }
-                  }}
-                  onBlur={applySuggestedPropertyId}
-                  rows={4}
-                  placeholder={'https://www.example-hotel.com\nhttps://www.booking.com/hotel/example.html'}
-                  className="w-full resize-y rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
-                />
-              </label>
+                {crawlUrlFields.map((field, index) => (
+                  <div key={field.id} className="flex flex-col gap-1 sm:flex-row sm:items-center">
+                    <input
+                      type="url"
+                      value={field.value}
+                      onChange={(e) => updateUrlField(field.id, e.target.value)}
+                      onBlur={index === 0 ? applySuggestedPropertyId : undefined}
+                      placeholder={
+                        index === 0
+                          ? 'https://www.example-hotel.com'
+                          : 'https://www.booking.com/hotel/… (optional)'
+                      }
+                      className="min-w-0 flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+                    />
+                    {crawlUrlFields.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeUrlField(field.id)}
+                        className="shrink-0 rounded-lg border border-neutral-300 px-3 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addUrlField}
+                  className="text-xs font-medium text-neutral-700 underline underline-offset-2 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white"
+                >
+                  + Add another URL
+                </button>
+                {bookingHint?.hotel_url && (
+                  <p className="text-[11px] text-neutral-600 dark:text-neutral-400">
+                    Likely Booking.com listing:{' '}
+                    <span className="font-mono break-all">{bookingHint.hotel_url}</span>
+                    {bookingHint.search_url && (
+                      <>
+                        {' '}
+                        · search:{' '}
+                        <a
+                          href={bookingHint.search_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline underline-offset-2"
+                        >
+                          open on Booking.com
+                        </a>
+                      </>
+                    )}
+                  </p>
+                )}
+              </div>
               <div className="grid gap-3 sm:grid-cols-[1fr_220px_auto]">
                 <div className="hidden sm:block" aria-hidden />
                 <label className="block min-w-0">
@@ -474,7 +605,7 @@ export default function StaffOnboardingPage() {
                     type="button"
                     onClick={() => {
                       setPropertyIdLocked(false);
-                      const first = parseSeedUrls(crawlUrlsText)[0];
+                      const first = collectSeedUrlsFromFields(crawlUrlFields)[0];
                       if (first) setPropertyId(propertyIdFromUrl(first));
                     }}
                     className="mt-1 text-[11px] text-neutral-500 underline underline-offset-2 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"

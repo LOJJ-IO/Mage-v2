@@ -5,7 +5,7 @@ import json
 import logging
 from datetime import datetime
 
-from app.knowledge.pipeline.crawl_http import crawl_client, fetch_page
+from app.knowledge.pipeline.crawl_http import crawl_client, crawl_throttle, fetch_page
 from app.knowledge.pipeline.discover import discover_urls_from_seeds
 from app.knowledge.pipeline.extract import extract_facts_from_page
 from app.knowledge.pipeline.normalize import gap_report, normalize_facts
@@ -68,10 +68,12 @@ async def run_crawl_job(job_id: str) -> dict:
         pages_with_facts = 0
         pages_via_playwright = 0
         async with crawl_client() as client:
-            for url in urls:
+            for idx, url in enumerate(urls):
+                if idx > 0:
+                    await crawl_throttle()
                 page_id = db.create_crawl_page(job_id, url)
                 try:
-                    res = await fetch_page(client, url, allow_playwright_fallback=True)
+                    res = await fetch_page(client, url, fallback="full")
                     if res.blocked:
                         pages_blocked += 1
                         logger.warning("Blocked fetching page %s (method=%s)", url, res.method)
