@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS property_facts (
   confidence REAL,
   source_url TEXT,
   source_snippet TEXT,
+  extraction_method VARCHAR(64),
   effective_from TIMESTAMPTZ,
   effective_until TIMESTAMPTZ,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -181,3 +182,6 @@ ON CONFLICT (property_id, pms_type) DO NOTHING;
 
 -- Multi-source crawl jobs (hotel site + OTA listing URLs)
 ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS seed_urls JSONB;
+
+-- Crawl extraction provenance (used for auto-fill confidence UI)
+ALTER TABLE property_facts ADD COLUMN IF NOT EXISTS extraction_method VARCHAR(64);

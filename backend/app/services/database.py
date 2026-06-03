@@ -18,6 +18,8 @@ from app.core.config import get_settings
 from functools import lru_cache
 import uuid
 import logging
+import hashlib
+from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +95,7 @@ class DatabaseProtocol(Protocol):
         confidence: Optional[float] = None,
         source_url: Optional[str] = None,
         source_snippet: Optional[str] = None,
+        extraction_method: Optional[str] = None,
         updated_by: Optional[str] = None,
     ) -> dict:
         ...
@@ -268,6 +271,15 @@ class DatabaseProtocol(Protocol):
         """Mark action escalated and optionally update summary."""
         ...
 
+    def list_unanswered_guest_questions(
+        self,
+        property_id: str,
+        min_occurrences: int = 2,
+        limit: int = 10,
+    ) -> List[dict]:
+        """Guest questions that triggered CONTACT_FRONT_DESK with no knowledge match."""
+        ...
+
 
 def _staff_action_from_row(row: dict) -> StaffAction:
     """Build StaffAction from DB/mock row with backward-compatible defaults."""
@@ -288,6 +300,46 @@ def _staff_action_from_row(row: dict) -> StaffAction:
     if "allow_staff_jump_in" not in data:
         data["allow_staff_jump_in"] = True
     return StaffAction(**{k: v for k, v in data.items() if k in StaffAction.model_fields})
+
+
+def _aggregate_unanswered_guest_questions(
+    actions: List[StaffAction],
+    guest_property: dict[str, Optional[str]],
+    property_id: str,
+    *,
+    min_occurrences: int = 2,
+    limit: int = 10,
+) -> List[dict]:
+    """Group CONTACT_FRONT_DESK knowledge-gap escalations by guest question."""
+    groups: dict[str, list[StaffAction]] = defaultdict(list)
+    for action in actions:
+        if action.action_type != ActionType.CONTACT_FRONT_DESK:
+            continue
+        if action.escalation_type != StaffActionEscalationType.CONTACT:
+            continue
+        guest_pid = guest_property.get(action.guest_id)
+        if guest_pid and guest_pid != property_id:
+            continue
+        if not guest_pid:
+            settings = get_settings()
+            default_pid = settings.property_id or "grand-horizon"
+            if property_id != default_pid:
+                continue
+        question = (action.source_message or "").strip()
+        if not question:
+            continue
+        groups[question.lower()].append(action)
+
+    gaps: List[dict] = []
+    for normalized, items in groups.items():
+        if len(items) < min_occurrences:
+            continue
+        question = items[0].source_message.strip()
+        gap_id = hashlib.md5(normalized.encode()).hexdigest()[:12]
+        gaps.append({"id": gap_id, "question": question, "count": len(items)})
+
+    gaps.sort(key=lambda g: g["count"], reverse=True)
+    return gaps[:limit]
 
 
 class MockDatabase(PropertyStoreMixin):
@@ -616,6 +668,25 @@ class MockDatabase(PropertyStoreMixin):
         if summary is not None:
             action.summary = (summary or "")[:500]
         return action
+
+    def list_unanswered_guest_questions(
+        self,
+        property_id: str,
+        min_occurrences: int = 2,
+        limit: int = 10,
+    ) -> List[dict]:
+        guest_property = {
+            gid: (guest.property_id if guest else None)
+            for gid, guest in self.guests.items()
+        }
+        actions = list(self.staff_actions.values())
+        return _aggregate_unanswered_guest_questions(
+            actions,
+            guest_property,
+            property_id,
+            min_occurrences=min_occurrences,
+            limit=limit,
+        )
 
 
 class SupabaseDatabase(PropertyStoreSupabase):
@@ -1105,6 +1176,52 @@ class SupabaseDatabase(PropertyStoreSupabase):
         except Exception as e:
             logger.error(f"Error escalating staff action {action_id}: {e}")
             return None
+
+    def list_unanswered_guest_questions(
+        self,
+        property_id: str,
+        min_occurrences: int = 2,
+        limit: int = 10,
+    ) -> List[dict]:
+        try:
+            guests = self.list_guests(property_id)
+            guest_property = {g.id: g.property_id for g in guests}
+            guest_ids = list(guest_property.keys())
+            if not guest_ids:
+                settings = get_settings()
+                if property_id != (settings.property_id or "grand-horizon"):
+                    return []
+                response = (
+                    self.client.table("staff_actions")
+                    .select("*")
+                    .eq("action_type", ActionType.CONTACT_FRONT_DESK.value)
+                    .eq("escalation_type", StaffActionEscalationType.CONTACT.value)
+                    .order("created_at", desc=True)
+                    .limit(500)
+                    .execute()
+                )
+            else:
+                response = (
+                    self.client.table("staff_actions")
+                    .select("*")
+                    .in_("guest_id", guest_ids)
+                    .eq("action_type", ActionType.CONTACT_FRONT_DESK.value)
+                    .eq("escalation_type", StaffActionEscalationType.CONTACT.value)
+                    .order("created_at", desc=True)
+                    .limit(500)
+                    .execute()
+                )
+            actions = [_staff_action_from_row(row) for row in (response.data or [])]
+            return _aggregate_unanswered_guest_questions(
+                actions,
+                guest_property,
+                property_id,
+                min_occurrences=min_occurrences,
+                limit=limit,
+            )
+        except Exception as e:
+            logger.error(f"Error listing unanswered guest questions: {e}")
+            return []
 
 
 @lru_cache()

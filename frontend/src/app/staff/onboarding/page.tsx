@@ -1,21 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  BRANCH_CHILDREN,
+  FieldCard,
+  getFieldState,
+  isBranchHidden,
+  isFieldComplete,
+  ProgressBar,
+  StaffKnowledgeSection,
+  type KnowledgeGap,
+  type PropertyFact,
+  type Slot,
+} from '@/components/knowledge';
+import '@/components/knowledge/onboarding.css';
 
 const DEFAULT_PROPERTY_ID = process.env.NEXT_PUBLIC_PROPERTY_ID || 'grand-horizon';
-
-type Slot = {
-  key: string;
-  domain: string;
-  tier: string;
-  label: string;
-};
-
-type Fact = {
-  value?: unknown;
-  status: string;
-  source_url?: string;
-};
 
 type Completeness = {
   A: { filled: number; total: number; percent: number };
@@ -85,9 +85,9 @@ function propertyIdFromUrl(input: string): string {
         .filter(Boolean)
         .join('-');
       const combined = [hostSlug, pathSlug].filter(Boolean).join('-');
-      return (combined.slice(0, 64) || 'pilot-hotel');
+      return combined.slice(0, 64) || 'pilot-hotel';
     }
-    return (hostSlug.slice(0, 64) || 'pilot-hotel');
+    return hostSlug.slice(0, 64) || 'pilot-hotel';
   } catch {
     return 'pilot-hotel';
   }
@@ -155,48 +155,6 @@ function staffFetch(path: string, staffKey: string, init?: RequestInit) {
   });
 }
 
-function statusBadgeClass(status: string): string {
-  if (status === 'verified' || status === 'filled') {
-    return 'bg-emerald-100 text-emerald-900 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-800';
-  }
-  if (status === 'conflict') {
-    return 'bg-orange-100 text-orange-900 border-orange-200 dark:bg-orange-950 dark:text-orange-200 dark:border-orange-800';
-  }
-  if (status === 'not_applicable') {
-    return 'bg-neutral-100 text-neutral-700 border-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-700';
-  }
-  return 'bg-amber-100 text-amber-900 border-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-800';
-}
-
-function CompletenessBar({
-  label,
-  filled,
-  total,
-  percent,
-}: {
-  label: string;
-  filled: number;
-  total: number;
-  percent: number;
-}) {
-  return (
-    <div className="min-w-[180px] flex-1">
-      <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-        <span className="font-medium text-neutral-700 dark:text-neutral-300">{label}</span>
-        <span className="tabular-nums text-neutral-600 dark:text-neutral-400">
-          {percent}% · {filled}/{total}
-        </span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
-        <div
-          className="h-full rounded-full bg-neutral-900 dark:bg-neutral-200 transition-all"
-          style={{ width: `${Math.min(100, percent)}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 export default function StaffOnboardingPage() {
   const [staffKey, setStaffKey] = useState('');
   const [unlocked, setUnlocked] = useState(false);
@@ -206,13 +164,74 @@ export default function StaffOnboardingPage() {
   const [bookingHint, setBookingHint] = useState<BookingSuggest | null>(null);
   const [crawlJob, setCrawlJob] = useState<CrawlJob | null>(null);
   const [crawling, setCrawling] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
-  const [facts, setFacts] = useState<Record<string, Fact>>({});
+  const [facts, setFacts] = useState<Record<string, PropertyFact>>({});
   const [completeness, setCompleteness] = useState<Completeness | null>(null);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState('');
+  const [knowledgeGaps, setKnowledgeGaps] = useState<KnowledgeGap[]>([]);
   const [message, setMessage] = useState('');
+  const [crawlJustCompleted, setCrawlJustCompleted] = useState(false);
+  const [lastCrawlFactsMerged, setLastCrawlFactsMerged] = useState(0);
+
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const staffKnowledgeRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+
+  const scrollToSection = (key: string) => {
+    const el =
+      key === 'staff' ? staffKnowledgeRef.current : sectionRefs.current[key];
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const structuredSlots = useMemo(
+    () => slots.filter((s) => s.domain !== 'staff'),
+    [slots]
+  );
+
+  const visibleStructuredSlots = useMemo(
+    () => structuredSlots.filter((s) => !isBranchHidden(s.key, facts)),
+    [structuredSlots, facts]
+  );
+
+  const domains = useMemo(
+    () => Array.from(new Set(structuredSlots.map((s) => s.domain))),
+    [structuredSlots]
+  );
+
+  const progressStats = useMemo(() => {
+    let tierAConfirmed = 0;
+    let tierATotal = 0;
+    let tierBConfirmed = 0;
+    let tierBTotal = 0;
+    let autoFilledCount = 0;
+    let needsVerifyCount = 0;
+
+    for (const slot of visibleStructuredSlots) {
+      const fact = facts[slot.key];
+      const complete = isFieldComplete(fact);
+      if (slot.tier === 'A') {
+        tierATotal += 1;
+        if (complete) tierAConfirmed += 1;
+      } else if (slot.tier === 'B') {
+        tierBTotal += 1;
+        if (complete) tierBConfirmed += 1;
+      }
+      const state = getFieldState(fact);
+      if (state === 'confirmed' && fact?.status !== 'verified') {
+        autoFilledCount += 1;
+      } else if (state === 'verify' && fact?.status !== 'verified') {
+        needsVerifyCount += 1;
+      }
+    }
+
+    return {
+      tierAConfirmed,
+      tierATotal,
+      tierBConfirmed,
+      tierBTotal,
+      autoFilledCount,
+      needsVerifyCount,
+    };
+  }, [visibleStructuredSlots, facts]);
 
   const loadFacts = useCallback(async (key: string, pid: string) => {
     const res = await staffFetch(`/api/staff/knowledge/facts/${encodeURIComponent(pid)}`, key);
@@ -220,6 +239,19 @@ export default function StaffOnboardingPage() {
     const data = await res.json();
     setFacts(data.facts || {});
     setCompleteness(data.completeness || null);
+  }, []);
+
+  const loadKnowledgeGaps = useCallback(async (key: string, pid: string) => {
+    const res = await staffFetch(
+      `/api/staff/knowledge/gaps/${encodeURIComponent(pid)}`,
+      key
+    );
+    if (!res.ok) {
+      setKnowledgeGaps([]);
+      return;
+    }
+    const data = await res.json();
+    setKnowledgeGaps(data.gaps || []);
   }, []);
 
   useEffect(() => {
@@ -239,16 +271,15 @@ export default function StaffOnboardingPage() {
         setSlots(schema.slots || []);
       }
       await loadFacts(staffKey, propertyId);
+      await loadKnowledgeGaps(staffKey, propertyId);
     })();
-  }, [unlocked, staffKey, propertyId, loadFacts]);
+  }, [unlocked, staffKey, propertyId, loadFacts, loadKnowledgeGaps]);
 
   useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, []);
-
-  const domains = useMemo(() => [...new Set(slots.map((s) => s.domain))], [slots]);
 
   const stopPolling = () => {
     if (pollRef.current) {
@@ -269,8 +300,11 @@ export default function StaffOnboardingPage() {
         setCrawling(false);
         if (job.property_id) setPropertyId(job.property_id);
         await loadFacts(staffKey, job.property_id || pid);
+        await loadKnowledgeGaps(staffKey, job.property_id || pid);
         const merged = job.facts_merged ?? 0;
         const pages = job.pages_discovered ?? 0;
+        setLastCrawlFactsMerged(merged);
+        setCrawlJustCompleted(true);
         setMessage(
           `Crawl finished — ${pages} pages scanned, ${merged} facts extracted. Review gaps below, then publish.`
         );
@@ -287,18 +321,63 @@ export default function StaffOnboardingPage() {
     setUnlocked(true);
   };
 
-  const patchFact = async (slotKey: string, status: string, value?: string) => {
+  const patchFact = async (slotKey: string, status: string, value?: unknown) => {
     const res = await staffFetch(
       `/api/staff/knowledge/facts/${encodeURIComponent(propertyId)}/${encodeURIComponent(slotKey)}`,
       staffKey,
       {
         method: 'PATCH',
-        body: JSON.stringify({ status, value: value ?? facts[slotKey]?.value }),
+        body: JSON.stringify({
+          status,
+          value: value !== undefined ? value : facts[slotKey]?.value,
+        }),
       }
     );
     if (res.ok) {
       await loadFacts(staffKey, propertyId);
-      setMessage(`Updated ${slotKey}`);
+    }
+  };
+
+  const handleToggleParent = async (slotKey: string, value: boolean) => {
+    await patchFact(slotKey, 'verified', value);
+    if (!value) {
+      const children = BRANCH_CHILDREN[slotKey] || [];
+      await Promise.all(
+        children.map((child) => patchFact(child, 'not_applicable'))
+      );
+    }
+  };
+
+  const confirmAllInSection = async (sectionSlots: Slot[]) => {
+    const greenFacts = sectionSlots
+      .filter((s) => getFieldState(facts[s.key]) === 'confirmed')
+      .filter((s) => facts[s.key]?.status !== 'verified');
+
+    await Promise.all(
+      greenFacts.map((s) =>
+        patchFact(s.key, 'verified', facts[s.key]?.value)
+      )
+    );
+    if (greenFacts.length) {
+      setMessage(`Confirmed ${greenFacts.length} auto-filled fields.`);
+    }
+  };
+
+  const saveKnowledgeGapAnswer = async (
+    gapId: string,
+    question: string,
+    answer: string
+  ) => {
+    const res = await staffFetch(
+      `/api/staff/knowledge/gaps/${encodeURIComponent(propertyId)}/answer`,
+      staffKey,
+      {
+        method: 'POST',
+        body: JSON.stringify({ gap_id: gapId, question, answer }),
+      }
+    );
+    if (res.ok) {
+      setMessage('Saved answer for guest question.');
     }
   };
 
@@ -335,15 +414,23 @@ export default function StaffOnboardingPage() {
     }
     const primarySeed = seedUrls[0];
     const suggestedPid = propertyIdFromUrl(primarySeed);
-    const pid = propertyIdLocked ? (propertyId.trim() || suggestedPid) : suggestedPid;
+    const pid = propertyIdLocked ? propertyId.trim() || suggestedPid : suggestedPid;
     setPropertyId(pid);
     setCrawling(true);
     setCrawlJob(null);
+    setCrawlJustCompleted(false);
     setMessage(
       seedUrls.length > 1
         ? `Crawl started — ${seedUrls.length} sources, discovering pages…`
-        : 'Crawl started — discovering pages…',
+        : 'Crawl started — discovering pages…'
     );
+
+    setTimeout(() => {
+      staffKnowledgeRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }, 150);
 
     const res = await staffFetch('/api/staff/knowledge/crawl', staffKey, {
       method: 'POST',
@@ -426,9 +513,13 @@ export default function StaffOnboardingPage() {
     }
   };
 
+  const isBranchChild = (slotKey: string) => {
+    return Object.values(BRANCH_CHILDREN).some((children) => children.includes(slotKey));
+  };
+
   if (!unlocked) {
     return (
-      <main className="staff-ui flex min-h-screen items-center justify-center bg-neutral-100 px-6 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+      <main className="staff-ui knowledge-onboarding flex min-h-screen items-center justify-center bg-neutral-100 px-6 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
         <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-white p-8 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
           <h1 className="font-heading text-xl font-semibold text-neutral-900 dark:text-white">
             Staff knowledge onboarding
@@ -456,7 +547,7 @@ export default function StaffOnboardingPage() {
   }
 
   return (
-    <main className="staff-ui min-h-screen bg-neutral-100 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+    <main className="staff-ui knowledge-onboarding min-h-screen bg-neutral-100 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/95 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95">
         <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 lg:px-10">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -466,26 +557,21 @@ export default function StaffOnboardingPage() {
               </h1>
               <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
                 Property:{' '}
-                <span className="font-medium text-neutral-800 dark:text-neutral-200">{propertyId}</span>
+                <span className="font-medium text-neutral-800 dark:text-neutral-200">
+                  {propertyId}
+                </span>
               </p>
             </div>
 
-            {completeness && (
-              <div className="flex w-full flex-col gap-3 sm:flex-row xl:max-w-xl">
-                <CompletenessBar
-                  label="Tier A"
-                  filled={completeness.A.filled}
-                  total={completeness.A.total}
-                  percent={completeness.A.percent}
-                />
-                <CompletenessBar
-                  label="Tier B"
-                  filled={completeness.B.filled}
-                  total={completeness.B.total}
-                  percent={completeness.B.percent}
-                />
-              </div>
-            )}
+            <div className="w-full xl:max-w-2xl">
+              <ProgressBar {...progressStats} />
+              {completeness && (
+                <p className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
+                  Server completeness: Tier A {completeness.A.percent}% · Tier B{' '}
+                  {completeness.B.percent}%
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -653,145 +739,112 @@ export default function StaffOnboardingPage() {
 
       <div className="mx-auto w-full max-w-[1600px] px-4 py-8 sm:px-6 lg:px-10">
         <div className="grid gap-8 xl:grid-cols-[220px_minmax(0,1fr)]">
-          <nav
-            className="hidden xl:block"
-            aria-label="Knowledge domains"
-          >
+          <nav className="hidden xl:block" aria-label="Knowledge domains">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
               Domains
             </p>
             <ul className="space-y-1">
               {domains.map((domain) => (
                 <li key={domain}>
-                  <a
-                    href={`#domain-${domain}`}
-                    className="block rounded-lg px-3 py-2 text-sm capitalize text-neutral-700 hover:bg-white hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-white"
+                  <button
+                    type="button"
+                    onClick={() => scrollToSection(domain)}
+                    className="nav-link capitalize"
                   >
                     {domain.replace(/_/g, ' ')}
-                  </a>
+                  </button>
                 </li>
               ))}
+              <li>
+                <button
+                  type="button"
+                  onClick={() => scrollToSection('staff')}
+                  className="nav-link"
+                >
+                  Staff knowledge
+                </button>
+              </li>
             </ul>
           </nav>
 
           <div className="min-w-0 space-y-10">
-            {domains.map((domain) => (
-              <section key={domain} id={`domain-${domain}`}>
-                <h2 className="mb-4 font-heading text-lg font-semibold capitalize text-neutral-900 dark:text-white">
-                  {domain.replace(/_/g, ' ')}
-                </h2>
-                <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
-                  {slots
-                    .filter((s) => s.domain === domain)
-                    .map((slot) => {
-                      const fact = facts[slot.key] || { status: 'unknown' };
-                      return (
-                        <li
-                          key={slot.key}
-                          className="flex flex-col justify-between gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900"
-                        >
-                          <div className="min-w-0">
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="text-sm font-medium text-neutral-900 dark:text-white">
-                                {slot.label}
-                              </p>
-                              <span
-                                className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${statusBadgeClass(fact.status)}`}
-                              >
-                                {fact.status.replace(/_/g, ' ')}
-                              </span>
-                            </div>
-                            <p className="mt-1 truncate text-xs text-neutral-500 dark:text-neutral-400">
-                              {slot.key}
-                            </p>
-                            {slot.tier && (
-                              <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
-                                Tier {slot.tier}
-                              </p>
-                            )}
-                            {fact.value != null && (
-                              <p className="mt-2 line-clamp-3 text-sm text-neutral-700 dark:text-neutral-300">
-                                {String(fact.value)}
-                              </p>
-                            )}
-                            {fact.source_url && (
-                              <p className="mt-1 truncate text-[11px] text-neutral-500 dark:text-neutral-400">
-                                Source: {fact.source_url}
-                              </p>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            className="self-start text-sm font-medium text-neutral-800 underline decoration-neutral-300 underline-offset-2 hover:decoration-neutral-600 dark:text-neutral-200 dark:decoration-neutral-600"
-                            onClick={() => {
-                              setSelectedKey(slot.key);
-                              setEditValue(fact.value != null ? String(fact.value) : '');
-                            }}
-                          >
-                            Edit
-                          </button>
-                        </li>
-                      );
-                    })}
-                </ul>
-              </section>
-            ))}
-          </div>
-        </div>
-      </div>
+            {crawlJustCompleted && (
+              <div className="crawl-complete-banner" role="status">
+                <span>
+                  ✓ Crawl complete — {lastCrawlFactsMerged} facts extracted. Scroll up to
+                  review auto-filled fields when you&apos;re ready.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => scrollToSection(domains[0] ?? 'property')}
+                >
+                  Review fields ↑
+                </button>
+              </div>
+            )}
+            {domains.map((domain) => {
+              const domainSlots = structuredSlots.filter(
+                (s) => s.domain === domain && !isBranchHidden(s.key, facts)
+              );
+              const greenCount = domainSlots.filter(
+                (s) =>
+                  getFieldState(facts[s.key]) === 'confirmed' &&
+                  facts[s.key]?.status !== 'verified'
+              ).length;
 
-      {selectedKey && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center">
-          <div
-            className="w-full max-w-lg rounded-xl border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="edit-fact-title"
-          >
-            <h3
-              id="edit-fact-title"
-              className="font-medium text-neutral-900 dark:text-white"
-            >
-              {selectedKey}
-            </h3>
-            <textarea
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              className="mt-3 min-h-[100px] w-full rounded-lg border border-neutral-300 bg-white p-3 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
-              placeholder="Enter value for this field…"
-            />
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900"
-                onClick={() => {
-                  patchFact(selectedKey, 'verified', editValue);
-                  setSelectedKey(null);
-                }}
-              >
-                Save & verify
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
-                onClick={() => {
-                  patchFact(selectedKey, 'not_applicable');
-                  setSelectedKey(null);
-                }}
-              >
-                Mark N/A
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
-                onClick={() => setSelectedKey(null)}
-              >
-                Cancel
-              </button>
+              return (
+                <section
+                  key={domain}
+                  id={`domain-${domain}`}
+                  ref={(el) => {
+                    sectionRefs.current[domain] = el;
+                  }}
+                >
+                  <div className="section-header">
+                    <h2 className="font-heading text-lg font-semibold capitalize text-neutral-900 dark:text-white">
+                      {domain.replace(/_/g, ' ')}
+                    </h2>
+                    {greenCount >= 2 && (
+                      <button
+                        type="button"
+                        className="confirm-all-btn"
+                        onClick={() => confirmAllInSection(domainSlots)}
+                      >
+                        Confirm all auto-filled
+                      </button>
+                    )}
+                  </div>
+                  <ul className="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
+                    {domainSlots.map((slot) => (
+                      <li key={slot.key}>
+                        <FieldCard
+                          slot={slot}
+                          fact={facts[slot.key]}
+                          isBranchChild={isBranchChild(slot.key)}
+                          onPatch={patchFact}
+                          onToggleParent={
+                            BRANCH_CHILDREN[slot.key] ? handleToggleParent : undefined
+                          }
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              );
+            })}
+
+            <div ref={staffKnowledgeRef} id="staff-knowledge">
+              <StaffKnowledgeSection
+                slots={slots}
+                facts={facts}
+                knowledgeGaps={knowledgeGaps}
+                onPatch={patchFact}
+                onSaveGapAnswer={saveKnowledgeGapAnswer}
+              />
             </div>
           </div>
         </div>
-      )}
+      </div>
     </main>
   );
 }

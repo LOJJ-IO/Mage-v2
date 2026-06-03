@@ -139,6 +139,7 @@ class PropertyStoreMixin:
         confidence: Optional[float] = None,
         source_url: Optional[str] = None,
         source_snippet: Optional[str] = None,
+        extraction_method: Optional[str] = None,
         updated_by: Optional[str] = None,
     ) -> dict:
         key = f"{property_id}:{slot_key}"
@@ -150,6 +151,7 @@ class PropertyStoreMixin:
             "confidence": confidence,
             "source_url": source_url,
             "source_snippet": source_snippet,
+            "extraction_method": extraction_method,
             "updated_at": datetime.utcnow().isoformat(),
             "updated_by": updated_by,
         }

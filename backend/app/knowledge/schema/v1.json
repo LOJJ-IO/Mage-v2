@@ -135,6 +135,9 @@
       "tier": "A",
       "label": "Pool location",
       "value_type": "string",
+      "widget": "text_with_chips",
+      "placeholder": "e.g. Third floor, Building B",
+      "suggestions": ["Ground floor", "3rd floor", "Rooftop", "Adjacent building"],
       "aliases": ["pool", "where is the pool"],
       "faq_id": "pool",
       "markdown_section": "Amenities"
@@ -155,6 +158,9 @@
       "tier": "B",
       "label": "Fitness center location",
       "value_type": "string",
+      "widget": "text_with_chips",
+      "placeholder": "e.g. Ground floor, near lobby",
+      "suggestions": ["Ground floor", "3rd floor", "Same floor as pool", "Basement"],
       "aliases": ["gym", "fitness"],
       "faq_id": "pool",
       "markdown_section": "Amenities"
@@ -165,6 +171,7 @@
       "tier": "B",
       "label": "Spa hours",
       "value_type": "string",
+      "widget": "time_range",
       "aliases": ["spa"],
       "markdown_section": "Amenities"
     },
@@ -204,6 +211,14 @@
       "tier": "A",
       "label": "Billing policy",
       "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Billing and payment...",
+      "options": [
+        "Credit card pre-authorized at check-in",
+        "Payment taken at check-out",
+        "Deposit required at check-in",
+        "Other (specify)"
+      ],
       "aliases": ["bill", "invoice", "charge", "payment"],
       "faq_id": "billing",
       "markdown_section": "Policies"
@@ -224,6 +239,15 @@
       "tier": "B",
       "label": "Laundry service",
       "value_type": "string",
+      "widget": "toggle_then_choice",
+      "question": "Laundry service...",
+      "options": [
+        "Full laundry service (drop-off, picked up next day)",
+        "Dry cleaning available",
+        "Self-serve machines on site (free)",
+        "Self-serve machines (coin/card operated)",
+        "All of the above"
+      ],
       "aliases": ["laundry", "dry cleaning"],
       "faq_id": "laundry",
       "markdown_section": "Services"
@@ -234,6 +258,14 @@
       "tier": "B",
       "label": "Lost & found",
       "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Lost & found...",
+      "options": [
+        "Kept at front desk — guests call to inquire",
+        "Kept by housekeeping — guests call to inquire",
+        "Both front desk and housekeeping",
+        "Other (specify)"
+      ],
       "aliases": ["lost", "missing", "forgot"],
       "faq_id": "lost_found",
       "markdown_section": "Services"
@@ -244,6 +276,15 @@
       "tier": "A",
       "label": "Extra towels policy",
       "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "When a guest needs extra towels...",
+      "options": [
+        "Call housekeeping (dial 0)",
+        "Extra set already in room closet",
+        "Available at pool/gym desk",
+        "Housekeeping brings them on daily service",
+        "Other (specify)"
+      ],
       "aliases": ["towel", "towels", "linens"],
       "faq_id": "towels_info",
       "markdown_section": "Room"
@@ -254,6 +295,15 @@
       "tier": "A",
       "label": "Iron & ironing board",
       "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "When a guest asks for an iron...",
+      "options": [
+        "Already in the room (closet or wardrobe)",
+        "Call front desk — we bring one up",
+        "Available on same floor in service closet",
+        "We don't have irons",
+        "Other (specify)"
+      ],
       "aliases": ["iron", "ironing", "ironing board"],
       "faq_id": "iron",
       "markdown_section": "Room"
@@ -264,6 +314,14 @@
       "tier": "B",
       "label": "Hair dryer",
       "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Hair dryer...",
+      "options": [
+        "In every room (bathroom drawer)",
+        "Available on request from front desk",
+        "We don't provide hair dryers",
+        "Other (specify)"
+      ],
       "aliases": ["hair dryer", "hairdryer", "blow dryer"],
       "faq_id": "hair_dryer",
       "markdown_section": "Room"
@@ -274,6 +332,14 @@
       "tier": "B",
       "label": "Room temperature / thermostat",
       "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Room temperature control...",
+      "options": [
+        "Individual thermostat in every room",
+        "Central AC/heat — guests can adjust via wall panel",
+        "Contact front desk to adjust",
+        "Other (specify)"
+      ],
       "aliases": ["cold", "hot", "temperature", "thermostat", "air conditioning"],
       "faq_id": "climate",
       "markdown_section": "Room"
@@ -284,6 +350,15 @@
       "tier": "B",
       "label": "In-room safe",
       "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "In-room safe...",
+      "options": [
+        "In every room — instructions on safe door",
+        "In every room — guests set their own code",
+        "Available on request",
+        "We don't have in-room safes",
+        "Other (specify)"
+      ],
       "aliases": ["safe", "room safe"],
       "faq_id": "safe",
       "markdown_section": "Room"
@@ -294,6 +369,15 @@
       "tier": "B",
       "label": "Minibar policy",
       "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Minibar...",
+      "options": [
+        "Pre-stocked — billed automatically if items used",
+        "Empty fridge in room — no minibar items",
+        "Items available on request from room service",
+        "No minibar in rooms",
+        "Other (specify)"
+      ],
       "aliases": ["minibar", "mini bar"],
       "faq_id": "minibar",
       "markdown_section": "Room"
@@ -304,6 +388,15 @@
       "tier": "A",
       "label": "Housekeeping",
       "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Housekeeping service...",
+      "options": [
+        "Daily — room cleaned every day",
+        "Every other day by default",
+        "On request only (guests ask at front desk)",
+        "Do Not Disturb respected — cleaned on checkout",
+        "Other (specify)"
+      ],
       "aliases": ["housekeeping", "housekeeper", "clean"],
       "faq_id": "housekeeping_info",
       "markdown_section": "Services"
@@ -314,6 +407,14 @@
       "tier": "B",
       "label": "Elevators",
       "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Elevators...",
+      "options": [
+        "Main lobby (near front desk)",
+        "Multiple locations — lobby and hallway ends",
+        "Stairs only (no elevator)",
+        "Other (specify)"
+      ],
       "aliases": ["elevator", "lift"],
       "faq_id": "elevator",
       "markdown_section": "Property"
@@ -324,6 +425,15 @@
       "tier": "B",
       "label": "Airport & taxis",
       "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Airport transport...",
+      "options": [
+        "Free hotel shuttle — ask front desk for schedule",
+        "Paid hotel shuttle — ask front desk for rates",
+        "No shuttle — front desk can call a taxi/Uber",
+        "No shuttle or taxi service",
+        "Other (specify)"
+      ],
       "aliases": ["airport", "shuttle", "taxi", "uber", "lyft"],
       "faq_id": "transport",
       "markdown_section": "Transport"
@@ -334,6 +444,13 @@
       "tier": "B",
       "label": "Concierge",
       "value_type": "string",
+      "widget": "toggle_then_choice",
+      "question": "Concierge service...",
+      "options": [
+        "Full concierge desk in lobby",
+        "Front desk handles concierge requests",
+        "Available via phone/app only"
+      ],
       "aliases": ["concierge", "directions", "nearby"],
       "faq_id": "concierge",
       "markdown_section": "Services"
@@ -344,6 +461,13 @@
       "tier": "B",
       "label": "Wake-up call",
       "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Wake-up calls...",
+      "options": [
+        "Dial 0 from room phone to request",
+        "Request via front desk or hotel app",
+        "Not available"
+      ],
       "aliases": ["wake up", "wakeup"],
       "faq_id": "wake_up",
       "markdown_section": "Services"
@@ -354,6 +478,15 @@
       "tier": "B",
       "label": "Room upgrades",
       "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Room upgrades...",
+      "options": [
+        "Available on request at check-in (subject to availability, free)",
+        "Available for a fee — ask front desk",
+        "Included for loyalty members",
+        "Not available",
+        "Other (specify)"
+      ],
       "aliases": ["upgrade", "upgrades"],
       "faq_id": "upgrade",
       "markdown_section": "Services"
@@ -364,6 +497,15 @@
       "tier": "B",
       "label": "Coffee & tea",
       "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "In-room coffee & tea...",
+      "options": [
+        "Coffee maker in every room",
+        "Coffee/tea station in lobby (complimentary)",
+        "Available from room service",
+        "Not available in rooms",
+        "Other (specify)"
+      ],
       "aliases": ["coffee", "tea"],
       "faq_id": "coffee",
       "markdown_section": "Dining"
@@ -384,6 +526,14 @@
       "tier": "B",
       "label": "Noise concerns",
       "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Quiet hours / noise policy...",
+      "options": [
+        "10:00 PM – 8:00 AM",
+        "11:00 PM – 7:00 AM",
+        "No formal quiet hours",
+        "Custom (specify)"
+      ],
       "aliases": ["noise", "loud", "noisy"],
       "faq_id": "noise",
       "markdown_section": "Policies"
@@ -395,6 +545,213 @@
       "label": "Front desk phone",
       "value_type": "string",
       "markdown_section": "Contact"
+    },
+    {
+      "key": "staff.iron.location",
+      "domain": "staff",
+      "tier": "A",
+      "label": "Iron & ironing board",
+      "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "When a guest asks for an iron...",
+      "options": [
+        "Already in the room (closet or wardrobe)",
+        "Call front desk — we bring one up",
+        "Available at guest request (same floor closet)",
+        "We don't have irons"
+      ]
+    },
+    {
+      "key": "staff.towels.extra",
+      "domain": "staff",
+      "tier": "A",
+      "label": "Extra towels",
+      "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "When a guest needs extra towels...",
+      "options": [
+        "Call housekeeping",
+        "Available at pool/gym desk",
+        "Extra set already in room closet",
+        "Dial 0 for front desk"
+      ]
+    },
+    {
+      "key": "staff.pillows.extra",
+      "domain": "staff",
+      "tier": "A",
+      "label": "Extra pillows & blankets",
+      "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "When a guest asks for extra pillows or blankets...",
+      "options": [
+        "Already in the room (closet)",
+        "Call housekeeping",
+        "Dial 0 for front desk"
+      ]
+    },
+    {
+      "key": "staff.checkin.early",
+      "domain": "staff",
+      "tier": "A",
+      "label": "Early check-in",
+      "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Early check-in policy...",
+      "options": [
+        "Not available",
+        "Available on request, subject to availability (free)",
+        "Available for a fee",
+        "Included for loyalty members"
+      ]
+    },
+    {
+      "key": "staff.checkout.late",
+      "domain": "staff",
+      "tier": "A",
+      "label": "Late check-out",
+      "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Late check-out policy...",
+      "options": [
+        "Not available",
+        "Available on request, subject to availability (free)",
+        "Available for a fee",
+        "Included for loyalty members"
+      ]
+    },
+    {
+      "key": "staff.luggage.storage",
+      "domain": "staff",
+      "tier": "A",
+      "label": "Luggage storage",
+      "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Can guests store luggage before check-in or after check-out?",
+      "options": ["Yes, at the front desk (free)", "Yes, for a fee", "No"]
+    },
+    {
+      "key": "staff.minibar.stocked",
+      "domain": "staff",
+      "tier": "B",
+      "label": "Minibar",
+      "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Minibar on arrival...",
+      "options": [
+        "Pre-stocked (billed if used)",
+        "Empty (available on request)",
+        "No minibar in rooms"
+      ]
+    },
+    {
+      "key": "staff.ice.location",
+      "domain": "staff",
+      "tier": "B",
+      "label": "Ice machine",
+      "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Ice machine location...",
+      "options": [
+        "Each floor (near elevators)",
+        "Ground floor only",
+        "Ask front desk",
+        "No ice machine"
+      ]
+    },
+    {
+      "key": "staff.microwave.available",
+      "domain": "staff",
+      "tier": "B",
+      "label": "Microwave",
+      "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Microwave access...",
+      "options": [
+        "In every room",
+        "Available on request",
+        "Common area only",
+        "Not available"
+      ]
+    },
+    {
+      "key": "staff.laundry.self_serve",
+      "domain": "staff",
+      "tier": "B",
+      "label": "Self-serve laundry",
+      "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Guest laundry options...",
+      "options": [
+        "Self-serve machines on site (free)",
+        "Self-serve machines (coin/card)",
+        "Full laundry service only",
+        "No laundry facilities"
+      ]
+    },
+    {
+      "key": "staff.shuttle.available",
+      "domain": "staff",
+      "tier": "A",
+      "label": "Shuttle service",
+      "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Shuttle service...",
+      "options": [
+        "Airport shuttle (free)",
+        "Airport shuttle (paid)",
+        "Downtown shuttle",
+        "No shuttle service"
+      ]
+    },
+    {
+      "key": "staff.packages.delivery",
+      "domain": "staff",
+      "tier": "B",
+      "label": "Package delivery",
+      "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Can guests receive packages or deliveries?",
+      "options": ["Yes, held at front desk", "Yes, delivered to room", "No"]
+    },
+    {
+      "key": "staff.smoking.area",
+      "domain": "staff",
+      "tier": "A",
+      "label": "Smoking area",
+      "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Smoking policy...",
+      "options": [
+        "Designated outdoor area (specify location)",
+        "Entire property is non-smoking",
+        "Smoking rooms available"
+      ]
+    },
+    {
+      "key": "staff.quiet.hours",
+      "domain": "staff",
+      "tier": "B",
+      "label": "Quiet hours",
+      "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Quiet hours...",
+      "options": ["10PM–8AM", "11PM–7AM", "No formal quiet hours", "Custom (specify)"]
+    },
+    {
+      "key": "staff.crib.available",
+      "domain": "staff",
+      "tier": "A",
+      "label": "Crib / baby bed",
+      "value_type": "string",
+      "widget": "multiple_choice",
+      "question": "Crib or baby bed...",
+      "options": [
+        "Available on request (free)",
+        "Available for a fee",
+        "Must request in advance",
+        "Not available"
+      ]
     }
   ]
 }

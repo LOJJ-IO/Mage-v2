@@ -116,6 +116,7 @@ async def run_crawl_job(job_id: str) -> dict:
                 confidence=fact.get("confidence"),
                 source_url=fact.get("source_url"),
                 source_snippet=fact.get("source_snippet"),
+                extraction_method=fact.get("extraction_method"),
                 updated_by="crawl",
             )
 

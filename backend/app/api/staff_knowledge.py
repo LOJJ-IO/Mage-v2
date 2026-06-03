@@ -1,7 +1,10 @@
 """Staff knowledge onboarding — facts, completeness, publish, crawl."""
 from __future__ import annotations
 
+from typing import Optional
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import BaseModel, Field
 from urllib.parse import unquote
 
 from app.api.staff import verify_staff_key
@@ -18,6 +21,12 @@ from app.services.database import get_database
 router = APIRouter(prefix="/staff/knowledge", tags=["staff-knowledge"])
 settings = get_settings()
 _AUTO_PROPERTY_IDS = {"", "grand-horizon", "pilot-hotel"}
+
+
+class KnowledgeGapAnswerRequest(BaseModel):
+    gap_id: str = Field(..., min_length=1, max_length=64)
+    answer: str = Field(..., min_length=1, max_length=2000)
+    question: Optional[str] = Field(None, max_length=500)
 
 
 @router.get("/schema")
@@ -140,3 +149,37 @@ async def crawl_status(job_id: str, _: None = Depends(verify_staff_key)):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@router.get("/gaps/{property_id}")
+async def get_knowledge_gaps(property_id: str, _: None = Depends(verify_staff_key)):
+    """
+    Return guest questions that triggered CONTACT_FRONT_DESK with no knowledge match.
+    These are candidates for staff to answer and add to the knowledge base.
+    """
+    db = get_database()
+    gaps = db.list_unanswered_guest_questions(
+        property_id=property_id,
+        min_occurrences=2,
+        limit=10,
+    )
+    return {"gaps": gaps}
+
+
+@router.post("/gaps/{property_id}/answer")
+async def save_knowledge_gap_answer(
+    property_id: str,
+    body: KnowledgeGapAnswerRequest,
+    _: None = Depends(verify_staff_key),
+):
+    """Persist staff answer for a recurring guest question gap."""
+    db = get_database()
+    slot_key = f"knowledge.gap.{body.gap_id}"
+    row = db.upsert_property_fact(
+        property_id=property_id,
+        slot_key=slot_key,
+        value={"question": body.question, "answer": body.answer},
+        status="verified",
+        updated_by="staff",
+    )
+    return row
