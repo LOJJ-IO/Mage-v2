@@ -5,15 +5,21 @@ import asyncio
 import logging
 import random
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Optional
+from typing import Awaitable, Callable, Literal, Optional
+
+FetchFallback = Literal["direct", "free", "full"]
 from urllib.parse import quote
 
 import httpx
+
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 _MIN_USABLE_CHARS = 200
 _FETCH_TIMEOUT = 25.0
+_FIRECRAWL_TIMEOUT = 60.0
+_FIRECRAWL_API_URL = "https://api.firecrawl.dev/v2/scrape"
 
 # ── User agents ────────────────────────────────────────────────────────────────
 
@@ -277,6 +283,84 @@ async def fetch_via_wayback(url: str) -> Optional[FetchResult]:
     return None
 
 
+def _wrap_jina_reader_markdown(url: str, markdown: str, title: str | None = None) -> str:
+    """Wrap markdown so the Jina markdown extractor in extract.py can parse it."""
+    title_line = (title or "").strip()
+    return f"Title: {title_line}\n\nURL Source: {url}\n\nMarkdown Content:\n{markdown}"
+
+
+async def fetch_via_firecrawl(url: str) -> Optional[FetchResult]:
+    """
+    Firecrawl scrape API — paid final fallback.
+
+    Returns markdown wrapped in Jina Reader format for extract.py compatibility.
+    """
+    settings = get_settings()
+    api_key = (settings.firecrawl_api_key or "").strip()
+    if not api_key or not settings.crawl_firecrawl_enabled:
+        return None
+
+    try:
+        async with httpx.AsyncClient(timeout=_FIRECRAWL_TIMEOUT) as client:
+            resp = await client.post(
+                _FIRECRAWL_API_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "url": url,
+                    "formats": ["markdown"],
+                    "onlyMainContent": True,
+                },
+            )
+            if resp.status_code != 200:
+                logger.debug(
+                    "fetch_via_firecrawl HTTP %s for %s: %s",
+                    resp.status_code,
+                    url,
+                    (resp.text or "")[:200],
+                )
+                return None
+
+            payload = resp.json()
+            if not payload.get("success"):
+                logger.debug(
+                    "fetch_via_firecrawl unsuccessful for %s: %s",
+                    url,
+                    payload.get("error") or payload,
+                )
+                return None
+
+            data = payload.get("data") or {}
+            markdown = (data.get("markdown") or "").strip()
+            if not markdown:
+                return None
+
+            metadata = data.get("metadata") or {}
+            title = metadata.get("title") or metadata.get("ogTitle") or ""
+            wrapped = _wrap_jina_reader_markdown(url, markdown, title=str(title) if title else None)
+
+            if _is_usable(wrapped, status=200):
+                return FetchResult(200, url, wrapped, "firecrawl")
+
+            logger.debug(
+                "fetch_via_firecrawl rejected for %s (%d chars after wrap)",
+                url,
+                len(wrapped),
+            )
+    except Exception as e:
+        logger.warning("fetch_via_firecrawl failed for %s: %s", url, e)
+    return None
+
+
+async def crawl_throttle() -> None:
+    """Pause between HTTP requests to reduce upstream rate limiting."""
+    delay = get_settings().crawl_request_delay_sec
+    if delay > 0:
+        await asyncio.sleep(delay)
+
+
 # ── Public fetch entry point ───────────────────────────────────────────────────
 
 async def fetch_page(
@@ -284,21 +368,26 @@ async def fetch_page(
     url: str,
     *,
     allow_playwright_fallback: bool = True,
+    fallback: FetchFallback | None = None,
 ) -> FetchResult:
     """
     Fetch a URL using a multi-service fallback chain.
 
-    Priority:
-    1. Direct httpx
-    2. Jina AI Reader
-    3. Google Cache
-    4. Wayback Machine
+    fallback levels:
+    - direct: httpx only (+ Googlebot / browser header retries)
+    - free: direct + Jina + Google Cache + Wayback
+    - full: free + Firecrawl (paid)
+
+    allow_playwright_fallback=False is equivalent to fallback=\"direct\".
     """
+    if fallback is None:
+        fallback = "full" if allow_playwright_fallback else "direct"
+
     fetchers: list[tuple[str, Callable[[], Awaitable[Optional[FetchResult]]]]] = [
         ("httpx", lambda: fetch_via_httpx(client, url)),
     ]
 
-    if allow_playwright_fallback:
+    if fallback in ("free", "full"):
         fetchers.extend(
             [
                 ("jina", lambda: fetch_via_jina(url)),
@@ -306,6 +395,8 @@ async def fetch_page(
                 ("wayback", lambda: fetch_via_wayback(url)),
             ]
         )
+    if fallback == "full":
+        fetchers.append(("firecrawl", lambda: fetch_via_firecrawl(url)))
 
     for method_name, fetcher in fetchers:
         try:

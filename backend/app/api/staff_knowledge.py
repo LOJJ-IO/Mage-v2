@@ -6,6 +6,7 @@ from urllib.parse import unquote
 
 from app.api.staff import verify_staff_key
 from app.core.config import get_settings
+from app.knowledge.pipeline.booking_seed import augment_seeds_with_booking, suggest_booking_for_seed
 from app.knowledge.pipeline.crawl_scope import collect_seed_urls, property_id_from_url
 from app.knowledge.property_helpers import ensure_property_for_crawl
 from app.knowledge.pipeline.runner import run_crawl_job
@@ -97,6 +98,14 @@ async def staff_help_tree(property_id: str, _: None = Depends(verify_staff_key))
     return {"property_id": property_id, "tree": tree}
 
 
+@router.get("/booking-suggest")
+async def booking_suggest(seed_url: str, _: None = Depends(verify_staff_key)):
+    """Suggest Booking.com search + likely hotel listing URL for a hotel website seed."""
+    if not (seed_url or "").strip():
+        raise HTTPException(status_code=400, detail="seed_url is required")
+    return await suggest_booking_for_seed(seed_url.strip(), probe=False, fetch_page_links=False)
+
+
 @router.post("/crawl")
 async def start_crawl(
     body: CrawlJobRequest,
@@ -107,6 +116,8 @@ async def start_crawl(
     seeds = collect_seed_urls(body.seed_url, body.seed_urls)
     if not seeds:
         raise HTTPException(status_code=400, detail="At least one seed URL is required")
+
+    seeds, booking_meta = await augment_seeds_with_booking(seeds)
 
     primary_seed = seeds[0]
     suggested_property_id = property_id_from_url(primary_seed)
@@ -120,7 +131,7 @@ async def start_crawl(
 
     job = db.create_crawl_job(property_id, primary_seed, seed_urls=seeds)
     background_tasks.add_task(run_crawl_job, job["id"])
-    return {**job, "property_id": property_id}
+    return {**job, "property_id": property_id, "booking_augment": booking_meta}
 
 
 @router.get("/crawl/{job_id}")
