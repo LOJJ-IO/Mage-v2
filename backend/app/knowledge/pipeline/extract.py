@@ -403,6 +403,178 @@ def _clean_og_title(title: str) -> str | None:
     return _clean_property_name(trimmed)
 
 
+# ── Jina Reader markdown (r.jina.ai output) ────────────────────────────────────
+
+def _is_jina_markdown(raw: str) -> bool:
+    """True when content looks like Jina AI Reader output (markdown, not HTML)."""
+    sample = (raw or "")[:4000].lower()
+    return "markdown content:" in sample and (
+        "url source:" in sample or bool(re.search(r"(?m)^title:\s*\S", raw or ""))
+    )
+
+
+def _jina_markdown_body(raw: str) -> str:
+    """Return the markdown body from a Jina Reader response."""
+    match = re.search(r"(?is)markdown content:\s*\n(.*)\Z", raw or "")
+    if match:
+        return match.group(1).strip()
+    return (raw or "").strip()
+
+
+def _jina_title_line(raw: str) -> str | None:
+    match = re.search(r"(?im)^title:\s*(.+)$", raw or "")
+    if not match:
+        return None
+    return match.group(1).strip()
+
+
+def _parse_jina_title(title: str) -> tuple[str | None, str | None]:
+    """Split 'Hotel Name, City, Country' into name and location."""
+    parts = [p.strip() for p in title.split(",") if p.strip()]
+    if not parts:
+        return None, None
+    name = _clean_property_name(parts[0])
+    location = ", ".join(parts[1:]) if len(parts) > 1 else None
+    return name, location
+
+
+def _markdown_section(body: str, *heading_keywords: str) -> str | None:
+    """Return text under the first ## heading whose title matches a keyword."""
+    for match in re.finditer(
+        r"(?is)^#{1,3}\s+([^\n]+)\n(.*?)(?=^#{1,3}\s+|\Z)",
+        body,
+        flags=re.MULTILINE,
+    ):
+        heading = match.group(1).lower()
+        if any(kw in heading for kw in heading_keywords):
+            return match.group(2).strip()
+    return None
+
+
+def _markdown_bullet_items(text: str) -> list[str]:
+    """Extract bullet list items from markdown/plain text."""
+    items: list[str] = []
+    for line in text.splitlines():
+        bullet = re.match(r"^\s*[\*\-•]\s+(.+)$", line.strip())
+        if not bullet:
+            continue
+        item = bullet.group(1).strip()
+        item = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", item)
+        item = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", item).strip()
+        if item and len(item) >= 3:
+            items.append(item)
+    return items
+
+
+def _amenity_items_from_text(text: str) -> list[str]:
+    items = _markdown_bullet_items(text)
+    cleaned: list[str] = []
+    for item in items:
+        low = item.lower()
+        if any(skip in low for skip in ("book now", "something went wrong", "missing some information")):
+            continue
+        if any(hint in low for hint in _AMENITY_ITEM_HINTS) or len(item) <= 40:
+            if item not in cleaned:
+                cleaned.append(item)
+    return cleaned
+
+
+def _extract_amenities_summary_from_markdown(body: str) -> str | None:
+    section = _markdown_section(
+        body,
+        "amenities",
+        "facilities",
+        "most popular amenities",
+    )
+    search_text = section or body
+    if "most popular amenities" in search_text.lower():
+        idx = search_text.lower().find("most popular amenities")
+        search_text = search_text[idx : idx + 2500]
+
+    items = _amenity_items_from_text(search_text)
+    amenity_like = [
+        item
+        for item in items
+        if any(hint in item.lower() for hint in _AMENITY_ITEM_HINTS)
+    ]
+    pool = amenity_like or items
+    if len(pool) >= 3:
+        return ", ".join(list(dict.fromkeys(pool))[:15])
+    return None
+
+
+def _extract_jina_markdown_facts(raw: str) -> dict[str, tuple[Any, float]]:
+    """Extract hotel slots from Jina Reader markdown output."""
+    facts: dict[str, tuple[Any, float]] = {}
+    body = _jina_markdown_body(raw)
+    if not body:
+        return facts
+
+    title = _jina_title_line(raw)
+    if title:
+        name, location = _parse_jina_title(title)
+        if name:
+            facts["property.name"] = (name, 0.9)
+        if location:
+            facts["property.location"] = (location, 0.86)
+
+    house_rules = _markdown_section(body, "house rules", "policies", "important and legal")
+    policy_text = house_rules or body
+    flat_policy = re.sub(r"\s+", " ", policy_text)
+
+    check_in = _extract_labeled_time(flat_policy, ["check-in", "check in", "checkin"])
+    if check_in:
+        facts["property.check_in.time"] = (check_in, 0.92)
+    check_out = _extract_labeled_time(flat_policy, ["check-out", "check out", "checkout"])
+    if check_out:
+        facts["property.check_out.time"] = (check_out, 0.92)
+
+    pets_section = _markdown_section(body, "house rules", "policies") or policy_text
+    pet = _extract_pet_policy(pets_section)
+    if not pet:
+        pet_match = re.search(
+            r"(?is)(pets(?:\s+are)?\s+allowed[^.\n]{0,120}\.)",
+            pets_section,
+        )
+        if pet_match:
+            pet = pet_match.group(1).strip()
+    if pet:
+        facts["policies.pets.allowed"] = (pet, 0.9)
+
+    for key, value in _extract_parking(body).items():
+        facts[key] = (value, 0.82)
+
+    amenities_summary = _extract_amenities_summary_from_markdown(body)
+    if amenities_summary:
+        facts["property.amenities.summary"] = (amenities_summary, 0.88)
+
+    bullets = _markdown_bullet_items(body)
+    for item in bullets:
+        low = item.lower()
+        if "housekeeping" in low and "services.housekeeping.policy" not in facts:
+            facts["services.housekeeping.policy"] = (item, 0.82)
+        if "room service" in low:
+            facts["dining.room_service.available"] = (True, 0.8)
+
+    dining = _markdown_section(body, "restaurants", "dining")
+    if dining:
+        hours = _extract_hours_near(dining, ["restaurant", "open for", "breakfast"], require_range=False)
+        if hours:
+            facts["dining.restaurant.hours"] = (hours, 0.78)
+        open_for = re.search(
+            r"(?is)open for\s+([^\n.]{8,120})",
+            dining,
+        )
+        if open_for and "dining.restaurant.hours" not in facts:
+            facts["dining.restaurant.hours"] = (open_for.group(1).strip(), 0.72)
+
+    phone = _extract_phone_near(body, ["front desk", "reception", "phone", "tel"])
+    if phone:
+        facts["property.front_desk.phone"] = (phone, 0.75)
+
+    return facts
+
+
 def _extract_facts_from_rich_text(
     text: str,
     *,
@@ -666,6 +838,10 @@ def _extract_amenities_summary(html: str, text: str) -> str | None:
     lower = text.lower()
     start = lower.find("hotel amenities")
     if start < 0:
+        start = lower.find("most popular amenities")
+    if start < 0:
+        start = lower.find("amenities of")
+    if start < 0:
         return None
     window = text[start : start + 700]
     tokens = [re.sub(r"\s+", " ", tok).strip(" .,:;|-") for tok in re.split(r"[•|,]", window)]
@@ -686,6 +862,13 @@ def _extract_amenities_summary(html: str, text: str) -> str | None:
 
 
 def _extract_property_name(html: str, url: str) -> str | None:
+    if _is_jina_markdown(html):
+        title = _jina_title_line(html)
+        if title:
+            name, _ = _parse_jina_title(title)
+            if name:
+                return name
+
     meta = _parse_meta_tags(html)
     for key in ("og:site_name", "application-name", "og:title", "twitter:title"):
         raw = meta.get(key)
@@ -772,7 +955,8 @@ def extract_facts_from_page(
     if not html or len(html) < 50:
         return {}
 
-    text = _strip_html(html)
+    is_jina = _is_jina_markdown(html)
+    text = _jina_markdown_body(html) if is_jina else _strip_html(html)
     page_type = classify_page_type(url, text)
     extracted: dict[str, dict[str, Any]] = {}
 
@@ -804,12 +988,18 @@ def extract_facts_from_page(
             "source_snippet": str(value)[:200],
         }
 
-    for method_name, structured_facts in (
-        ("json_ld", _extract_json_ld(html)),
-        ("policy_box", _extract_policy_info_boxes(html)),
-        ("open_graph", _extract_open_graph_facts(html)),
-        ("selector", _extract_selector_facts(html)),
-    ):
+    structured_methods: list[tuple[str, dict[str, tuple[Any, float]]]] = []
+    if is_jina:
+        structured_methods.append(("jina_markdown", _extract_jina_markdown_facts(html)))
+    structured_methods.extend(
+        (
+            ("json_ld", _extract_json_ld(html)),
+            ("policy_box", _extract_policy_info_boxes(html)),
+            ("open_graph", _extract_open_graph_facts(html)),
+            ("selector", _extract_selector_facts(html)),
+        )
+    )
+    for method_name, structured_facts in structured_methods:
         for key, (value, confidence) in structured_facts.items():
             set_slot(key, value, confidence, extraction_method=method_name)
 
@@ -861,6 +1051,12 @@ def extract_facts_from_page(
             policy = _extract_pet_policy(text)
             if policy:
                 set_slot(slot_key, policy, 0.7)
+        elif slot_key == "services.housekeeping.policy":
+            if "housekeeping" in text.lower():
+                for item in _markdown_bullet_items(text):
+                    if "housekeeping" in item.lower():
+                        set_slot(slot_key, item, 0.65)
+                        break
 
     # Explicit labeled check-in/out.
     if "property.check_in.time" not in extracted:

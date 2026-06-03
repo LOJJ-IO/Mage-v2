@@ -8,6 +8,7 @@ _METHOD_WEIGHT = {
     "json_ld": 100,
     "policy_box": 95,
     "open_graph": 78,
+    "jina_markdown": 88,
     "google_places": 93,
     "selector": 85,
     "faq": 80,
