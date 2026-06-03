@@ -283,3 +283,66 @@ def test_open_graph_address_tags():
     facts = extract_facts_from_page("https://example.com/", html)
     assert "10405 Jasper Avenue" in facts["property.location"]["value"]
     assert "Edmonton" in facts["property.location"]["value"]
+
+
+_BOOKING_JINA_MARKDOWN = """
+Title: Hyatt Place Edmonton West, Edmonton, Canada
+
+URL Source: https://www.booking.com/hotel/ca/hyatt-place-edmonton-west.html
+
+Markdown Content:
+*   Pet friendly
+*   Swimming pool
+*   Free Wifi
+*   Free parking
+*   Daily housekeeping
+
+## House rules
+
+Check-in
+
+From 3:00 PM
+
+Check-out
+
+Until 11:00 AM
+
+Pets
+
+Pets are allowed. Charges may apply.
+
+## Amenities of Hyatt Place Edmonton West
+
+### Most popular amenities
+
+*   Indoor swimming pool
+*   Free parking
+*   Free Wifi
+*   Fitness center
+*   Restaurant
+*   Bar
+"""
+
+
+def test_jina_markdown_extracts_booking_listing_facts():
+    facts = extract_facts_from_page(
+        "https://www.booking.com/hotel/ca/hyatt-place-edmonton-west.html",
+        _BOOKING_JINA_MARKDOWN,
+    )
+    assert facts["property.name"]["value"] == "Hyatt Place Edmonton West"
+    assert facts["property.name"]["extraction_method"] == "jina_markdown"
+    assert facts["property.location"]["value"] == "Edmonton, Canada"
+    assert facts["property.check_in.time"]["value"] == "3:00 PM"
+    assert facts["property.check_out.time"]["value"] == "11:00 AM"
+    assert "Pets are allowed" in facts["policies.pets.allowed"]["value"]
+    assert facts["parking.self.available"]["value"] is True
+    assert "Indoor swimming pool" in facts["property.amenities.summary"]["value"]
+    assert facts["services.housekeeping.policy"]["value"] == "Daily housekeeping"
+
+
+def test_jina_markdown_beats_regex_pet_fragment():
+    facts = extract_facts_from_page(
+        "https://www.booking.com/hotel/ca/hyatt-place-edmonton-west.html",
+        _BOOKING_JINA_MARKDOWN,
+    )
+    assert facts["policies.pets.allowed"]["extraction_method"] == "jina_markdown"
