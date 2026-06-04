@@ -273,51 +273,530 @@
   padding: 0;
 }
 
-.knowledge-onboarding .progress-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  width: 100%;
+/* —— Page header & top section —— */
+.knowledge-onboarding .onboarding-top {
+  margin-bottom: 1.5rem;
 }
 
-.knowledge-onboarding .prog-block {
-  flex: 1;
-  min-width: 160px;
-  background: white;
+.knowledge-onboarding .page-hdr {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.knowledge-onboarding .page-title {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  line-height: 1.3;
+}
+
+.knowledge-onboarding .page-sub {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-top: 3px;
+}
+
+.knowledge-onboarding .page-sub strong {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.knowledge-onboarding .hdr-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.knowledge-onboarding .btn-ghost {
+  font-size: 13px;
+  padding: 6px 14px;
   border: 0.5px solid var(--color-border-secondary);
   border-radius: var(--border-radius-md);
-  padding: 0.75rem 1rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-}
-
-.dark .knowledge-onboarding .prog-block {
-  background: #171717;
-}
-
-.knowledge-onboarding .prog-label {
-  font-size: 12px;
-  font-weight: 500;
+  background: transparent;
   color: var(--color-text-secondary);
-  margin-bottom: 0.35rem;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.knowledge-onboarding .btn-ghost:hover {
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+.knowledge-onboarding .btn-primary {
+  font-size: 13px;
+  padding: 6px 16px;
+  border: none;
+  border-radius: var(--border-radius-md);
+  background: var(--color-text-primary);
+  color: var(--color-page-bg, #fafafa);
+  cursor: pointer;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.knowledge-onboarding .btn-primary:hover {
+  opacity: 0.88;
+}
+
+.dark .knowledge-onboarding {
+  --color-page-bg: #0a0a0a;
+}
+
+.knowledge-onboarding {
+  --color-page-bg: #f5f5f5;
+}
+
+.dark .knowledge-onboarding .btn-primary {
+  background: #f0f0f0;
+  color: #0a0a0a;
+}
+
+.knowledge-onboarding .onboarding-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.knowledge-onboarding .onboarding-theme-toggle:hover {
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+.knowledge-onboarding .server-completeness {
+  margin-top: -0.75rem;
+  margin-bottom: 1rem;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.knowledge-onboarding .onboarding-status-msg {
+  margin-top: 0.75rem;
+  font-size: 13px;
+  color: #0f6e56;
+}
+
+.dark .knowledge-onboarding .onboarding-status-msg {
+  color: #1d9e75;
+}
+
+/* —— Progress cards —— */
+.knowledge-onboarding .progress-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  width: 100%;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 900px) {
+  .knowledge-onboarding .progress-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.knowledge-onboarding .prog-card {
+  background: var(--color-background-secondary);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  border: 0.5px solid transparent;
+}
+
+.dark .knowledge-onboarding .prog-card {
+  background: #111111;
+  border-color: #1a1a1a;
+}
+
+.knowledge-onboarding .prog-card-label {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 500;
+}
+
+.knowledge-onboarding .prog-icon--a {
+  color: #1d9e75;
+}
+
+.knowledge-onboarding .prog-icon--b {
+  color: #ba7517;
+}
+
+.knowledge-onboarding .prog-icon--extract {
+  color: var(--color-text-tertiary);
 }
 
 .knowledge-onboarding .prog-bar-bg {
-  height: 6px;
+  height: 4px;
   background: var(--color-border-tertiary);
-  border-radius: 3px;
+  border-radius: 2px;
   overflow: hidden;
+  margin-bottom: 0.4rem;
+}
+
+.dark .knowledge-onboarding .prog-bar-bg {
+  background: #222222;
 }
 
 .knowledge-onboarding .prog-bar {
-  height: 6px;
-  border-radius: 3px;
+  height: 4px;
+  border-radius: 2px;
   transition: width 0.3s ease;
 }
 
-.knowledge-onboarding .prog-count {
-  margin-top: 0.35rem;
+.knowledge-onboarding .prog-bar--a {
+  background: #1d9e75;
+}
+
+.knowledge-onboarding .prog-bar--b {
+  background: #ba7517;
+}
+
+.knowledge-onboarding .prog-nums,
+.knowledge-onboarding .prog-detail {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+
+.knowledge-onboarding .prog-big {
+  font-size: 22px;
+  font-weight: 500;
+  color: #1d9e75;
+  line-height: 1.2;
+  margin-bottom: 2px;
+}
+
+.knowledge-onboarding .prog-big--idle {
+  color: var(--color-text-tertiary);
+  font-weight: 400;
+}
+
+/* —— Crawl panel —— */
+.knowledge-onboarding .crawl-panel {
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+.dark .knowledge-onboarding .crawl-panel {
+  border-color: #222222;
+}
+
+.knowledge-onboarding .crawl-panel-hdr {
+  padding: 1rem 1.25rem;
+  border-bottom: 0.5px solid var(--color-border-tertiary);
+}
+
+.dark .knowledge-onboarding .crawl-panel-hdr {
+  border-bottom-color: #1a1a1a;
+}
+
+.knowledge-onboarding .crawl-panel-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.knowledge-onboarding .crawl-panel-hint {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  margin-top: 2px;
+}
+
+.knowledge-onboarding .crawl-panel-body {
+  padding: 1rem 1.25rem;
+}
+
+.knowledge-onboarding .crawl-examples {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.knowledge-onboarding .crawl-ex-label {
   font-size: 11px;
   color: var(--color-text-tertiary);
+}
+
+.knowledge-onboarding .crawl-ex-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.knowledge-onboarding .crawl-ex-chip:hover {
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+.knowledge-onboarding .crawl-url-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.knowledge-onboarding .crawl-url-icon {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+.knowledge-onboarding .crawl-url-inp {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  padding: 7px 10px;
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+.knowledge-onboarding .crawl-url-inp:focus {
+  outline: none;
+  border-color: var(--color-text-tertiary);
+}
+
+.dark .knowledge-onboarding .crawl-url-inp {
+  background: #111111;
+}
+
+.knowledge-onboarding .crawl-url-tag {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.knowledge-onboarding .crawl-url-tag--primary {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 0.5px solid #93c5fd;
+}
+
+.dark .knowledge-onboarding .crawl-url-tag--primary {
+  background: #0f2940;
+  color: #5ba0d8;
+  border-color: #1a4a6e;
+}
+
+.knowledge-onboarding .crawl-url-tag--optional {
+  background: var(--color-background-secondary);
+  color: var(--color-text-tertiary);
+  border: 0.5px solid var(--color-border-secondary);
+}
+
+.knowledge-onboarding .crawl-add-url {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 2px 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 0.75rem;
+  background: none;
+  border: none;
+}
+
+.knowledge-onboarding .crawl-add-url:hover {
+  color: var(--color-text-primary);
+}
+
+.knowledge-onboarding .crawl-remove-url {
+  font-size: 11px;
+  padding: 4px 10px;
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.knowledge-onboarding .crawl-booking-hint {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.75rem;
+}
+
+.knowledge-onboarding .crawl-booking-hint a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.knowledge-onboarding .crawl-panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-top: 0.75rem;
+  border-top: 0.5px solid var(--color-border-tertiary);
+}
+
+.dark .knowledge-onboarding .crawl-panel-footer {
+  border-top-color: #1a1a1a;
+}
+
+.knowledge-onboarding .crawl-prop-id-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.knowledge-onboarding .crawl-prop-id-label {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+.knowledge-onboarding .crawl-prop-id-inp {
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  width: 180px;
+  max-width: 100%;
+}
+
+.dark .knowledge-onboarding .crawl-prop-id-inp {
+  background: #1a1a1a;
+}
+
+.knowledge-onboarding .crawl-auto-link {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  text-decoration: underline;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.knowledge-onboarding .crawl-auto-link:hover {
+  color: var(--color-text-secondary);
+}
+
+.knowledge-onboarding .crawl-start-btn {
+  font-size: 13px;
+  padding: 8px 20px;
+  border: none;
+  border-radius: var(--border-radius-md);
+  background: var(--color-text-primary);
+  color: var(--color-page-bg, #fafafa);
+  cursor: pointer;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.knowledge-onboarding .crawl-start-btn:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.knowledge-onboarding .crawl-start-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dark .knowledge-onboarding .crawl-start-btn {
+  background: #f0f0f0;
+  color: #0a0a0a;
+}
+
+.knowledge-onboarding .crawl-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.625rem 1.25rem;
+  background: var(--color-background-secondary);
+  border-top: 0.5px solid var(--color-border-tertiary);
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+
+.dark .knowledge-onboarding .crawl-status-bar {
+  background: #0d0d0d;
+  border-top-color: #1a1a1a;
+}
+
+.knowledge-onboarding .crawl-status-left {
+  display: inline-flex;
+  align-items: center;
+}
+
+.knowledge-onboarding .crawl-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-border-secondary);
+  display: inline-block;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.knowledge-onboarding .crawl-status-dot--done {
+  background: #1d9e75;
+}
+
+.knowledge-onboarding .crawl-status-dot--running {
+  background: #6366f1;
+  animation: crawl-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes crawl-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.knowledge-onboarding .crawl-status-tip {
+  margin-left: auto;
+  text-align: right;
 }
 
 .knowledge-onboarding .staff-knowledge-section {

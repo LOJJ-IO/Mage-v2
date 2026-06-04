@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { IconUpload } from '@tabler/icons-react';
 import {
   AnimatedNumber,
   BRANCH_CHILDREN,
@@ -10,16 +11,27 @@ import {
   isBranchHidden,
   isCoreSlot,
   isFieldComplete,
+  OnboardingCrawlPanel,
+  OnboardingThemeToggle,
   ProgressBar,
   sortSlotsForDisplay,
   StaffKnowledgeSection,
   type KnowledgeGap,
   type PropertyFact,
   type Slot,
+  type UrlField,
 } from '@/components/knowledge';
+import type { BookingSuggest } from '@/components/knowledge/onboardingTypes';
 import '@/components/knowledge/onboarding.css';
+import { getStoredStaffKey, setStoredStaffKey } from '@/lib/stateMachineStaff';
 
 const DEFAULT_PROPERTY_ID = process.env.NEXT_PUBLIC_PROPERTY_ID || 'grand-horizon';
+
+function readStoredStaffUnlock(): { key: string; unlocked: boolean } {
+  if (typeof window === 'undefined') return { key: '', unlocked: false };
+  const key = getStoredStaffKey()?.trim() || '';
+  return { key, unlocked: key.length > 0 };
+}
 
 type Completeness = {
   A: { filled: number; total: number; percent: number };
@@ -118,8 +130,6 @@ function parseSeedUrls(input: string): string[] {
   return out;
 }
 
-type UrlField = { id: string; value: string };
-
 function newUrlField(value = ''): UrlField {
   const id =
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -141,13 +151,6 @@ function collectSeedUrlsFromFields(fields: UrlField[]): string[] {
   return out;
 }
 
-type BookingSuggest = {
-  search_query?: string;
-  search_url?: string;
-  hotel_url?: string | null;
-  source?: string | null;
-};
-
 function staffFetch(path: string, staffKey: string, init?: RequestInit) {
   return fetch(path, {
     ...init,
@@ -160,11 +163,16 @@ function staffFetch(path: string, staffKey: string, init?: RequestInit) {
 }
 
 export default function StaffOnboardingPage() {
-  const [staffKey, setStaffKey] = useState('');
-  const [unlocked, setUnlocked] = useState(false);
+  const [staffKey, setStaffKey] = useState(() => readStoredStaffUnlock().key);
+  const [unlocked, setUnlocked] = useState(() => readStoredStaffUnlock().unlocked);
+  const [pinError, setPinError] = useState<string | undefined>();
+  const [unlocking, setUnlocking] = useState(false);
   const [propertyId, setPropertyId] = useState(DEFAULT_PROPERTY_ID);
   const [propertyIdLocked, setPropertyIdLocked] = useState(false);
-  const [crawlUrlFields, setCrawlUrlFields] = useState<UrlField[]>(() => [newUrlField()]);
+  const [crawlUrlFields, setCrawlUrlFields] = useState<UrlField[]>(() => [
+    newUrlField(),
+    newUrlField(),
+  ]);
   const [bookingHint, setBookingHint] = useState<BookingSuggest | null>(null);
   const [crawlJob, setCrawlJob] = useState<CrawlJob | null>(null);
   const [crawling, setCrawling] = useState(false);
@@ -286,6 +294,15 @@ export default function StaffOnboardingPage() {
     };
   }, [visibleStructuredSlots, facts]);
 
+  const hasCrawlRun = useMemo(
+    () =>
+      crawling ||
+      crawlJob != null ||
+      crawlJustCompleted ||
+      lastCrawlFactsMerged > 0,
+    [crawling, crawlJob, crawlJustCompleted, lastCrawlFactsMerged]
+  );
+
   const loadFacts = useCallback(async (key: string, pid: string) => {
     const res = await staffFetch(`/api/staff/knowledge/facts/${encodeURIComponent(pid)}`, key);
     if (!res.ok) return;
@@ -307,26 +324,51 @@ export default function StaffOnboardingPage() {
     setKnowledgeGaps(data.gaps || []);
   }, []);
 
-  useEffect(() => {
-    const saved = sessionStorage.getItem('mage-staff-key');
-    if (saved) {
-      setStaffKey(saved);
-      setUnlocked(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!unlocked || !staffKey) return;
-    (async () => {
-      const schemaRes = await staffFetch('/api/staff/knowledge/schema', staffKey);
+  const loadOnboardingData = useCallback(
+    async (key: string, pid: string) => {
+      const schemaRes = await staffFetch('/api/staff/knowledge/schema', key);
       if (schemaRes.ok) {
         const schema = await schemaRes.json();
         setSlots(schema.slots || []);
+      } else {
+        setSlots([]);
       }
-      await loadFacts(staffKey, propertyId);
-      await loadKnowledgeGaps(staffKey, propertyId);
-    })();
-  }, [unlocked, staffKey, propertyId, loadFacts, loadKnowledgeGaps]);
+      await loadFacts(key, pid);
+      await loadKnowledgeGaps(key, pid);
+    },
+    [loadFacts, loadKnowledgeGaps]
+  );
+
+  useEffect(() => {
+    const key = staffKey.trim();
+    if (!unlocked || !key) return;
+    void loadOnboardingData(key, propertyId);
+  }, [unlocked, staffKey, propertyId, loadOnboardingData]);
+
+  const handleUnlock = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setPinError(undefined);
+    const form = e.currentTarget;
+    const input = form.elements.namedItem('staff-key') as HTMLInputElement | null;
+    const key = (input?.value ?? staffKey).trim();
+    if (!key) {
+      setPinError('Enter your staff access key.');
+      return;
+    }
+    setUnlocking(true);
+    try {
+      const schemaRes = await staffFetch('/api/staff/knowledge/schema', key);
+      if (!schemaRes.ok) {
+        setPinError('Invalid staff key. Try mage-staff-dev for local dev.');
+        return;
+      }
+      setStoredStaffKey(key);
+      setStaffKey(key);
+      setUnlocked(true);
+    } finally {
+      setUnlocking(false);
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -367,11 +409,6 @@ export default function StaffOnboardingPage() {
         setMessage(job.error_message || 'Crawl failed.');
       }
     }, 2000);
-  };
-
-  const unlock = () => {
-    sessionStorage.setItem('mage-staff-key', staffKey);
-    setUnlocked(true);
   };
 
   const patchFact = async (slotKey: string, status: string, value?: unknown) => {
@@ -540,7 +577,7 @@ export default function StaffOnboardingPage() {
 
   const removeUrlField = (id: string) => {
     setCrawlUrlFields((prev) => {
-      if (prev.length <= 1) return prev;
+      if (prev.length <= 2) return prev;
       return prev.filter((field) => field.id !== id);
     });
   };
@@ -566,6 +603,27 @@ export default function StaffOnboardingPage() {
     }
   };
 
+  const applyExampleUrl = (url: string) => {
+    setCrawlUrlFields((prev) => {
+      const next = [...prev];
+      while (next.length < 2) next.push(newUrlField());
+      const emptyIdx = next.findIndex((f) => !f.value.trim());
+      const idx = emptyIdx >= 0 ? emptyIdx : 0;
+      next[idx] = { ...next[idx], value: url };
+      if (idx === 0 && !propertyIdLocked) {
+        setPropertyId(propertyIdFromUrl(url));
+        void refreshBookingHint(url);
+      }
+      return next;
+    });
+  };
+
+  const handleAutoPropertyId = () => {
+    setPropertyIdLocked(false);
+    const first = collectSeedUrlsFromFields(crawlUrlFields)[0];
+    if (first) setPropertyId(propertyIdFromUrl(first));
+  };
+
   const isBranchChild = (slotKey: string) => {
     return Object.values(BRANCH_CHILDREN).some((children) => children.includes(slotKey));
   };
@@ -580,20 +638,35 @@ export default function StaffOnboardingPage() {
           <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
             Enter your staff key to review and publish property knowledge.
           </p>
-          <input
-            type="password"
-            value={staffKey}
-            onChange={(e) => setStaffKey(e.target.value)}
-            placeholder="Staff key"
-            className="mt-6 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
-          />
-          <button
-            type="button"
-            onClick={unlock}
-            className="mt-4 w-full rounded-lg bg-neutral-900 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-          >
-            Continue
-          </button>
+          <form onSubmit={handleUnlock} className="mt-6">
+            <label className="sr-only" htmlFor="staff-key">
+              Staff access key
+            </label>
+            <input
+              id="staff-key"
+              name="staff-key"
+              type="password"
+              value={staffKey}
+              onChange={(e) => setStaffKey(e.target.value)}
+              onInput={(e) => setStaffKey(e.currentTarget.value)}
+              placeholder="Staff key"
+              autoComplete="current-password"
+              disabled={unlocking}
+              className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+            />
+            {pinError && (
+              <p className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
+                {pinError}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={unlocking}
+              className="mt-4 w-full rounded-lg bg-neutral-900 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-60 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+            >
+              {unlocking ? 'Checking…' : 'Continue'}
+            </button>
+          </form>
         </div>
       </main>
     );
@@ -605,210 +678,65 @@ export default function StaffOnboardingPage() {
         crawling || crawlJustCompleted ? ' has-crawl-float' : ''
       }`}
     >
-      <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/95 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95">
-        <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 lg:px-10">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div>
-              <h1 className="font-heading text-2xl font-semibold text-neutral-900 dark:text-white">
-                Knowledge onboarding
-              </h1>
-              <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-                Property:{' '}
-                <span className="font-medium text-neutral-800 dark:text-neutral-200">
-                  {propertyId}
-                </span>
-              </p>
-            </div>
-
-            <div className="w-full xl:max-w-2xl">
-              <ProgressBar {...progressStats} />
-              {completeness && (
-                <p className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
-                  Server completeness: Tier A{' '}
-                  <AnimatedNumber value={completeness.A.percent} duration={900} />% · Tier B{' '}
-                  <AnimatedNumber value={completeness.B.percent} duration={900} />%
-                </p>
-              )}
-            </div>
+      <div className="onboarding-top mx-auto w-full max-w-[1600px] px-4 pt-6 sm:px-6 lg:px-10">
+        <div className="page-hdr">
+          <div>
+            <h1 className="font-heading page-title">Knowledge onboarding</h1>
+            <p className="page-sub">
+              Property: <strong>{propertyId}</strong>
+            </p>
           </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={seed}
-              className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
-            >
-              Seed demo facts
-            </button>
-            <button
-              type="button"
-              onClick={publish}
-              className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-            >
-              Publish snapshot
-            </button>
-            <a
-              href="/staff"
-              className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
-            >
+          <div className="hdr-actions">
+            <OnboardingThemeToggle />
+            <a href="/staff" className="btn-ghost">
               Staff workspace
             </a>
+            <button type="button" className="btn-ghost" onClick={seed}>
+              Seed demo facts
+            </button>
+            <button type="button" className="btn-primary" onClick={publish}>
+              <IconUpload size={15} stroke={2} aria-hidden />
+              Publish snapshot
+            </button>
           </div>
-
-          {message && (
-            <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-400" role="status">
-              {message}
-            </p>
-          )}
-
-          <section className="mt-6 rounded-xl border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900/50">
-            <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
-              Crawl hotel sources
-            </h2>
-            <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
-              The first URL is the hotel website (brand sub-routes like{' '}
-              <span className="font-mono">marriott.com/hotels/your-hotel</span> work). Add optional
-              listing pages with extra fields. If you omit Booking.com, we try to find its listing
-              from your hotel URL when the crawl starts.
-            </p>
-            <div className="mt-4 space-y-3">
-              <div className="space-y-2">
-                <span className="block text-xs font-medium text-neutral-700 dark:text-neutral-300">
-                  Source URLs
-                </span>
-                {crawlUrlFields.map((field, index) => (
-                  <div key={field.id} className="flex flex-col gap-1 sm:flex-row sm:items-center">
-                    <input
-                      type="url"
-                      value={field.value}
-                      onChange={(e) => updateUrlField(field.id, e.target.value)}
-                      onBlur={index === 0 ? applySuggestedPropertyId : undefined}
-                      placeholder={
-                        index === 0
-                          ? 'https://www.example-hotel.com'
-                          : 'https://www.booking.com/hotel/… (optional)'
-                      }
-                      className="min-w-0 flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
-                    />
-                    {crawlUrlFields.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeUrlField(field.id)}
-                        className="shrink-0 rounded-lg border border-neutral-300 px-3 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={addUrlField}
-                  className="text-xs font-medium text-neutral-700 underline underline-offset-2 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white"
-                >
-                  + Add another URL
-                </button>
-                {bookingHint?.hotel_url && (
-                  <p className="text-[11px] text-neutral-600 dark:text-neutral-400">
-                    Likely Booking.com listing:{' '}
-                    <span className="font-mono break-all">{bookingHint.hotel_url}</span>
-                    {bookingHint.search_url && (
-                      <>
-                        {' '}
-                        · search:{' '}
-                        <a
-                          href={bookingHint.search_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline underline-offset-2"
-                        >
-                          open on Booking.com
-                        </a>
-                      </>
-                    )}
-                  </p>
-                )}
-              </div>
-              <div className="grid gap-3 sm:grid-cols-[1fr_220px_auto]">
-                <div className="hidden sm:block" aria-hidden />
-                <label className="block min-w-0">
-                  <span className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">
-                    Property ID
-                  </span>
-                  <input
-                    type="text"
-                    value={propertyId}
-                    onChange={(e) => {
-                      setPropertyIdLocked(true);
-                      setPropertyId(e.target.value);
-                    }}
-                    placeholder="auto-from-domain"
-                    className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPropertyIdLocked(false);
-                      const first = collectSeedUrlsFromFields(crawlUrlFields)[0];
-                      if (first) setPropertyId(propertyIdFromUrl(first));
-                    }}
-                    className="mt-1 text-[11px] text-neutral-500 underline underline-offset-2 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-                  >
-                    Auto from URL
-                  </button>
-                </label>
-                <div className="flex items-end">
-                  <button
-                    type="button"
-                    onClick={startCrawl}
-                    disabled={crawling}
-                    className="w-full rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-900 sm:w-auto sm:whitespace-nowrap"
-                  >
-                    {crawling ? 'Crawling…' : 'Start crawl'}
-                  </button>
-                </div>
-              </div>
-            </div>
-            {crawlJob && (
-              <div className="mt-3 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
-                <span className="font-medium capitalize">{crawlJob.status.replace(/_/g, ' ')}</span>
-                {(crawlJob.seed_urls?.length ?? 0) > 1 && (
-                  <span className="ml-2">
-                    · <AnimatedNumber value={crawlJob.seed_urls!.length} duration={600} /> sources
-                  </span>
-                )}
-                {crawlJob.pages_discovered != null && (
-                  <span className="ml-2">
-                    · <AnimatedNumber value={crawlJob.pages_discovered} duration={700} /> pages
-                    found
-                  </span>
-                )}
-                {crawlJob.pages_extracted != null && (
-                  <span className="ml-2">
-                    · <AnimatedNumber value={crawlJob.pages_extracted} duration={700} /> with facts
-                  </span>
-                )}
-                {crawlJob.facts_merged != null && (
-                  <span className="ml-2">
-                    · <AnimatedNumber value={crawlJob.facts_merged} duration={700} /> slots filled
-                  </span>
-                )}
-                {crawlJob.gap_report && crawlJob.status === 'completed' && (
-                  <span className="ml-2">
-                    · Tier A gaps:{' '}
-                    <AnimatedNumber
-                      value={crawlJob.gap_report.tier_a_missing?.length ?? 0}
-                      duration={700}
-                    />
-                  </span>
-                )}
-              </div>
-            )}
-          </section>
         </div>
-      </header>
 
-      <div className="onboarding-main mx-auto w-full max-w-[1600px] px-4 py-8 sm:px-6 lg:px-10">
+        <ProgressBar {...progressStats} hasCrawlRun={hasCrawlRun} />
+        {completeness && (
+          <p className="server-completeness">
+            Server completeness: Tier A{' '}
+            <AnimatedNumber value={completeness.A.percent} duration={900} />% · Tier B{' '}
+            <AnimatedNumber value={completeness.B.percent} duration={900} />%
+          </p>
+        )}
+
+        <OnboardingCrawlPanel
+          crawlUrlFields={crawlUrlFields}
+          propertyId={propertyId}
+          crawling={crawling}
+          crawlJob={crawlJob}
+          bookingHint={bookingHint}
+          onUpdateUrlField={updateUrlField}
+          onApplySuggestedPropertyId={applySuggestedPropertyId}
+          onAddUrlField={addUrlField}
+          onRemoveUrlField={removeUrlField}
+          onPropertyIdChange={(value) => {
+            setPropertyIdLocked(true);
+            setPropertyId(value);
+          }}
+          onAutoPropertyId={handleAutoPropertyId}
+          onStartCrawl={startCrawl}
+          onExampleChip={applyExampleUrl}
+        />
+
+        {message && (
+          <p className="onboarding-status-msg" role="status">
+            {message}
+          </p>
+        )}
+      </div>
+
+      <div className="onboarding-main mx-auto w-full max-w-[1600px] px-4 pb-8 sm:px-6 lg:px-10">
         <div className="grid gap-8 xl:grid-cols-[220px_minmax(0,1fr)]">
           <nav className="hidden xl:block" aria-label="Knowledge domains">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
