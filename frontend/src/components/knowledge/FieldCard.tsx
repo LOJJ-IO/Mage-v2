@@ -50,13 +50,6 @@ export function FieldCard({
     setDraftValue(formatFactValue(fact?.value));
   }, [fact?.value, slot.key]);
 
-  const visualClass =
-    isVerified || fieldState === 'confirmed'
-      ? 'green'
-      : fieldState === 'verify'
-        ? 'yellow'
-        : 'empty';
-
   const badge = isVerified ? (
     <span className="badge confirmed">Confirmed</span>
   ) : fieldState === 'confirmed' ? (
@@ -211,7 +204,7 @@ export function FieldCard({
   const showStandardActions = !isInteractiveWidget || widgetType === 'text_with_chips';
 
   return (
-    <div className={`field-card ${visualClass}${isBranchChild ? ' branch-child' : ''}`}>
+    <div className={`field-card${isBranchChild ? ' branch-child' : ''}`}>
       <div className="field-top">
         <div className="field-label">
           {slot.label}
@@ -243,7 +236,7 @@ export function FieldCard({
           {fieldState === 'confirmed' && !isVerified && !isInteractiveWidget && (
             <>
               <button type="button" className="btn-confirm" onClick={() => handleConfirm()}>
-                Confirm
+                ✓ Confirm
               </button>
               <button type="button" className="btn-edit" onClick={() => setEditing(true)}>
                 Edit
@@ -253,7 +246,7 @@ export function FieldCard({
           {fieldState === 'confirmed' && !isVerified && isInteractiveWidget && !showInlineWidget && (
             <>
               <button type="button" className="btn-confirm" onClick={() => handleConfirm()}>
-                Confirm
+                ✓ Confirm
               </button>
               <button type="button" className="btn-edit" onClick={() => setEditing(true)}>
                 Edit
@@ -266,13 +259,13 @@ export function FieldCard({
             </button>
           )}
           {fieldState === 'verify' && !isInteractiveWidget && (
-            <button
-              type="button"
-              className="btn-confirm"
-              onClick={() => handleConfirm(draftValue)}
-            >
-              Confirm
-            </button>
+              <button
+                type="button"
+                className="btn-confirm"
+                onClick={() => handleConfirm(draftValue)}
+              >
+                ✓ Confirm
+              </button>
           )}
           {fieldState === 'empty' && (
             <>
@@ -284,7 +277,7 @@ export function FieldCard({
                 Save
               </button>
               <button type="button" className="skip-link" onClick={handleSkip}>
-                Skip
+                Skip for now
               </button>
             </>
           )}
@@ -303,13 +296,13 @@ export function FieldCard({
             </>
           )}
           {widgetType === 'text_with_chips' && fieldState !== 'empty' && !isVerified && (
-            <button
-              type="button"
-              className="btn-confirm"
-              onClick={() => handleConfirm(draftValue)}
-            >
-              Confirm
-            </button>
+              <button
+                type="button"
+                className="btn-confirm"
+                onClick={() => handleConfirm(draftValue)}
+              >
+                ✓ Confirm
+              </button>
           )}
         </div>
       )}
