@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import re
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Literal, Optional
 
@@ -101,7 +102,6 @@ _BLOCK_MARKERS = (
     "challenge-platform",
     "awswaf",
     "aws waf",
-    "captcha",
     "enable javascript and cookies",
     "just a moment",
     "request blocked",
@@ -111,6 +111,15 @@ _BLOCK_MARKERS = (
     "security check",
     "please wait while we check",
     "browser check",
+    "verify you are human",
+    "complete the captcha",
+)
+
+# Embedded reCAPTCHA widgets on real hotel pages are not bot-challenge pages.
+_RECAPTCHA_WIDGET_MARKERS = (
+    "g-recaptcha",
+    "recaptcha-site-key",
+    "google.com/recaptcha",
 )
 
 # Jina wraps upstream failures in HTTP 200 — detect and reject.
@@ -126,7 +135,26 @@ def is_blocked_or_challenge_html(text: str) -> bool:
         return False
     if any(marker in lower for marker in _JINA_FAILURE_MARKERS):
         return True
-    return any(marker in lower for marker in _BLOCK_MARKERS)
+    if any(marker in lower for marker in _BLOCK_MARKERS):
+        return True
+    # Standalone "captcha" often appears in form widgets, not challenge pages.
+    if "captcha" in lower:
+        if any(widget in lower for widget in _RECAPTCHA_WIDGET_MARKERS) and len(lower) > 5000:
+            return False
+        if len(lower) < 4000:
+            return True
+    return False
+
+
+def _looks_like_page_content(text: str) -> bool:
+    """Reject binary/garbled cache responses that are long but not HTML/markdown."""
+    sample = (text or "")[:4000].lower()
+    if "<html" in sample or "<!doctype" in sample:
+        return True
+    if "markdown content:" in sample or sample.lstrip().startswith("#"):
+        return True
+    printable = sum(1 for ch in (text or "")[:2000] if ch.isprintable() or ch.isspace())
+    return printable / max(len(text or ""), 1) > 0.85
 
 
 def _is_success_status(status: int | None) -> bool:
@@ -137,7 +165,11 @@ def _is_success_status(status: int | None) -> bool:
 def _is_usable(text: str, *, status: int | None = None) -> bool:
     if status is not None and not _is_success_status(status):
         return False
-    return len(text or "") > _MIN_USABLE_CHARS and not is_blocked_or_challenge_html(text)
+    if len(text or "") <= _MIN_USABLE_CHARS:
+        return False
+    if is_blocked_or_challenge_html(text):
+        return False
+    return _looks_like_page_content(text)
 
 
 # ── httpx client factory ───────────────────────────────────────────────────────
@@ -208,6 +240,75 @@ async def fetch_via_httpx(client: httpx.AsyncClient, url: str) -> Optional[Fetch
     except Exception as e:
         logger.debug("fetch_via_httpx failed for %s: %s", url, e)
         return None
+
+
+# ── Playwright (headless Chromium + stealth) ───────────────────────────────────
+
+_STEALTH_SCRIPT = """
+Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+window.chrome = { runtime: {} };
+Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+"""
+
+
+async def _apply_stealth(page) -> None:
+    """Best-effort anti-automation tweaks for hotel sites with bot checks."""
+    try:
+        await page.evaluate(
+            "() => { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }); }"
+        )
+    except Exception:
+        pass
+
+
+async def fetch_via_playwright(url: str) -> Optional[FetchResult]:
+    """Headless Chromium fetch for JS-rendered hotel pages."""
+    settings = get_settings()
+    if not settings.crawl_playwright_enabled:
+        return None
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        logger.debug("playwright not installed — skipping browser fallback for %s", url)
+        return None
+
+    timeout_ms = settings.crawl_playwright_timeout_ms
+    wait_ms = settings.crawl_playwright_wait_ms
+
+    try:
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-blink-features=AutomationControlled",
+                ],
+            )
+            context = await browser.new_context(
+                user_agent=_random_ua(),
+                locale="en-US",
+            )
+            await context.add_init_script(_STEALTH_SCRIPT)
+            page = await context.new_page()
+            await _apply_stealth(page)
+            response = await page.goto(
+                url,
+                wait_until="domcontentloaded",
+                timeout=timeout_ms,
+            )
+            if wait_ms > 0:
+                await page.wait_for_timeout(wait_ms)
+            html = await page.content()
+            status = response.status if response else 200
+            await browser.close()
+
+            if _is_usable(html, status=status):
+                return FetchResult(status, url, html, "playwright")
+    except Exception as e:
+        logger.debug("fetch_via_playwright failed for %s: %s", url, e)
+    return None
 
 
 async def fetch_via_jina(url: str) -> Optional[FetchResult]:
@@ -361,6 +462,12 @@ async def crawl_throttle() -> None:
         await asyncio.sleep(delay)
 
 
+def _content_fingerprint(text: str) -> str:
+    """Rough fingerprint to skip near-duplicate fetches (httpx vs playwright)."""
+    sample = re.sub(r"\s+", " ", (text or "")[:8000]).strip().lower()
+    return f"{len(text or '')}:{hash(sample)}"
+
+
 # ── Public fetch entry point ───────────────────────────────────────────────────
 
 async def fetch_page(
@@ -390,6 +497,7 @@ async def fetch_page(
     if fallback in ("free", "full"):
         fetchers.extend(
             [
+                ("playwright", lambda: fetch_via_playwright(url)),
                 ("jina", lambda: fetch_via_jina(url)),
                 ("google_cache", lambda: fetch_via_google_cache(url)),
                 ("wayback", lambda: fetch_via_wayback(url)),
@@ -434,3 +542,55 @@ async def fetch_page(
         blocked=True,
         blocked_reason="all_methods_failed",
     )
+
+
+async def fetch_all_free_methods(
+    client: httpx.AsyncClient,
+    url: str,
+) -> list[FetchResult]:
+    """
+    Run every free fetch strategy and return all usable results.
+
+    Unlike fetch_page(), this does not stop at the first success — httpx, Playwright,
+    Jina, Google Cache, and Wayback are all attempted so extractors can merge facts
+    from whichever sources return content.
+    """
+    fetchers: list[tuple[str, Callable[[], Awaitable[Optional[FetchResult]]]]] = [
+        ("httpx", lambda: fetch_via_httpx(client, url)),
+        ("playwright", lambda: fetch_via_playwright(url)),
+        ("jina", lambda: fetch_via_jina(url)),
+        ("google_cache", lambda: fetch_via_google_cache(url)),
+        ("wayback", lambda: fetch_via_wayback(url)),
+    ]
+
+    results: list[FetchResult] = []
+    seen: set[str] = set()
+
+    for method_name, fetcher in fetchers:
+        try:
+            result = await fetcher()
+        except Exception as e:
+            logger.debug("fetch_all_free: %s raised for %s: %s", method_name, url, e)
+            continue
+
+        if not result or not _is_usable(result.text, status=result.status_code):
+            continue
+
+        fingerprint = _content_fingerprint(result.text)
+        if fingerprint in seen:
+            logger.debug("fetch_all_free: skipping duplicate %s content for %s", method_name, url)
+            continue
+        seen.add(fingerprint)
+
+        result.method = method_name
+        result.blocked = False
+        results.append(result)
+        logger.info(
+            "fetch_all_free: %s succeeded for %s (status=%s, %d chars)",
+            method_name,
+            url,
+            result.status_code,
+            len(result.text),
+        )
+
+    return results

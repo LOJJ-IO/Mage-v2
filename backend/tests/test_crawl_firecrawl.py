@@ -79,6 +79,10 @@ def test_fetch_page_uses_firecrawl_after_free_methods_fail():
         call_order.append("httpx")
         return None
 
+    async def fake_playwright(url):
+        call_order.append("playwright")
+        return None
+
     async def fake_jina(url):
         call_order.append("jina")
         return None
@@ -100,14 +104,15 @@ def test_fetch_page_uses_firecrawl_after_free_methods_fail():
 
     async def run():
         with patch("app.knowledge.pipeline.crawl_http.fetch_via_httpx", fake_httpx):
-            with patch("app.knowledge.pipeline.crawl_http.fetch_via_jina", fake_jina):
-                with patch("app.knowledge.pipeline.crawl_http.fetch_via_google_cache", fake_cache):
-                    with patch("app.knowledge.pipeline.crawl_http.fetch_via_wayback", fake_wayback):
-                        with patch("app.knowledge.pipeline.crawl_http.fetch_via_firecrawl", fake_firecrawl):
-                            async with crawl_client() as client:
-                                return await fetch_page(client, "https://blocked.example.com")
+            with patch("app.knowledge.pipeline.crawl_http.fetch_via_playwright", fake_playwright):
+                with patch("app.knowledge.pipeline.crawl_http.fetch_via_jina", fake_jina):
+                    with patch("app.knowledge.pipeline.crawl_http.fetch_via_google_cache", fake_cache):
+                        with patch("app.knowledge.pipeline.crawl_http.fetch_via_wayback", fake_wayback):
+                            with patch("app.knowledge.pipeline.crawl_http.fetch_via_firecrawl", fake_firecrawl):
+                                async with crawl_client() as client:
+                                    return await fetch_page(client, "https://blocked.example.com")
 
     res = asyncio.run(run())
-    assert call_order == ["httpx", "jina", "google_cache", "wayback", "firecrawl"]
+    assert call_order == ["httpx", "playwright", "jina", "google_cache", "wayback", "firecrawl"]
     assert res.method == "firecrawl"
     assert not res.blocked

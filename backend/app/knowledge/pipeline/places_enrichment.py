@@ -55,12 +55,19 @@ def _extract_hotel_name_from_url(url: str) -> str:
         )
 
     last = segments[-1]
+    original_slug = last
 
     # Strip locale codes like "en-US", "en-CA"
-    last = re.sub(r"^[a-z]{2}-[A-Z]{2}-?", "", last)
+    last = re.sub(r"^[a-z]{2}-[A-Z]{2}-?", "", last, flags=re.I)
 
-    # Strip property codes like "yegzw-" (airport codes etc.)
-    last = re.sub(r"^[a-z]{3,5}[a-z0-9]{1,3}-", "", last)
+    # Strip property codes like "yegzw-" (Hyatt/Marriott path slugs), not city names.
+    stripped = re.sub(r"^[a-z]{3,5}[a-z0-9]{1,3}-", "", last, flags=re.I)
+    if stripped and stripped != last:
+        # Only accept the strip when enough slug remains (avoid "edmonton-west" → "west").
+        if len(stripped.replace("-", " ")) >= 8 or stripped.count("-") >= 2:
+            last = stripped
+        else:
+            last = original_slug
 
     # Replace hyphens with spaces and title-case
     name = last.replace("-", " ").title()
@@ -75,6 +82,9 @@ def _extract_hotel_name_from_url(url: str) -> str:
         "choicehotels": "Choice Hotels",
         "wyndham": "Wyndham",
         "bestwestern": "Best Western",
+        "sandmanhotels": "Sandman Hotel",
+        "sandman": "Sandman Hotel",
+        "comfortinn": "Comfort Inn",
     }
     for domain_key, brand in brand_hints.items():
         if domain_key in domain and brand.lower() not in name.lower():

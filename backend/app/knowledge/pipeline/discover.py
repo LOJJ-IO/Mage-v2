@@ -413,7 +413,7 @@ async def _discover_single_page(client, raw: str) -> list[str]:
     """Resolve redirects and return only the listing page (OTAs, review sites)."""
     try:
         await crawl_throttle()
-        res = await fetch_page(client, raw, fallback="full")
+        res = await fetch_page(client, raw, fallback="free")
         if res.status_code == 200 and res.text:
             return [_clean_url(res.final_url)]
     except Exception as e:

@@ -5,7 +5,12 @@ import json
 import logging
 from datetime import datetime
 
-from app.knowledge.pipeline.crawl_http import crawl_client, crawl_throttle, fetch_page
+from app.knowledge.pipeline.crawl_http import (
+    crawl_client,
+    crawl_throttle,
+    fetch_all_free_methods,
+    fetch_via_firecrawl,
+)
 from app.knowledge.pipeline.discover import discover_urls_from_seeds
 from app.knowledge.pipeline.extract import extract_facts_from_page
 from app.knowledge.pipeline.normalize import gap_report, normalize_facts
@@ -73,23 +78,53 @@ async def run_crawl_job(job_id: str) -> dict:
                     await crawl_throttle()
                 page_id = db.create_crawl_page(job_id, url)
                 try:
-                    res = await fetch_page(client, url, fallback="full")
-                    if res.blocked:
+                    free_results = await fetch_all_free_methods(client, url)
+
+                    # Paid Firecrawl only when every free method failed and explicitly enabled.
+                    if not free_results and settings.crawl_firecrawl_enabled:
+                        firecrawl_res = await fetch_via_firecrawl(url)
+                        if firecrawl_res and firecrawl_res.text:
+                            free_results = [firecrawl_res]
+
+                    if not free_results:
                         pages_blocked += 1
-                        logger.warning("Blocked fetching page %s (method=%s)", url, res.method)
-                    if res.method == "playwright" and res.status_code == 200 and res.text:
-                        pages_via_playwright += 1
-                    html = res.text if res.text and not res.blocked else ""
+                        logger.warning("All fetch methods failed for %s", url)
+                        db.update_crawl_page(page_id, status="error")
+                        continue
+
+                    primary = next(
+                        (
+                            res
+                            for res in free_results
+                            if res.method in ("httpx", "httpx_googlebot", "httpx_browser")
+                        ),
+                        free_results[0],
+                    )
                     db.update_crawl_page(
                         page_id,
                         status="fetched",
-                        raw_html=html[:50000],
+                        raw_html=primary.text[:50000],
                     )
-                    facts = extract_facts_from_page(url, html)
-                    db.update_crawl_page(page_id, status="extracted", extracted_facts=facts)
-                    if facts:
-                        pages_with_facts += 1
+
+                    page_had_facts = False
+                    for res in free_results:
+                        if res.method == "playwright" and res.status_code == 200 and res.text:
+                            pages_via_playwright += 1
+                        facts = extract_facts_from_page(url, res.text)
+                        if not facts:
+                            continue
+                        page_had_facts = True
                         batches.append(facts)
+                        logger.info(
+                            "Extracted %d facts from %s via %s",
+                            len(facts),
+                            url,
+                            res.method,
+                        )
+
+                    db.update_crawl_page(page_id, status="extracted")
+                    if page_had_facts:
+                        pages_with_facts += 1
                 except Exception as e:
                     logger.warning("Page fetch failed %s: %s", url, e)
                     db.update_crawl_page(page_id, status="error")

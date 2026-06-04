@@ -274,6 +274,140 @@ def _extract_phone_near(text: str, keywords: list[str]) -> str | None:
     return match.group(0).strip() if match else None
 
 
+_STREET_SUFFIX = (
+    r"Road|Rd|Street|St|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Way|Lane|Ln|"
+    r"Court|Ct|Place|Pl|Highway|Hwy|Circle|Cir"
+)
+_MAILING_ADDRESS = re.compile(
+    rf"(?is)"
+    rf"(\d{{1,6}}\s+[A-Za-z0-9\s.'\-]+(?:{_STREET_SUFFIX})\.?)"
+    rf"(?:\s*,\s*\n?\s*)?"
+    rf"([\w\s.'\-]{{2,40}})?"
+    rf"(?:\s*,\s*\n?\s*)?"
+    rf"((?:[A-Z]{{2}}|[A-Za-z]{{4,20}}))?"
+    rf"(?:\s*,\s*\n?\s*)?"
+    rf"([A-Z]\d[A-Z]\s?\d[A-Z]\d)?"
+)
+
+
+def _compose_mailing_address(*parts: str | None) -> str | None:
+    cleaned = [part.strip(" ,") for part in parts if part and str(part).strip(" ,")]
+    if not cleaned:
+        return None
+    return ", ".join(cleaned)
+
+
+def _is_plausible_mailing_address(address: str) -> bool:
+    if not address or len(address) < 12:
+        return False
+    if not re.search(rf"(?i)\b(?:{_STREET_SUFFIX})\b", address):
+        return False
+    lower = address.lower()
+    if any(
+        bad in lower
+        for bad in (
+            "pets",
+            "check-in",
+            "check-out",
+            "wifi",
+            "parking",
+            " am ",
+            " pm ",
+            "allowed",
+            "housekeeping",
+        )
+    ):
+        return False
+    return True
+
+
+def _extract_mailing_address_from_text(text: str) -> str | None:
+    """Find a street address with optional city/province/postal in plain or markdown text."""
+    if not text:
+        return None
+
+    match = _MAILING_ADDRESS.search(text)
+    if match:
+        street = match.group(1).strip(" ,")
+        city = (match.group(2) or "").strip(" ,")
+        region = (match.group(3) or "").strip(" ,")
+        postal = (match.group(4) or "").strip(" ,")
+        if city and re.fullmatch(r"[A-Z]\d[A-Z]\s?\d[A-Z]\d", city, re.I):
+            postal = city
+            city = ""
+        if region and re.fullmatch(r"[A-Z]\d[A-Z]\s?\d[A-Z]\d", region, re.I):
+            postal = region
+            region = ""
+        composed = _compose_mailing_address(street, city or None, region or None, postal or None)
+        if composed and _is_plausible_mailing_address(composed):
+            return composed
+
+    single_line = re.search(
+        rf"(?i)(\d{{1,6}}\s+[\w\s.'\-]+(?:{_STREET_SUFFIX})\.?)"
+        rf"(?:,\s*([^,\n]+))?"
+        rf"(?:,\s*([^,\n]+))?"
+        rf"(?:,\s*([A-Z]\d[A-Z]\s?\d[A-Z]\d))?",
+        text,
+    )
+    if single_line:
+        composed = _compose_mailing_address(
+            single_line.group(1),
+            single_line.group(2),
+            single_line.group(3),
+            single_line.group(4),
+        )
+        if composed and _is_plausible_mailing_address(composed):
+            return composed
+    return None
+
+
+def _extract_footer_html_chunk(html: str) -> str:
+    for pattern in (
+        r"(?is)<footer[^>]*>(.*?)</footer>",
+        r'(?is)<div[^>]+id=["\']footer-content["\'][^>]*>(.*?)</div>',
+        r'(?is)<section[^>]+id=["\']footer-content["\'][^>]*>(.*?)</section>',
+        r'(?is)<div[^>]+class=["\'][^"\']*\bfooter\b[^"\']*["\'][^>]*>(.*?)</div>',
+    ):
+        match = re.search(pattern, html)
+        if match and len(match.group(1)) > 80:
+            return match.group(1)
+    return ""
+
+
+def _extract_contact_block_facts(text: str) -> dict[str, tuple[Any, float]]:
+    """Extract address and phone from footer/contact blocks in HTML or markdown."""
+    facts: dict[str, tuple[Any, float]] = {}
+    if not text:
+        return facts
+
+    address = _extract_mailing_address_from_text(text)
+    if address and _is_plausible_mailing_address(address):
+        facts["property.location"] = (address, 0.88)
+
+    phone: str | None = None
+    tel_match = re.search(r"(?i)tel:([+\d\s().-]+)", text)
+    if tel_match:
+        phone = tel_match.group(1).strip()
+    if not phone:
+        phone_match = re.search(r"(?i)(?:phone|tel(?:ephone)?)\s*:?\s*\[?([^\]\n<]+)", text)
+        if phone_match:
+            phone = phone_match.group(1).strip()
+    if not phone:
+        phone = _extract_phone_near(text, ["phone", "tel", "call", "front desk", "reservations"])
+    if phone:
+        normalized = _PHONE.search(phone)
+        if normalized:
+            facts["property.front_desk.phone"] = (normalized.group(0).strip(), 0.86)
+
+    return facts
+
+
+def _extract_footer_contact_facts(html: str) -> dict[str, tuple[Any, float]]:
+    footer = _extract_footer_html_chunk(html)
+    search_html = footer if footer else html[-12000:]
+    return _extract_contact_block_facts(_strip_html(search_html))
+
+
 def _iter_json_ld_nodes(value: Any) -> list[dict[str, Any]]:
     nodes: list[dict[str, Any]] = []
     if isinstance(value, dict):
@@ -365,8 +499,107 @@ def _clean_property_name(name: str) -> str | None:
     cleaned = re.sub(r"(?i)\s*[-|]\s*(official site|book direct|best rate).*$", "", cleaned).strip()
     cleaned = re.sub(r"[®™]", "", cleaned).strip()
     if len(cleaned) > 120:
+        cleaned = _extract_hotel_name_candidate(cleaned) or None
+        if not cleaned:
+            return None
+    if _is_seo_property_name(cleaned):
+        extracted = _extract_hotel_name_candidate(cleaned)
+        if extracted:
+            return extracted
         return None
     return cleaned
+
+
+_SEO_NAME_MARKERS = (
+    "stay at",
+    "book your stay",
+    "book a stay",
+    "book now",
+    "best hotel by",
+    "welcome to the",
+    "welcome to ",
+    "discover ",
+    "experience ",
+    "official site",
+)
+
+
+def _is_seo_property_name(name: str) -> bool:
+    low = (name or "").lower().strip()
+    if not low:
+        return True
+    if any(marker in low for marker in _SEO_NAME_MARKERS):
+        return True
+    if low.startswith("the best ") and "hotel" in low:
+        return True
+    if len(name) > 72 and "hotel" in low:
+        return True
+    return False
+
+
+def is_low_quality_property_name(name: Any) -> bool:
+    """True when a crawled property name looks like SEO boilerplate."""
+    if name is None or not str(name).strip():
+        return True
+    return _is_seo_property_name(str(name).strip())
+
+
+def _extract_hotel_name_candidate(text: str) -> str | None:
+    """Pull a hotel-like phrase from SEO-heavy titles."""
+    if not text:
+        return None
+
+    brand_hotel = re.search(
+        r"(?i)\b("
+        r"(?:sandman|comfort|hyatt|marriott|hilton|westin|sheraton|radisson|"
+        r"best western|holiday inn|hampton|fairfield|courtyard|residence inn)"
+        r"[\w\s'&.-]*(?:hotel|inn|suites|resort|lodge|motel)"
+        r"(?:\s*,\s*[^|,]+)?"
+        r"(?:\s+[\w'&.-]+){0,2}"
+        r")",
+        text,
+    )
+    if brand_hotel:
+        candidate = brand_hotel.group(1).strip(" ,-|•")
+        if candidate and not _is_seo_property_name(candidate):
+            return re.sub(r"\s+", " ", candidate).strip()
+
+    generic = re.search(
+        r"(?i)\b([\w'&.-]+(?:\s+[\w'&.-]+){0,3}\s+"
+        r"(?:hotel|inn|suites|resort|lodge|motel|hostel)\b"
+        r"(?:\s*,\s*[^|,]+)?"
+        r"(?:\s+[\w'&.-]+){0,2})",
+        text,
+    )
+    if generic:
+        candidate = generic.group(1).strip(" ,-|•")
+        if candidate and not _is_seo_property_name(candidate):
+            return re.sub(r"\s+", " ", candidate).strip()
+
+    chunks = [c.strip() for c in re.split(r"[|•–—]+", text) if c.strip()]
+    if len(chunks) <= 1:
+        chunks = [c.strip() for c in re.split(r"\s+[-–—]\s+", text) if c.strip()]
+
+    best: str | None = None
+    best_score = -999
+    for chunk in chunks:
+        low = chunk.lower()
+        score = 0
+        if any(w in low for w in ("hotel", "inn", "suites", "resort", "lodge", "motel", "sandman")):
+            score += 4
+        if _is_seo_property_name(chunk):
+            score -= 8
+        if len(chunk) > 55:
+            score -= 3
+        if len(chunk) < 8:
+            score -= 2
+        if score > best_score:
+            best_score = score
+            best = chunk
+
+    if best and best_score >= 0:
+        return re.sub(r"\s+", " ", best).strip(" ,-|•")
+    return None
 
 
 def _parse_meta_tags(html: str) -> dict[str, str]:
@@ -531,14 +764,14 @@ def _extract_jina_markdown_facts(raw: str) -> dict[str, tuple[Any, float]]:
 
     pets_section = _markdown_section(body, "house rules", "policies") or policy_text
     pet = _extract_pet_policy(pets_section)
-    if not pet:
+    if pet is None:
         pet_match = re.search(
             r"(?is)(pets(?:\s+are)?\s+allowed[^.\n]{0,120}\.)",
             pets_section,
         )
         if pet_match:
-            pet = pet_match.group(1).strip()
-    if pet:
+            pet = _coerce_boolean_slot_value(pet_match.group(1))
+    if pet is not None:
         facts["policies.pets.allowed"] = (pet, 0.9)
 
     for key, value in _extract_parking(body).items():
@@ -571,6 +804,16 @@ def _extract_jina_markdown_facts(raw: str) -> dict[str, tuple[Any, float]]:
     phone = _extract_phone_near(body, ["front desk", "reception", "phone", "tel"])
     if phone:
         facts["property.front_desk.phone"] = (phone, 0.75)
+
+    contact_text = body[-6000:] if len(body) > 6000 else body
+    contact_facts = _extract_contact_block_facts(contact_text)
+    if contact_facts.get("property.location"):
+        new_location = str(contact_facts["property.location"][0])
+        if _is_plausible_mailing_address(new_location):
+            facts["property.location"] = contact_facts["property.location"]
+    for key, value in contact_facts.items():
+        if key not in facts:
+            facts[key] = value
 
     return facts
 
@@ -639,7 +882,7 @@ def _extract_open_graph_facts(html: str) -> dict[str, tuple[Any, float]]:
         if not raw:
             continue
         name = _clean_og_title(raw) if "title" in name_key else _clean_property_name(raw)
-        if name:
+        if name and not _is_seo_property_name(name):
             facts["property.name"] = (name, confidence)
             break
 
@@ -759,23 +1002,66 @@ def _extract_wifi_credentials(text: str) -> tuple[str | None, str | None]:
     return network, password
 
 
-def _extract_pet_policy(text: str) -> str | None:
+def _is_boolean_slot_key(key: str) -> bool:
+    return key.endswith(".available") or key.endswith(".allowed")
+
+
+def _normalize_boolean_candidate(raw: Any) -> str:
+    text = str(raw or "")
+    text = re.sub(r"\[([^\]]*)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"\]\([^)]+\)", "", text)
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def _coerce_boolean_slot_value(raw: Any) -> bool | None:
+    """Map crawl text to Yes/No. Return None when ambiguous — leave empty for staff."""
+    if isinstance(raw, bool):
+        return raw
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        if raw == 1:
+            return True
+        if raw == 0:
+            return False
+        return None
+
+    text = _normalize_boolean_candidate(raw)
+    if not text:
+        return None
+
+    for pattern in (
+        r"\bno pets\b",
+        r"\bnot pet[- ]?friendly\b",
+        r"\bpets?\s+(?:are\s+)?not allowed\b",
+        r"\bdogs?\s+(?:are\s+)?not allowed\b",
+        r"\bcats?\s+(?:are\s+)?not allowed\b",
+    ):
+        if re.search(pattern, text):
+            return False
+
+    for pattern in (
+        r"\bpet[- ]?friendly\b",
+        r"\bpets?\s+(?:are\s+)?allowed\b",
+        r"\bdogs?\s+(?:are\s+)?allowed\b",
+        r"\bcats?\s+(?:are\s+)?allowed\b",
+    ):
+        if re.search(pattern, text):
+            return True
+
+    if text in {"yes", "true", "y", "1", "available"}:
+        return True
+    if text in {"no", "false", "n", "0", "unavailable", "not available"}:
+        return False
+    return None
+
+
+def _extract_pet_policy(text: str) -> bool | None:
+    """Return True/False for pet policy, or None if not confidently determined."""
     lower = text.lower()
     if "pet" not in lower and "dog" not in lower and "cat" not in lower:
         return None
-    for pattern in (
-        r"(?i)(pet[- ]friendly[^.]{0,120}\.)",
-        r"(?i)(pets (?:are )?(?:not )?allowed[^.]{0,80}\.)",
-        r"(?i)(no pets[^.]{0,60}\.)",
-    ):
-        match = re.search(pattern, text)
-        if match:
-            return match.group(1).strip()
-    if "pet-friendly" in lower or "pet friendly" in lower:
-        return "Pet-friendly"
-    if "no pets" in lower:
-        return "No pets allowed"
-    return None
+    return _coerce_boolean_slot_value(text)
 
 
 def _extract_parking(text: str) -> dict[str, Any]:
@@ -794,6 +1080,97 @@ def _extract_parking(text: str) -> dict[str, Any]:
     if loc:
         out["parking.self.location"] = loc.group(0).strip()[:120]
     return out
+
+
+_AMENITY_BOOLEAN_RULES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
+    (
+        "amenities.pool.available",
+        (
+            r"\b(?:indoor|outdoor|heated)\s+(?:swimming\s+)?pool\b",
+            r"\bswimming\s+pool\b",
+            r"\bpool\b",
+        ),
+        (r"\bno pool\b", r"\bpool\s+closed\b"),
+    ),
+    (
+        "amenities.fitness.available",
+        (
+            r"\bfitness\s+center\b",
+            r"\bfitness\s+room\b",
+            r"\bexercise\s+(?:room|center)\b",
+            r"\bgym\b",
+            r"\bworkout\s+(?:room|center)\b",
+        ),
+        (r"\bno (?:gym|fitness)\b",),
+    ),
+    (
+        "amenities.spa.available",
+        (r"\bspa\b", r"\bspa\s+services\b"),
+        (r"\bno spa\b",),
+    ),
+    (
+        "dining.breakfast.available",
+        (
+            r"\bcomplimentary breakfast\b",
+            r"\bcontinental breakfast\b",
+            r"\bfree breakfast\b",
+            r"\bbreakfast\s+(?:included|available|served)\b",
+            r"\bbreakfast\b",
+        ),
+        (r"\bno breakfast\b", r"\bbreakfast\s+not included\b"),
+    ),
+    (
+        "dining.restaurant.available",
+        (
+            r"\bon-site (?:restaurant|dining)\b",
+            r"\brestaurant\b",
+            r"\bdining room\b",
+        ),
+        (r"\bno restaurant\b",),
+    ),
+    (
+        "dining.bar.available",
+        (r"\b(?:bar|lounge|cocktail\s+lounge)\b",),
+        (r"\bno bar\b",),
+    ),
+    (
+        "room.supplies.hair_dryer.available",
+        (r"\bhair\s+dryer\b", r"\bhairdryer\b", r"\bblow\s+dryer\b"),
+        (r"\bno hair\s+dryer\b",),
+    ),
+    (
+        "room.supplies.iron_board.available",
+        (r"\biron(?:ing)?\s+board\b", r"\biron\b"),
+        (r"\bno iron\b",),
+    ),
+    (
+        "room.safe.available",
+        (r"\b(?:in-room|room)\s+safe\b", r"\bsafe\b"),
+        (r"\bno (?:in-room\s+)?safe\b",),
+    ),
+    (
+        "room.minibar.available",
+        (r"\bmini\s?bar\b", r"\bminibar\b"),
+        (r"\bno mini\s?bar\b",),
+    ),
+)
+
+
+def _extract_amenity_boolean_facts(text: str) -> dict[str, tuple[bool, float]]:
+    """Infer Yes/No amenity and room feature slots from page or summary text."""
+    facts: dict[str, tuple[bool, float]] = {}
+    if not text or len(text) < 8:
+        return facts
+
+    lower = text.lower()
+    for slot_key, yes_patterns, no_patterns in _AMENITY_BOOLEAN_RULES:
+        if any(re.search(pattern, lower) for pattern in no_patterns):
+            facts[slot_key] = (False, 0.74)
+            continue
+        if any(re.search(pattern, lower) for pattern in yes_patterns):
+            facts[slot_key] = (True, 0.78)
+
+    return facts
 
 
 def _extract_amenities_summary(html: str, text: str) -> str | None:
@@ -875,7 +1252,7 @@ def _extract_property_name(html: str, url: str) -> str | None:
         if not raw:
             continue
         name = _clean_og_title(raw) if "title" in key else _clean_property_name(raw)
-        if name:
+        if name and not _is_seo_property_name(name):
             return name
 
     title = re.search(r"(?is)<title[^>]*>(.*?)</title>", html)
@@ -969,7 +1346,12 @@ def extract_facts_from_page(
     ) -> None:
         if value is None:
             return
-        if isinstance(value, str):
+        if _is_boolean_slot_key(key):
+            coerced = _coerce_boolean_slot_value(value)
+            if coerced is None:
+                return
+            value = coerced
+        elif isinstance(value, str):
             value = value.strip()
             if not value:
                 return
@@ -996,6 +1378,7 @@ def extract_facts_from_page(
             ("json_ld", _extract_json_ld(html)),
             ("policy_box", _extract_policy_info_boxes(html)),
             ("open_graph", _extract_open_graph_facts(html)),
+            ("footer_contact", _extract_footer_contact_facts(html)),
             ("selector", _extract_selector_facts(html)),
         )
     )
@@ -1049,7 +1432,7 @@ def extract_facts_from_page(
             continue
         elif slot_key == "policies.pets.allowed":
             policy = _extract_pet_policy(text)
-            if policy:
+            if policy is not None:
                 set_slot(slot_key, policy, 0.7)
         elif slot_key == "services.housekeeping.policy":
             if "housekeeping" in text.lower():
@@ -1076,6 +1459,12 @@ def extract_facts_from_page(
     amenities_summary = _extract_amenities_summary(html, text)
     if amenities_summary:
         set_slot("property.amenities.summary", amenities_summary, 0.65)
+        for key, (value, confidence) in _extract_amenity_boolean_facts(amenities_summary).items():
+            set_slot(key, value, confidence, extraction_method="amenity_summary")
+
+    for key, (value, confidence) in _extract_amenity_boolean_facts(text).items():
+        if key not in extracted:
+            set_slot(key, value, confidence, extraction_method="regex")
 
     property_name = _extract_property_name(html, url)
     path = (urlparse(url).path or "/").lower()

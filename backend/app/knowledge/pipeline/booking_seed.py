@@ -8,7 +8,7 @@ from urllib.parse import quote_plus, urlparse
 
 import httpx
 
-from app.knowledge.pipeline.crawl_http import crawl_client, crawl_throttle, fetch_page
+from app.knowledge.pipeline.crawl_http import crawl_client, crawl_throttle, fetch_all_free_methods
 from app.knowledge.pipeline.crawl_scope import is_aggregator_url, normalize_seed_url
 from app.knowledge.pipeline.places_enrichment import _extract_hotel_name_from_url
 
@@ -154,12 +154,27 @@ async def _booking_hotel_url_reachable(url: str) -> bool:
 
 
 async def _fetch_primary_html(seed_url: str) -> str | None:
+    """Fetch hotel seed page via all free methods; prefer HTML for link extraction."""
     try:
         await crawl_throttle()
         async with crawl_client(timeout=12.0) as client:
-            res = await fetch_page(client, seed_url, fallback="free")
-            if res.status_code == 200 and res.text:
-                return res.text
+            results = await fetch_all_free_methods(client, seed_url)
+            if not results:
+                return None
+            prefer_order = (
+                "httpx",
+                "httpx_googlebot",
+                "httpx_browser",
+                "playwright",
+                "google_cache",
+                "wayback",
+                "jina",
+            )
+            for method in prefer_order:
+                for res in results:
+                    if res.method == method or res.method.startswith(method):
+                        return res.text
+            return results[0].text
     except Exception as e:
         logger.debug("Seed fetch for Booking discovery failed %s: %s", seed_url, e)
     return None
@@ -217,10 +232,11 @@ async def suggest_booking_for_seed(
 
 async def augment_seeds_with_booking(seeds: list[str]) -> tuple[list[str], dict[str, Any]]:
     """
-    Append a Booking.com hotel listing when missing.
+    Discover a Booking.com hotel listing from the primary hotel website seed and
+    append it when missing.
 
-    Uses page links first, then slug guess. Always exposes search_url in meta
-    for staff even when a hotel URL is added.
+    Runs even when the caller already supplied an optional Booking.com URL — we
+    always try to find the listing from the hotel site first.
     """
     meta: dict[str, Any] = {
         "added": None,
@@ -229,14 +245,16 @@ async def augment_seeds_with_booking(seeds: list[str]) -> tuple[list[str], dict[
         "source": None,
         "verified": False,
     }
-    if not seeds or has_booking_hotel_seed(seeds):
+    if not seeds:
         return seeds, meta
 
-    primary = seeds[0]
-    if is_aggregator_url(primary):
+    primary_hotel = next((s for s in seeds if not is_aggregator_url(s)), None)
+    if not primary_hotel:
         return seeds, meta
 
-    suggestion = await suggest_booking_for_seed(primary, probe=True, fetch_page_links=True)
+    suggestion = await suggest_booking_for_seed(
+        primary_hotel, probe=True, fetch_page_links=True
+    )
     meta["search_url"] = suggestion.get("search_url")
     meta["search_query"] = suggestion.get("search_query")
     meta["source"] = suggestion.get("source")
@@ -246,7 +264,7 @@ async def augment_seeds_with_booking(seeds: list[str]) -> tuple[list[str], dict[
     if not hotel_url:
         logger.info(
             "Booking augment: no hotel URL for %s (search: %s)",
-            primary,
+            primary_hotel,
             meta["search_url"],
         )
         return seeds, meta
@@ -258,7 +276,7 @@ async def augment_seeds_with_booking(seeds: list[str]) -> tuple[list[str], dict[
     logger.info(
         "Booking augment: added %s for %s (source=%s, verified=%s)",
         normalized,
-        primary,
+        primary_hotel,
         meta["source"],
         meta["verified"],
     )
