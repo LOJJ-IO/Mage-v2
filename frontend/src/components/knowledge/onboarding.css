@@ -353,6 +353,70 @@
   font-size: 14px;
 }
 
+.crawl-status-float {
+  position: fixed;
+  bottom: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  width: calc(100% - 2rem);
+  max-width: 42rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--border-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 14px;
+  box-shadow:
+    0 4px 6px -1px rgb(0 0 0 / 0.08),
+    0 12px 28px -4px rgb(0 0 0 / 0.12);
+  pointer-events: auto;
+}
+
+.crawl-status-float--running {
+  background: #f0f4ff;
+  border: 0.5px solid #6366f1;
+  color: #3730a3;
+}
+
+.crawl-status-float--done {
+  background: #e1f5ee;
+  border: 0.5px solid #1d9e75;
+  color: #0f6e56;
+}
+
+.crawl-status-float-body {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.45;
+}
+
+.crawl-status-float-action,
+.crawl-complete-banner button {
+  font-size: 13px;
+  padding: 4px 12px;
+  border-radius: var(--border-radius-md);
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.crawl-status-float--done .crawl-status-float-action {
+  border: 0.5px solid #1d9e75;
+  color: #0f6e56;
+}
+
+.crawl-status-float--running .crawl-status-float-action {
+  border: 0.5px solid #6366f1;
+  color: #3730a3;
+}
+
+.knowledge-onboarding.has-crawl-float .onboarding-main {
+  padding-bottom: 5.5rem;
+}
+
 .crawl-complete-banner button {
   font-size: 13px;
   padding: 4px 12px;

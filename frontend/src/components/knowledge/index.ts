@@ -1,4 +1,6 @@
 export * from './types';
+export { AnimatedNumber } from './AnimatedNumber';
+export { CrawlStatusFloat } from './CrawlStatusFloat';
 export { ToggleField } from './ToggleField';
 export { TimeField } from './TimeField';
 export { TimeRangeField } from './TimeRangeField';

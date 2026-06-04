@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AnimatedNumber,
   BRANCH_CHILDREN,
+  CrawlStatusFloat,
   FieldCard,
   getFieldState,
   isBranchHidden,
@@ -598,7 +600,11 @@ export default function StaffOnboardingPage() {
   }
 
   return (
-    <main className="staff-ui knowledge-onboarding min-h-screen bg-neutral-100 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+    <main
+      className={`staff-ui knowledge-onboarding min-h-screen bg-neutral-100 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100${
+        crawling || crawlJustCompleted ? ' has-crawl-float' : ''
+      }`}
+    >
       <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/95 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95">
         <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 lg:px-10">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -618,8 +624,9 @@ export default function StaffOnboardingPage() {
               <ProgressBar {...progressStats} />
               {completeness && (
                 <p className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
-                  Server completeness: Tier A {completeness.A.percent}% · Tier B{' '}
-                  {completeness.B.percent}%
+                  Server completeness: Tier A{' '}
+                  <AnimatedNumber value={completeness.A.percent} duration={900} />% · Tier B{' '}
+                  <AnimatedNumber value={completeness.B.percent} duration={900} />%
                 </p>
               )}
             </div>
@@ -766,20 +773,33 @@ export default function StaffOnboardingPage() {
               <div className="mt-3 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
                 <span className="font-medium capitalize">{crawlJob.status.replace(/_/g, ' ')}</span>
                 {(crawlJob.seed_urls?.length ?? 0) > 1 && (
-                  <span className="ml-2">· {crawlJob.seed_urls!.length} sources</span>
+                  <span className="ml-2">
+                    · <AnimatedNumber value={crawlJob.seed_urls!.length} duration={600} /> sources
+                  </span>
                 )}
                 {crawlJob.pages_discovered != null && (
-                  <span className="ml-2">· {crawlJob.pages_discovered} pages found</span>
+                  <span className="ml-2">
+                    · <AnimatedNumber value={crawlJob.pages_discovered} duration={700} /> pages
+                    found
+                  </span>
                 )}
                 {crawlJob.pages_extracted != null && (
-                  <span className="ml-2">· {crawlJob.pages_extracted} with facts</span>
+                  <span className="ml-2">
+                    · <AnimatedNumber value={crawlJob.pages_extracted} duration={700} /> with facts
+                  </span>
                 )}
                 {crawlJob.facts_merged != null && (
-                  <span className="ml-2">· {crawlJob.facts_merged} slots filled</span>
+                  <span className="ml-2">
+                    · <AnimatedNumber value={crawlJob.facts_merged} duration={700} /> slots filled
+                  </span>
                 )}
                 {crawlJob.gap_report && crawlJob.status === 'completed' && (
                   <span className="ml-2">
-                    · Tier A gaps: {crawlJob.gap_report.tier_a_missing?.length ?? 0}
+                    · Tier A gaps:{' '}
+                    <AnimatedNumber
+                      value={crawlJob.gap_report.tier_a_missing?.length ?? 0}
+                      duration={700}
+                    />
                   </span>
                 )}
               </div>
@@ -788,7 +808,7 @@ export default function StaffOnboardingPage() {
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-[1600px] px-4 py-8 sm:px-6 lg:px-10">
+      <div className="onboarding-main mx-auto w-full max-w-[1600px] px-4 py-8 sm:px-6 lg:px-10">
         <div className="grid gap-8 xl:grid-cols-[220px_minmax(0,1fr)]">
           <nav className="hidden xl:block" aria-label="Knowledge domains">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
@@ -810,20 +830,6 @@ export default function StaffOnboardingPage() {
           </nav>
 
           <div className="min-w-0 space-y-10">
-            {crawlJustCompleted && (
-              <div className="crawl-complete-banner" role="status">
-                <span>
-                  ✓ Crawl complete — {lastCrawlFactsMerged} facts extracted. Scroll up to
-                  review auto-filled fields when you&apos;re ready.
-                </span>
-                <button
-                  type="button"
-                  onClick={() => scrollToSection(coreSlotsByDomain[0]?.domain ?? 'property')}
-                >
-                  Review fields ↑
-                </button>
-              </div>
-            )}
             {coreSlotsByDomain.map(({ domain, slots: domainSlots }) => {
               const greenCount = domainSlots.filter(
                 (s) =>
@@ -890,6 +896,15 @@ export default function StaffOnboardingPage() {
           </div>
         </div>
       </div>
+
+      <CrawlStatusFloat
+        crawling={crawling}
+        crawlComplete={crawlJustCompleted}
+        pagesDiscovered={crawlJob?.pages_discovered ?? 0}
+        pagesWithFacts={crawlJob?.pages_extracted ?? 0}
+        factsMerged={crawlJob?.facts_merged ?? lastCrawlFactsMerged}
+        onReviewFields={() => scrollToSection(coreSlotsByDomain[0]?.domain ?? 'property')}
+      />
     </main>
   );
 }

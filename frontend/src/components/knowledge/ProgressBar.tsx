@@ -1,5 +1,7 @@
 'use client';
 
+import { AnimatedNumber } from './AnimatedNumber';
+
 interface ProgressBarProps {
   tierAConfirmed: number;
   tierATotal: number;
@@ -32,7 +34,8 @@ export function ProgressBar({
           />
         </div>
         <div className="prog-count">
-          {tierAConfirmed} of {tierATotal} fields confirmed
+          <AnimatedNumber value={tierAConfirmed} duration={800} /> of{' '}
+          <AnimatedNumber value={tierATotal} duration={800} /> fields confirmed
         </div>
       </div>
       <div className="prog-block">
@@ -44,16 +47,18 @@ export function ProgressBar({
           />
         </div>
         <div className="prog-count">
-          {tierBConfirmed} of {tierBTotal} fields confirmed
+          <AnimatedNumber value={tierBConfirmed} duration={800} /> of{' '}
+          <AnimatedNumber value={tierBTotal} duration={800} /> fields confirmed
         </div>
       </div>
       <div className="prog-block" style={{ flex: '0 0 auto', minWidth: '160px' }}>
         <div className="prog-label">Extracted from crawl</div>
         <div style={{ fontSize: '22px', fontWeight: 500, color: '#1D9E75' }}>
-          {extractedPending}
+          <AnimatedNumber value={extractedPending} duration={1000} />
         </div>
         <div className="prog-count">
-          {autoFilledCount} ready to confirm · {needsVerifyCount} need verify
+          <AnimatedNumber value={autoFilledCount} duration={800} /> ready to confirm ·{' '}
+          <AnimatedNumber value={needsVerifyCount} duration={800} /> need verify
         </div>
       </div>
     </div>
