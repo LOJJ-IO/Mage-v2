@@ -50,15 +50,27 @@ def test_normalize_booking_hotel_url():
     ) == "https://www.booking.com/hotel/ca/foo.html"
 
 
-def test_augment_skips_when_booking_already_present():
+def test_augment_keeps_existing_booking_without_duplicate():
     async def run():
-        seeds = [
-            "https://www.hyatt.com/hyatt-place/en-US/yegzw-hyatt-place-edmonton-west",
-            "https://www.booking.com/hotel/ca/hyatt-place-edmonton-west.html",
-        ]
-        return await augment_seeds_with_booking(seeds)
+        with patch(
+            "app.knowledge.pipeline.booking_seed.suggest_booking_for_seed",
+            new_callable=AsyncMock,
+        ) as mock_suggest:
+            mock_suggest.return_value = {
+                "hotel_url": "https://www.booking.com/hotel/ca/hyatt-place-edmonton-west.html",
+                "search_url": "https://www.booking.com/searchresults.html?ss=Hyatt",
+                "search_query": "Hyatt Place Edmonton West",
+                "source": "page_link",
+                "verified": True,
+            }
+            seeds = [
+                "https://www.hyatt.com/hyatt-place/en-US/yegzw-hyatt-place-edmonton-west",
+                "https://www.booking.com/hotel/ca/hyatt-place-edmonton-west.html",
+            ]
+            return await augment_seeds_with_booking(seeds), mock_suggest
 
-    out, meta = asyncio.run(run())
+    (out, meta), mock_suggest = asyncio.run(run())
+    mock_suggest.assert_awaited_once()
     assert out == [
         "https://www.hyatt.com/hyatt-place/en-US/yegzw-hyatt-place-edmonton-west",
         "https://www.booking.com/hotel/ca/hyatt-place-edmonton-west.html",

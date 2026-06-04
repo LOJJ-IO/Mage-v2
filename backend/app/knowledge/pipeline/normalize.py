@@ -10,6 +10,7 @@ _METHOD_WEIGHT = {
     "open_graph": 78,
     "jina_markdown": 88,
     "firecrawl": 87,
+    "footer_contact": 86,
     "google_places": 93,
     "selector": 85,
     "faq": 80,

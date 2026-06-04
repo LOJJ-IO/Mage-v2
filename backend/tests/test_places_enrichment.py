@@ -28,6 +28,10 @@ def test_extract_name_fallback_independent():
     assert len(name) > 3
 
 
+def test_extract_name_sandman_edmonton_west():
+    url = "https://www.sandmanhotels.com/hotels/edmonton-west"
+    name = _extract_hotel_name_from_url(url)
+    assert name == "Sandman Hotel Edmonton West"
 def test_normalize_iso_time():
     assert _normalize_places_time("T15:00") == "3:00 PM"
     assert _normalize_places_time("T04:00") == "4:00 AM"

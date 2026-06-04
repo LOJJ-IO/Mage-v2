@@ -270,6 +270,28 @@ def test_open_graph_meta_attribute_order():
     assert facts["property.name"]["value"] == "Sandman Hotel Edmonton West"
 
 
+def test_seo_og_title_extracts_sandman_hotel_name():
+    html = """
+    <html><head>
+      <meta property="og:title" content="Stay at the Best Hotel by West Edmonton Mall Sandman Hotel, Edmonton West">
+    </head><body></body></html>
+    """
+    facts = extract_facts_from_page(
+        "https://www.sandmanhotels.com/hotels/edmonton-west",
+        html,
+    )
+    assert facts["property.name"]["value"] == "Sandman Hotel, Edmonton West"
+
+
+def test_is_low_quality_property_name():
+    from app.knowledge.pipeline.extract import is_low_quality_property_name
+
+    assert is_low_quality_property_name(
+        "Stay at the Best Hotel by West Edmonton Mall Sandman Hotel, Edmonton West"
+    )
+    assert not is_low_quality_property_name("Sandman Hotel Edmonton West")
+
+
 def test_open_graph_address_tags():
     html = """
     <html><head>
@@ -334,7 +356,7 @@ def test_jina_markdown_extracts_booking_listing_facts():
     assert facts["property.location"]["value"] == "Edmonton, Canada"
     assert facts["property.check_in.time"]["value"] == "3:00 PM"
     assert facts["property.check_out.time"]["value"] == "11:00 AM"
-    assert "Pets are allowed" in facts["policies.pets.allowed"]["value"]
+    assert facts["policies.pets.allowed"]["value"] is True
     assert facts["parking.self.available"]["value"] is True
     assert "Indoor swimming pool" in facts["property.amenities.summary"]["value"]
     assert facts["services.housekeeping.policy"]["value"] == "Daily housekeeping"
@@ -345,6 +367,7 @@ def test_jina_markdown_beats_regex_pet_fragment():
         "https://www.booking.com/hotel/ca/hyatt-place-edmonton-west.html",
         _BOOKING_JINA_MARKDOWN,
     )
+    assert facts["policies.pets.allowed"]["value"] is True
     assert facts["policies.pets.allowed"]["extraction_method"] == "jina_markdown"
 
 
@@ -402,3 +425,155 @@ def test_discover_urls_seed_first_without_path_guessing(monkeypatch):
     assert sitemap_called["value"] is False
     assert len(fetch_calls) == 1
     assert fetch_calls[0] == "https://brand.com/hotels/downtown-edmonton"
+
+
+def test_footer_contact_extracts_address_and_phone():
+    html = """
+    <html><body>
+    <footer id="footer-content">
+      <h3>Sandman Hotel Edmonton West</h3>
+      <p>17635 Stony Plain Road, Edmonton, Alberta, T5S 1E3, CA</p>
+      <a href="tel:+17804831385">(780) 483-1385</a>
+    </footer>
+    </body></html>
+    """
+    facts = extract_facts_from_page("https://www.sandmanhotels.com/edmonton-west", html)
+    assert "17635 Stony Plain Road" in facts["property.location"]["value"]
+    assert facts["property.location"]["extraction_method"] == "footer_contact"
+    assert "483-1385" in facts["property.front_desk.phone"]["value"]
+
+
+def test_jina_markdown_footer_extracts_street_address():
+    markdown = """
+Title: Sandman Hotel Edmonton West
+
+URL Source: https://www.sandmanhotels.com/edmonton-west
+
+Markdown Content:
+Sandman Hotel Edmonton West
+
+17635 Stony Plain Road,
+
+ Edmonton, T5S 1E3
+
+ Phone: [(780) 483-1385](tel:+17804831385)
+"""
+    facts = extract_facts_from_page("https://www.sandmanhotels.com/edmonton-west", markdown)
+    assert "17635 Stony Plain Road" in facts["property.location"]["value"]
+    assert "Edmonton" in facts["property.location"]["value"]
+    assert "7804831385" in re.sub(r"\D", "", facts["property.front_desk.phone"]["value"])
+
+
+def test_recaptcha_widget_not_treated_as_block_page():
+    from app.knowledge.pipeline.crawl_http import is_blocked_or_challenge_html
+
+    html = (
+        "<html><body>" + ("x" * 6000)
+        + '<div data-g-recaptcha-site-key="abc123"></div>'
+        + ("y" * 6000)
+        + "</body></html>"
+    )
+    assert not is_blocked_or_challenge_html(html)
+
+
+def test_fetch_all_free_methods_collects_multiple_results():
+    import asyncio
+    from unittest.mock import patch
+
+    from app.knowledge.pipeline.crawl_http import FetchResult, crawl_client, fetch_all_free_methods
+
+    httpx_html = "<html><body>" + ("Hotel page " * 40) + "</body></html>"
+    jina_text = (
+        "Title: Example Hotel\n\nURL Source: https://example.com\n\n"
+        "Markdown Content:\n## Contact\n17601 Example Road, Edmonton, AB\n"
+        + ("detail " * 40)
+    )
+
+    async def fake_httpx(client, url):
+        return FetchResult(200, url, httpx_html, "httpx")
+
+    async def fake_playwright(url):
+        return None
+
+    async def fake_jina(url):
+        return FetchResult(200, url, jina_text, "jina")
+
+    async def fake_cache(url):
+        return None
+
+    async def fake_wayback(url):
+        return None
+
+    async def run():
+        with patch("app.knowledge.pipeline.crawl_http.fetch_via_httpx", fake_httpx):
+            with patch("app.knowledge.pipeline.crawl_http.fetch_via_playwright", fake_playwright):
+                with patch("app.knowledge.pipeline.crawl_http.fetch_via_jina", fake_jina):
+                    with patch("app.knowledge.pipeline.crawl_http.fetch_via_google_cache", fake_cache):
+                        with patch("app.knowledge.pipeline.crawl_http.fetch_via_wayback", fake_wayback):
+                            async with crawl_client() as client:
+                                return await fetch_all_free_methods(client, "https://example.com/hotel")
+
+    results = asyncio.run(run())
+    methods = {res.method for res in results}
+    assert methods == {"httpx", "jina"}
+
+
+def test_boolean_pet_friendly_coerces_to_yes():
+    facts = extract_facts_from_page(
+        "https://example.com/",
+        "<html><body>We are a pet-friendly hotel near the mall.</body></html>",
+    )
+    assert facts["policies.pets.allowed"]["value"] is True
+
+
+def test_boolean_no_pets_coerces_to_no():
+    facts = extract_facts_from_page(
+        "https://example.com/",
+        "<html><body>No pets allowed on property.</body></html>",
+    )
+    assert facts["policies.pets.allowed"]["value"] is False
+
+
+def test_boolean_ambiguous_pet_text_not_filled():
+    facts = extract_facts_from_page(
+        "https://example.com/",
+        "<html><body>Ask the front desk about animals.</body></html>",
+    )
+    assert "policies.pets.allowed" not in facts
+
+
+def test_amenity_summary_extracts_boolean_slots():
+    from app.knowledge.pipeline.extract import _extract_amenity_boolean_facts
+
+    summary = (
+        "Indoor swimming pool, Fitness center, Free overnight parking, "
+        "$20 breakfast credit, Spa services"
+    )
+    facts = _extract_amenity_boolean_facts(summary)
+    assert facts["amenities.pool.available"][0] is True
+    assert facts["amenities.fitness.available"][0] is True
+    assert facts["amenities.spa.available"][0] is True
+    assert facts["dining.breakfast.available"][0] is True
+
+
+def test_amenity_boolean_from_page_extract():
+    html = """
+    <html><body>
+    <ul>
+      <li>Indoor pool</li>
+      <li>24-hour fitness center</li>
+      <li>Hair dryer in every room</li>
+    </ul>
+    </body></html>
+    """
+    facts = extract_facts_from_page("https://example.com/", html)
+    assert facts.get("amenities.pool.available", {}).get("value") is True
+    assert facts.get("amenities.fitness.available", {}).get("value") is True
+    assert facts.get("room.supplies.hair_dryer.available", {}).get("value") is True
+
+
+def test_crawl_firecrawl_disabled_by_default(monkeypatch):
+    monkeypatch.setenv("CRAWL_FIRECRAWL_ENABLED", "false")
+    from app.core.config import Settings
+
+    assert Settings().crawl_firecrawl_enabled is False

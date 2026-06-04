@@ -6,8 +6,10 @@ import {
   FieldCard,
   getFieldState,
   isBranchHidden,
+  isCoreSlot,
   isFieldComplete,
   ProgressBar,
+  sortSlotsForDisplay,
   StaffKnowledgeSection,
   type KnowledgeGap,
   type PropertyFact,
@@ -178,9 +180,29 @@ export default function StaffOnboardingPage() {
 
   const scrollToSection = (key: string) => {
     const el =
-      key === 'staff' ? staffKnowledgeRef.current : sectionRefs.current[key];
+      key === 'staff'
+        ? staffKnowledgeRef.current
+        : key === 'details'
+          ? sectionRefs.current.details
+          : sectionRefs.current[key];
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+
+  const renderFieldGrid = (sectionSlots: Slot[]) => (
+    <ul className="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
+      {sectionSlots.map((slot) => (
+        <li key={slot.key}>
+          <FieldCard
+            slot={slot}
+            fact={facts[slot.key]}
+            isBranchChild={isBranchChild(slot.key)}
+            onPatch={patchFact}
+            onToggleParent={BRANCH_CHILDREN[slot.key] ? handleToggleParent : undefined}
+          />
+        </li>
+      ))}
+    </ul>
+  );
 
   const structuredSlots = useMemo(
     () => slots.filter((s) => s.domain !== 'staff'),
@@ -192,9 +214,38 @@ export default function StaffOnboardingPage() {
     [structuredSlots, facts]
   );
 
-  const domains = useMemo(
-    () => Array.from(new Set(structuredSlots.map((s) => s.domain))),
-    [structuredSlots]
+  const coreSlotsByDomain = useMemo(() => {
+    const core = structuredSlots.filter(isCoreSlot);
+    const order = ['property', 'amenities', 'dining'] as const;
+    return order
+      .map((domain) => ({
+        domain,
+        slots: sortSlotsForDisplay(
+          core.filter((s) => s.domain === domain && !isBranchHidden(s.key, facts))
+        ),
+      }))
+      .filter((section) => section.slots.length > 0);
+  }, [structuredSlots, facts]);
+
+  const detailSlots = useMemo(
+    () =>
+      sortSlotsForDisplay(
+        structuredSlots.filter(
+          (s) => !isCoreSlot(s) && !isBranchHidden(s.key, facts)
+        )
+      ),
+    [structuredSlots, facts]
+  );
+
+  const navSections = useMemo(
+    () => [
+      ...coreSlotsByDomain.map((s) => ({ id: s.domain, label: s.domain.replace(/_/g, ' ') })),
+      ...(detailSlots.length
+        ? [{ id: 'details', label: 'Additional details' }]
+        : []),
+      { id: 'staff', label: 'Staff knowledge' },
+    ],
+    [coreSlotsByDomain, detailSlots.length]
   );
 
   const progressStats = useMemo(() => {
@@ -744,26 +795,17 @@ export default function StaffOnboardingPage() {
               Domains
             </p>
             <ul className="space-y-1">
-              {domains.map((domain) => (
-                <li key={domain}>
+              {navSections.map((section) => (
+                <li key={section.id}>
                   <button
                     type="button"
-                    onClick={() => scrollToSection(domain)}
+                    onClick={() => scrollToSection(section.id)}
                     className="nav-link capitalize"
                   >
-                    {domain.replace(/_/g, ' ')}
+                    {section.label}
                   </button>
                 </li>
               ))}
-              <li>
-                <button
-                  type="button"
-                  onClick={() => scrollToSection('staff')}
-                  className="nav-link"
-                >
-                  Staff knowledge
-                </button>
-              </li>
             </ul>
           </nav>
 
@@ -776,16 +818,13 @@ export default function StaffOnboardingPage() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => scrollToSection(domains[0] ?? 'property')}
+                  onClick={() => scrollToSection(coreSlotsByDomain[0]?.domain ?? 'property')}
                 >
                   Review fields ↑
                 </button>
               </div>
             )}
-            {domains.map((domain) => {
-              const domainSlots = structuredSlots.filter(
-                (s) => s.domain === domain && !isBranchHidden(s.key, facts)
-              );
+            {coreSlotsByDomain.map(({ domain, slots: domainSlots }) => {
               const greenCount = domainSlots.filter(
                 (s) =>
                   getFieldState(facts[s.key]) === 'confirmed' &&
@@ -814,24 +853,30 @@ export default function StaffOnboardingPage() {
                       </button>
                     )}
                   </div>
-                  <ul className="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
-                    {domainSlots.map((slot) => (
-                      <li key={slot.key}>
-                        <FieldCard
-                          slot={slot}
-                          fact={facts[slot.key]}
-                          isBranchChild={isBranchChild(slot.key)}
-                          onPatch={patchFact}
-                          onToggleParent={
-                            BRANCH_CHILDREN[slot.key] ? handleToggleParent : undefined
-                          }
-                        />
-                      </li>
-                    ))}
-                  </ul>
+                  {renderFieldGrid(domainSlots)}
                 </section>
               );
             })}
+
+            {detailSlots.length > 0 && (
+              <section
+                id="domain-details"
+                ref={(el) => {
+                  sectionRefs.current.details = el;
+                }}
+              >
+                <div className="section-header">
+                  <h2 className="font-heading text-lg font-semibold text-neutral-900 dark:text-white">
+                    Additional details
+                  </h2>
+                  <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                    Room policies, services, and other fields that usually need a quick staff
+                    confirmation — grouped here so auto-filled essentials stay up top.
+                  </p>
+                </div>
+                {renderFieldGrid(detailSlots)}
+              </section>
+            )}
 
             <div ref={staffKnowledgeRef} id="staff-knowledge">
               <StaffKnowledgeSection

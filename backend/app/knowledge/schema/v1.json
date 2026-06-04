@@ -48,7 +48,8 @@
       "tier": "B",
       "label": "Late checkout policy",
       "value_type": "string",
-      "markdown_section": "Check-In & Check-Out"
+      "markdown_section": "Check-In & Check-Out",
+      "form_group": "detail"
     },
     {
       "key": "connectivity.wifi.network_name",
@@ -71,6 +72,17 @@
       "markdown_section": "WiFi"
     },
     {
+      "key": "dining.restaurant.available",
+      "domain": "dining",
+      "tier": "A",
+      "label": "Restaurant",
+      "value_type": "boolean",
+      "aliases": ["restaurant", "dining", "on-site dining"],
+      "faq_id": "dining",
+      "markdown_section": "Dining",
+      "form_group": "core"
+    },
+    {
       "key": "dining.restaurant.hours",
       "domain": "dining",
       "tier": "A",
@@ -81,6 +93,17 @@
       "markdown_section": "Dining"
     },
     {
+      "key": "dining.breakfast.available",
+      "domain": "dining",
+      "tier": "A",
+      "label": "Breakfast",
+      "value_type": "boolean",
+      "aliases": ["breakfast", "continental breakfast"],
+      "faq_id": "dining",
+      "markdown_section": "Dining",
+      "form_group": "core"
+    },
+    {
       "key": "dining.breakfast.hours",
       "domain": "dining",
       "tier": "A",
@@ -89,6 +112,17 @@
       "aliases": ["breakfast"],
       "faq_id": "dining",
       "markdown_section": "Dining"
+    },
+    {
+      "key": "dining.bar.available",
+      "domain": "dining",
+      "tier": "B",
+      "label": "Bar & lounge",
+      "value_type": "boolean",
+      "aliases": ["bar", "lounge", "cocktail"],
+      "faq_id": "bar",
+      "markdown_section": "Dining",
+      "form_group": "core"
     },
     {
       "key": "dining.bar.hours",
@@ -120,6 +154,17 @@
       "markdown_section": "Dining"
     },
     {
+      "key": "amenities.pool.available",
+      "domain": "amenities",
+      "tier": "A",
+      "label": "Swimming pool",
+      "value_type": "boolean",
+      "aliases": ["pool", "swim", "swimming"],
+      "faq_id": "pool",
+      "markdown_section": "Amenities",
+      "form_group": "core"
+    },
+    {
       "key": "amenities.pool.hours",
       "domain": "amenities",
       "tier": "A",
@@ -143,6 +188,17 @@
       "markdown_section": "Amenities"
     },
     {
+      "key": "amenities.fitness.available",
+      "domain": "amenities",
+      "tier": "A",
+      "label": "Gym / fitness center",
+      "value_type": "boolean",
+      "aliases": ["gym", "fitness", "fitness center", "workout"],
+      "faq_id": "pool",
+      "markdown_section": "Amenities",
+      "form_group": "core"
+    },
+    {
       "key": "amenities.fitness.hours",
       "domain": "amenities",
       "tier": "A",
@@ -164,6 +220,16 @@
       "aliases": ["gym", "fitness"],
       "faq_id": "pool",
       "markdown_section": "Amenities"
+    },
+    {
+      "key": "amenities.spa.available",
+      "domain": "amenities",
+      "tier": "B",
+      "label": "Spa",
+      "value_type": "boolean",
+      "aliases": ["spa"],
+      "markdown_section": "Amenities",
+      "form_group": "core"
     },
     {
       "key": "amenities.spa.hours",
@@ -221,14 +287,15 @@
       ],
       "aliases": ["bill", "invoice", "charge", "payment"],
       "faq_id": "billing",
-      "markdown_section": "Policies"
+      "markdown_section": "Policies",
+      "form_group": "detail"
     },
     {
       "key": "policies.pets.allowed",
       "domain": "property",
       "tier": "A",
       "label": "Pet policy",
-      "value_type": "string",
+      "value_type": "boolean",
       "aliases": ["pet", "pets", "dog", "cat"],
       "faq_id": "pets",
       "markdown_section": "Policies"
@@ -250,7 +317,8 @@
       ],
       "aliases": ["laundry", "dry cleaning"],
       "faq_id": "laundry",
-      "markdown_section": "Services"
+      "markdown_section": "Services",
+      "form_group": "detail"
     },
     {
       "key": "services.lost_found.process",
@@ -268,7 +336,8 @@
       ],
       "aliases": ["lost", "missing", "forgot"],
       "faq_id": "lost_found",
-      "markdown_section": "Services"
+      "markdown_section": "Services",
+      "form_group": "detail"
     },
     {
       "key": "room.supplies.towels.policy",
@@ -287,13 +356,25 @@
       ],
       "aliases": ["towel", "towels", "linens"],
       "faq_id": "towels_info",
-      "markdown_section": "Room"
+      "markdown_section": "Room",
+      "form_group": "detail"
+    },
+    {
+      "key": "room.supplies.iron_board.available",
+      "domain": "room",
+      "tier": "A",
+      "label": "Iron & ironing board",
+      "value_type": "boolean",
+      "aliases": ["iron", "ironing", "ironing board"],
+      "faq_id": "iron",
+      "markdown_section": "Room",
+      "form_group": "detail"
     },
     {
       "key": "room.supplies.iron_board.availability",
       "domain": "room",
       "tier": "A",
-      "label": "Iron & ironing board",
+      "label": "Iron & ironing board — details",
       "value_type": "string",
       "widget": "multiple_choice",
       "question": "When a guest asks for an iron...",
@@ -306,13 +387,25 @@
       ],
       "aliases": ["iron", "ironing", "ironing board"],
       "faq_id": "iron",
-      "markdown_section": "Room"
+      "markdown_section": "Room",
+      "form_group": "detail"
+    },
+    {
+      "key": "room.supplies.hair_dryer.available",
+      "domain": "room",
+      "tier": "B",
+      "label": "Hair dryer",
+      "value_type": "boolean",
+      "aliases": ["hair dryer", "hairdryer", "blow dryer"],
+      "faq_id": "hair_dryer",
+      "markdown_section": "Room",
+      "form_group": "detail"
     },
     {
       "key": "room.supplies.hair_dryer.availability",
       "domain": "room",
       "tier": "B",
-      "label": "Hair dryer",
+      "label": "Hair dryer — details",
       "value_type": "string",
       "widget": "multiple_choice",
       "question": "Hair dryer...",
@@ -324,7 +417,8 @@
       ],
       "aliases": ["hair dryer", "hairdryer", "blow dryer"],
       "faq_id": "hair_dryer",
-      "markdown_section": "Room"
+      "markdown_section": "Room",
+      "form_group": "detail"
     },
     {
       "key": "room.climate.thermostat",
@@ -342,13 +436,25 @@
       ],
       "aliases": ["cold", "hot", "temperature", "thermostat", "air conditioning"],
       "faq_id": "climate",
-      "markdown_section": "Room"
+      "markdown_section": "Room",
+      "form_group": "detail"
+    },
+    {
+      "key": "room.safe.available",
+      "domain": "room",
+      "tier": "B",
+      "label": "In-room safe",
+      "value_type": "boolean",
+      "aliases": ["safe", "room safe"],
+      "faq_id": "safe",
+      "markdown_section": "Room",
+      "form_group": "detail"
     },
     {
       "key": "room.safe.instructions",
       "domain": "room",
       "tier": "B",
-      "label": "In-room safe",
+      "label": "In-room safe — details",
       "value_type": "string",
       "widget": "multiple_choice",
       "question": "In-room safe...",
@@ -361,13 +467,25 @@
       ],
       "aliases": ["safe", "room safe"],
       "faq_id": "safe",
-      "markdown_section": "Room"
+      "markdown_section": "Room",
+      "form_group": "detail"
+    },
+    {
+      "key": "room.minibar.available",
+      "domain": "room",
+      "tier": "B",
+      "label": "Minibar",
+      "value_type": "boolean",
+      "aliases": ["minibar", "mini bar"],
+      "faq_id": "minibar",
+      "markdown_section": "Room",
+      "form_group": "detail"
     },
     {
       "key": "room.minibar.policy",
       "domain": "room",
       "tier": "B",
-      "label": "Minibar policy",
+      "label": "Minibar — details",
       "value_type": "string",
       "widget": "multiple_choice",
       "question": "Minibar...",
@@ -380,7 +498,8 @@
       ],
       "aliases": ["minibar", "mini bar"],
       "faq_id": "minibar",
-      "markdown_section": "Room"
+      "markdown_section": "Room",
+      "form_group": "detail"
     },
     {
       "key": "services.housekeeping.policy",
@@ -399,7 +518,8 @@
       ],
       "aliases": ["housekeeping", "housekeeper", "clean"],
       "faq_id": "housekeeping_info",
-      "markdown_section": "Services"
+      "markdown_section": "Services",
+      "form_group": "detail"
     },
     {
       "key": "property.elevators.location",
@@ -417,7 +537,8 @@
       ],
       "aliases": ["elevator", "lift"],
       "faq_id": "elevator",
-      "markdown_section": "Property"
+      "markdown_section": "Property",
+      "form_group": "detail"
     },
     {
       "key": "transport.airport_shuttle",
@@ -436,7 +557,8 @@
       ],
       "aliases": ["airport", "shuttle", "taxi", "uber", "lyft"],
       "faq_id": "transport",
-      "markdown_section": "Transport"
+      "markdown_section": "Transport",
+      "form_group": "detail"
     },
     {
       "key": "services.concierge",
@@ -453,7 +575,8 @@
       ],
       "aliases": ["concierge", "directions", "nearby"],
       "faq_id": "concierge",
-      "markdown_section": "Services"
+      "markdown_section": "Services",
+      "form_group": "detail"
     },
     {
       "key": "services.wake_up_call",
@@ -470,7 +593,8 @@
       ],
       "aliases": ["wake up", "wakeup"],
       "faq_id": "wake_up",
-      "markdown_section": "Services"
+      "markdown_section": "Services",
+      "form_group": "detail"
     },
     {
       "key": "services.upgrades.policy",
@@ -489,7 +613,8 @@
       ],
       "aliases": ["upgrade", "upgrades"],
       "faq_id": "upgrade",
-      "markdown_section": "Services"
+      "markdown_section": "Services",
+      "form_group": "detail"
     },
     {
       "key": "dining.coffee.availability",
@@ -508,7 +633,8 @@
       ],
       "aliases": ["coffee", "tea"],
       "faq_id": "coffee",
-      "markdown_section": "Dining"
+      "markdown_section": "Dining",
+      "form_group": "detail"
     },
     {
       "key": "property.amenities.summary",
@@ -518,7 +644,8 @@
       "value_type": "string",
       "aliases": ["amenities", "amenity"],
       "faq_id": "amenities",
-      "markdown_section": "Amenities"
+      "markdown_section": "Amenities",
+      "form_group": "detail"
     },
     {
       "key": "property.noise.policy",
@@ -536,7 +663,8 @@
       ],
       "aliases": ["noise", "loud", "noisy"],
       "faq_id": "noise",
-      "markdown_section": "Policies"
+      "markdown_section": "Policies",
+      "form_group": "detail"
     },
     {
       "key": "property.front_desk.phone",

@@ -121,7 +121,7 @@ class Settings(BaseSettings):
     # Firecrawl API — paid final fallback for blocked hotel/OTA pages (optional).
     firecrawl_api_key: str = os.getenv("FIRECRAWL_API_KEY", "")
     crawl_firecrawl_enabled: bool = os.getenv(
-        "CRAWL_FIRECRAWL_ENABLED", "true"
+        "CRAWL_FIRECRAWL_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
     # Pause between crawl/discover HTTP requests (seconds) to avoid rate limits.
     crawl_request_delay_sec: float = float(os.getenv("CRAWL_REQUEST_DELAY_SEC", "1.5"))

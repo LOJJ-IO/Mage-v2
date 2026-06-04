@@ -31,6 +31,8 @@ export type Slot = {
   options?: string[];
   placeholder?: string;
   suggestions?: string[];
+  /** core = auto-fill friendly, shown first; detail = staff-heavy, shown before Staff Knowledge */
+  form_group?: 'core' | 'detail';
 };
 
 export type KnowledgeGap = {
@@ -38,6 +40,8 @@ export type KnowledgeGap = {
   question: string;
   count: number;
 };
+
+export const CORE_DOMAIN_ORDER = ['property', 'amenities', 'dining'] as const;
 
 export const BRANCH_CHILDREN: Record<string, string[]> = {
   'parking.self.available': ['parking.self.location', 'parking.self.rate'],
@@ -49,7 +53,52 @@ export const BRANCH_CHILDREN: Record<string, string[]> = {
   'dining.breakfast.available': ['dining.breakfast.hours', 'dining.breakfast.type'],
   'dining.bar.available': ['dining.bar.hours'],
   'dining.room_service.available': ['dining.room_service.hours'],
+  'room.supplies.hair_dryer.available': ['room.supplies.hair_dryer.availability'],
+  'room.supplies.iron_board.available': ['room.supplies.iron_board.availability'],
+  'room.safe.available': ['room.safe.instructions'],
+  'room.minibar.available': ['room.minibar.policy'],
 };
+
+const WIDGET_SORT_ORDER: Record<WidgetType, number> = {
+  toggle: 0,
+  time: 1,
+  time_range: 2,
+  phone: 3,
+  text: 4,
+  text_with_chips: 5,
+  currency: 6,
+  toggle_then_choice: 7,
+  multiple_choice: 8,
+  textarea: 9,
+};
+
+/** Sort slots: parent toggles first, then easy widgets, children directly after parents. */
+export function sortSlotsForDisplay(slots: Slot[]): Slot[] {
+  const slotIndex = new Map(slots.map((slot, index) => [slot.key, index]));
+
+  const compare = (a: Slot, b: Slot): number => {
+    if (a.key === getParentKey(b.key)) return -1;
+    if (b.key === getParentKey(a.key)) return 1;
+
+    const groupA = a.form_group === 'detail' ? 1 : 0;
+    const groupB = b.form_group === 'detail' ? 1 : 0;
+    if (groupA !== groupB) return groupA - groupB;
+
+    const widgetA = WIDGET_SORT_ORDER[getWidgetType(a.key, a)] ?? 5;
+    const widgetB = WIDGET_SORT_ORDER[getWidgetType(b.key, b)] ?? 5;
+    if (widgetA !== widgetB) return widgetA - widgetB;
+
+    const idxA = slotIndex.get(a.key) ?? 999;
+    const idxB = slotIndex.get(b.key) ?? 999;
+    return idxA - idxB;
+  };
+
+  return [...slots].sort(compare);
+}
+
+export function isCoreSlot(slot: Slot): boolean {
+  return slot.form_group !== 'detail';
+}
 
 export const CHECK_IN_PRESETS = ['2:00 PM', '3:00 PM', '4:00 PM'];
 export const CHECK_OUT_PRESETS = ['10:00 AM', '11:00 AM', '12:00 PM'];
