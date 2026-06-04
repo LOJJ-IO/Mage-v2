@@ -489,7 +489,17 @@ class MockDatabase(PropertyStoreMixin):
         # Keep last 50 messages
         if len(self.conversations[guest_id]) > 50:
             self.conversations[guest_id] = self.conversations[guest_id][-50:]
-    
+
+        if role == "user":
+            try:
+                from app.services.sentiment import compute_happiness_score
+                score = compute_happiness_score(self.conversations[guest_id])
+                guest = self.guests.get(guest_id)
+                if guest:
+                    guest.happiness_score = score
+            except Exception as e:
+                logger.warning("Sentiment scoring failed for %s: %s", guest_id, e)
+
     def clear_conversation(self, guest_id: str):
         """Clear conversation history for a guest."""
         self.conversations[guest_id] = []
@@ -898,9 +908,29 @@ class SupabaseDatabase(PropertyStoreSupabase):
                 "created_at": datetime.utcnow().isoformat()
             }
             self.client.table("conversations").insert(message_dict).execute()
-            
+
             # Note: Supabase doesn't automatically limit to 50 messages
             # You may want to add a cleanup job or trigger in Supabase
+
+            if role == "user":
+                try:
+                    from app.services.sentiment import compute_happiness_score
+                    recent = (
+                        self.client.table("conversations")
+                        .select("role, content")
+                        .eq("guest_id", guest_id)
+                        .order("created_at", desc=True)
+                        .limit(10)
+                        .execute()
+                    )
+                    msgs = list(reversed(recent.data or []))
+                    score = compute_happiness_score(msgs)
+                    self.client.table("guests").update(
+                        {"happiness_score": score}
+                    ).eq("id", guest_id).execute()
+                except Exception as sentiment_err:
+                    logger.warning("Sentiment scoring failed for %s: %s", guest_id, sentiment_err)
+
         except Exception as e:
             logger.error(f"Error adding message to conversation for guest {guest_id}: {e}")
             raise

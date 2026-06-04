@@ -198,6 +198,21 @@ async def list_staff_inbox_threads(
     return _enrich_inbox_threads(raw, actions)
 
 
+class GuestHappinessScore(BaseModel):
+    guest_id: str
+    score: Optional[int] = None
+
+
+@router.get("/guests/happiness-scores", response_model=List[GuestHappinessScore])
+async def list_guest_happiness_scores(_: bool = Depends(verify_staff_key)):
+    """Pre-computed VADER happiness scores for all guests. Cheap single-table read."""
+    db = get_database()
+    return [
+        GuestHappinessScore(guest_id=g.id, score=g.happiness_score)
+        for g in db.list_guests()
+    ]
+
+
 @router.get("/guests/{guest_id}/conversation", response_model=StaffGuestConversationResponse)
 async def get_staff_guest_conversation(
     guest_id: str,

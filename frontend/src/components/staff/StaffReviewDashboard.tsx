@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { StaffAction } from '@/types';
+import { apiClient } from '@/lib/api';
 import { StaffCard, StaffTag } from './StaffLayoutPrimitives';
 import { ResizableSplit } from './ResizablePanel';
 
@@ -10,6 +11,7 @@ const REVIEW_STATUS_KEY = 'mage-review-status';
 
 interface StaffReviewDashboardProps {
   actions: StaffAction[];
+  staffKey: string;
 }
 
 interface GuestReviewRow {
@@ -36,7 +38,15 @@ function inferHappiness(rows: StaffAction[]): number {
   return clamp(score, 25, 99);
 }
 
-export function StaffReviewDashboard({ actions }: StaffReviewDashboardProps) {
+export function StaffReviewDashboard({ actions, staffKey }: StaffReviewDashboardProps) {
+  const [sentimentScores, setSentimentScores] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    apiClient.listGuestHappinessScores(staffKey).then((res) => {
+      if (res.success && res.data) setSentimentScores(res.data);
+    });
+  }, [staffKey]);
+
   const [platformSettings, setPlatformSettings] = useState<string[]>([
     'Google',
     'Tripadvisor',
@@ -95,7 +105,7 @@ export function StaffReviewDashboard({ actions }: StaffReviewDashboardProps) {
         checkoutDate: new Date(
           new Date(latest.createdAt).getTime() + 2 * 24 * 60 * 60 * 1000
         ).toLocaleDateString(),
-        happinessScore: inferHappiness(rowsByGuest),
+        happinessScore: sentimentScores[guestId] ?? inferHappiness(rowsByGuest),
         requestCount: rowsByGuest.length,
         reviewRequestsSent: '—',
         reviewPosted: status?.posted ? 'Yes' : 'No',

@@ -525,6 +525,22 @@ class ApiClient {
     return { success: true, data: result.data.map(mapStaffAction) };
   }
 
+  async listGuestHappinessScores(staffKey: string): Promise<ApiResponse<Record<string, number>>> {
+    const result = await this.request<Array<{ guest_id: string; score: number | null }>>(
+      '/api/staff/guests/happiness-scores',
+      {},
+      staffKey
+    );
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    const map: Record<string, number> = {};
+    for (const row of result.data) {
+      if (row.score != null) map[row.guest_id] = row.score;
+    }
+    return { success: true, data: map };
+  }
+
   async getStaffAction(staffKey: string, actionId: string): Promise<ApiResponse<StaffAction>> {
     const result = await this.request<Record<string, unknown>>(
       `/api/staff/actions/${actionId}`,
