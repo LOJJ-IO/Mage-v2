@@ -55,10 +55,7 @@ export function StaffKnowledgeSection({
           const fact = facts[slot.key];
           const answered = fact?.value != null && fact?.value !== '';
           return (
-            <div
-              key={slot.key}
-              className={`field-card ${answered ? 'green' : 'empty'}`}
-            >
+            <div key={slot.key} className="field-card">
               <div className="field-top">
                 <div className="field-label">
                   {slot.label}
@@ -92,11 +89,7 @@ export function StaffKnowledgeSection({
             Guests asked these recently — we had no answer
           </div>
           {knowledgeGaps.map((gap) => (
-            <div
-              key={gap.id}
-              className="field-card empty"
-              style={{ marginBottom: '0.75rem' }}
-            >
+            <div key={gap.id} className="field-card" style={{ marginBottom: '0.75rem' }}>
               <div className="field-top">
                 <div className="field-label">&ldquo;{gap.question}&rdquo;</div>
                 <span className="badge unknown">Asked {gap.count}×</span>

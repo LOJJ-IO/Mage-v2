@@ -145,23 +145,12 @@
   border: 0.5px solid var(--color-border-secondary);
   background: white;
   padding: 1rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
 .dark .knowledge-onboarding .field-card {
   background: #171717;
-}
-
-.knowledge-onboarding .field-card.green {
-  border-left: 3px solid #1d9e75;
-}
-
-.knowledge-onboarding .field-card.yellow {
-  border-left: 3px solid #ba7517;
-}
-
-.knowledge-onboarding .field-card.empty {
-  border-left: 3px solid var(--color-border-tertiary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .knowledge-onboarding .field-top {
@@ -178,24 +167,31 @@
 }
 
 .knowledge-onboarding .tier-pill {
+  display: inline-flex;
+  align-items: center;
   margin-left: 0.5rem;
   font-size: 10px;
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-background-secondary);
   color: var(--color-text-tertiary);
+  text-transform: none;
+  letter-spacing: normal;
+  vertical-align: middle;
 }
 
 .knowledge-onboarding .badge {
   flex-shrink: 0;
   font-size: 11px;
   font-weight: 500;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 999px;
+  line-height: 1.3;
 }
 
 .knowledge-onboarding .badge.confirmed {
-  background: #e1f5ee;
+  background: #e8f7f0;
   color: #0f6e56;
 }
 
@@ -205,6 +201,11 @@
 }
 
 .knowledge-onboarding .badge.unknown {
+  background: #f3f0eb;
+  color: #6b6560;
+}
+
+.dark .knowledge-onboarding .badge.unknown {
   background: var(--color-background-secondary);
   color: var(--color-text-secondary);
 }
@@ -233,14 +234,23 @@
   font-size: 13px;
   padding: 5px 12px;
   border-radius: var(--border-radius-md);
-  background: #1d9e75;
-  color: white;
-  border: none;
+  background: white;
+  color: var(--color-text-primary);
+  border: 0.5px solid var(--color-border-secondary);
   cursor: pointer;
 }
 
 .knowledge-onboarding .btn-confirm:hover {
-  background: #0f6e56;
+  background: var(--color-background-secondary);
+}
+
+.dark .knowledge-onboarding .btn-confirm {
+  background: #171717;
+  color: var(--color-text-primary);
+}
+
+.dark .knowledge-onboarding .btn-confirm:hover {
+  background: #262626;
 }
 
 .knowledge-onboarding .btn-edit {
@@ -273,9 +283,15 @@
 .knowledge-onboarding .prog-block {
   flex: 1;
   min-width: 160px;
-  background: var(--color-background-secondary);
+  background: white;
+  border: 0.5px solid var(--color-border-secondary);
   border-radius: var(--border-radius-md);
   padding: 0.75rem 1rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.dark .knowledge-onboarding .prog-block {
+  background: #171717;
 }
 
 .knowledge-onboarding .prog-label {
@@ -306,8 +322,15 @@
 
 .knowledge-onboarding .staff-knowledge-section {
   margin-top: 2rem;
-  padding-top: 1.5rem;
-  border-top: 0.5px solid var(--color-border-tertiary);
+  padding: 1.5rem;
+  border-radius: 12px;
+  background: #faf8f5;
+  border: 0.5px solid #ebe6de;
+}
+
+.dark .knowledge-onboarding .staff-knowledge-section {
+  background: #1c1917;
+  border-color: #404040;
 }
 
 .knowledge-onboarding .field-question {
@@ -328,15 +351,19 @@
   font-size: 12px;
   padding: 5px 12px;
   border-radius: var(--border-radius-md);
-  background: #e1f5ee;
-  color: #0f6e56;
-  border: 0.5px solid #1d9e75;
+  background: white;
+  color: var(--color-text-primary);
+  border: 0.5px solid var(--color-border-secondary);
   cursor: pointer;
   white-space: nowrap;
 }
 
 .knowledge-onboarding .confirm-all-btn:hover {
-  background: #c8ebe0;
+  background: var(--color-background-secondary);
+}
+
+.dark .knowledge-onboarding .confirm-all-btn {
+  background: #171717;
 }
 
 .crawl-complete-banner {
@@ -448,7 +475,6 @@
 }
 
 .knowledge-onboarding .branch-child {
-  margin-left: 1rem;
-  border-left: 2px solid var(--color-border-tertiary);
-  padding-left: 0.75rem;
+  /* Nested follow-up fields — indent only, no status-colored border */
+  margin-top: 0.25rem;
 }
