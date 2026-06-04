@@ -1,5 +1,6 @@
 'use client';
 
+import { IconCircleCheck, IconSparkles } from '@tabler/icons-react';
 import { AnimatedNumber } from './AnimatedNumber';
 
 interface ProgressBarProps {
@@ -9,6 +10,7 @@ interface ProgressBarProps {
   tierBTotal: number;
   autoFilledCount: number;
   needsVerifyCount: number;
+  hasCrawlRun: boolean;
 }
 
 export function ProgressBar({
@@ -18,48 +20,72 @@ export function ProgressBar({
   tierBTotal,
   autoFilledCount,
   needsVerifyCount,
+  hasCrawlRun,
 }: ProgressBarProps) {
   const tierAPct = tierATotal > 0 ? (tierAConfirmed / tierATotal) * 100 : 0;
   const tierBPct = tierBTotal > 0 ? (tierBConfirmed / tierBTotal) * 100 : 0;
   const extractedPending = autoFilledCount + needsVerifyCount;
+  const showExtractedStats = hasCrawlRun || extractedPending > 0;
 
   return (
     <div className="progress-row">
-      <div className="prog-block">
-        <div className="prog-label">Tier A — essential</div>
+      <div className="prog-card">
+        <div className="prog-card-label">
+          <IconCircleCheck size={14} stroke={2} className="prog-icon prog-icon--a" aria-hidden />
+          Tier A — essential
+        </div>
         <div className="prog-bar-bg">
           <div
-            className="prog-bar"
-            style={{ width: `${tierAPct}%`, background: '#1D9E75' }}
+            className="prog-bar prog-bar--a"
+            style={{ width: `${tierAPct}%` }}
           />
         </div>
-        <div className="prog-count">
+        <div className="prog-nums">
           <AnimatedNumber value={tierAConfirmed} duration={800} /> of{' '}
           <AnimatedNumber value={tierATotal} duration={800} /> fields confirmed
         </div>
       </div>
-      <div className="prog-block">
-        <div className="prog-label">Tier B — helpful</div>
+
+      <div className="prog-card">
+        <div className="prog-card-label">
+          <IconCircleCheck size={14} stroke={2} className="prog-icon prog-icon--b" aria-hidden />
+          Tier B — helpful
+        </div>
         <div className="prog-bar-bg">
           <div
-            className="prog-bar"
-            style={{ width: `${tierBPct}%`, background: '#BA7517' }}
+            className="prog-bar prog-bar--b"
+            style={{ width: `${tierBPct}%` }}
           />
         </div>
-        <div className="prog-count">
+        <div className="prog-nums">
           <AnimatedNumber value={tierBConfirmed} duration={800} /> of{' '}
           <AnimatedNumber value={tierBTotal} duration={800} /> fields confirmed
         </div>
       </div>
-      <div className="prog-block" style={{ flex: '0 0 auto', minWidth: '160px' }}>
-        <div className="prog-label">Extracted from crawl</div>
-        <div style={{ fontSize: '22px', fontWeight: 500, color: '#1D9E75' }}>
-          <AnimatedNumber value={extractedPending} duration={1000} />
+
+      <div className="prog-card">
+        <div className="prog-card-label">
+          <IconSparkles size={14} stroke={1.75} className="prog-icon prog-icon--extract" aria-hidden />
+          Extracted from crawl
         </div>
-        <div className="prog-count">
-          <AnimatedNumber value={autoFilledCount} duration={800} /> ready to confirm ·{' '}
-          <AnimatedNumber value={needsVerifyCount} duration={800} /> need verify
-        </div>
+        {showExtractedStats ? (
+          <>
+            <div className="prog-big">
+              <AnimatedNumber value={extractedPending} duration={1000} />
+            </div>
+            <div className="prog-detail">
+              <AnimatedNumber value={autoFilledCount} duration={800} /> ready to confirm ·{' '}
+              <AnimatedNumber value={needsVerifyCount} duration={800} /> need verify
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="prog-big prog-big--idle" aria-hidden>
+              —
+            </div>
+            <div className="prog-detail">Start a crawl to auto-fill fields</div>
+          </>
+        )}
       </div>
     </div>
   );
