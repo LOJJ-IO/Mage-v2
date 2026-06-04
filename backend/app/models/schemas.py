@@ -173,6 +173,7 @@ class GuestProfile(BaseModel):
     property_id: Optional[str] = None
     pms_booking_id: Optional[str] = None
     pms_guest_id: Optional[str] = None
+    happiness_score: Optional[int] = None
 
 
 class MagicLinkRequest(BaseModel):
