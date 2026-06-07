@@ -4,6 +4,44 @@ from pydantic import field_validator
 from functools import lru_cache
 
 
+def _strip_url_scheme(host: str) -> str:
+    return host.replace("https://", "").replace("http://", "").strip().rstrip("/")
+
+
+def resolve_frontend_url(
+    *,
+    request_host: str | None = None,
+    forwarded_host: str | None = None,
+    forwarded_proto: str | None = None,
+) -> str:
+    """
+    Public site URL for magic links.
+
+    Priority: FRONTEND_URL env → request Host/X-Forwarded-Host (what the guest typed)
+    → VERCEL_PROJECT_PRODUCTION_URL (stable prod alias) → VERCEL_URL (deployment id URL).
+    """
+    explicit = (os.getenv("FRONTEND_URL") or "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+
+    for host in (forwarded_host, request_host):
+        cleaned = (host or "").split(",")[0].strip()
+        if not cleaned or cleaned.startswith("127.0.0.1") or cleaned.startswith("localhost"):
+            continue
+        proto = (forwarded_proto or "https").split(",")[0].strip() or "https"
+        return f"{proto}://{cleaned}"
+
+    production = (os.getenv("VERCEL_PROJECT_PRODUCTION_URL") or "").strip()
+    if production:
+        return f"https://{_strip_url_scheme(production)}"
+
+    # Last resort: unique per-deployment hostname (e.g. lojj-ecrbixun1-....vercel.app)
+    vercel = (os.getenv("VERCEL_URL") or "").strip()
+    if vercel:
+        return f"https://{_strip_url_scheme(vercel)}"
+    return "http://localhost:3000"
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
@@ -140,7 +178,7 @@ class Settings(BaseSettings):
     auth_token_ttl_hours: int = int(os.getenv("AUTH_TOKEN_TTL_HOURS", "48"))
     session_ttl_hours: int = int(os.getenv("SESSION_TTL_HOURS", "168"))
     stay_grace_hours: int = int(os.getenv("STAY_GRACE_HOURS", "12"))
-    frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    frontend_url: str = resolve_frontend_url()
     email_provider: str = os.getenv("EMAIL_PROVIDER", "")
     allow_dev_guest_login: bool = os.getenv(
         "ALLOW_DEV_GUEST_LOGIN", os.getenv("DEBUG", "true")

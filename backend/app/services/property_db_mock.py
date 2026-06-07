@@ -93,14 +93,21 @@ class PropertyStoreMixin:
             "used_at": None,
         }
 
-    def consume_auth_token(self, token_hash: str) -> Optional[dict]:
+    def validate_auth_token(self, token_hash: str) -> Optional[dict]:
         row = self.auth_tokens.get(token_hash)
-        if not row or row.get("used_at"):
+        if not row:
             return None
         if row["expires_at"] < datetime.utcnow():
             return None
-        row["used_at"] = datetime.utcnow()
         return {"property_id": row["property_id"], "booking_id": row["booking_id"]}
+
+    def revoke_auth_tokens_for_booking(self, property_id: str, booking_id: str) -> int:
+        removed = 0
+        for token_hash, row in list(self.auth_tokens.items()):
+            if row["property_id"] == property_id and row["booking_id"] == booking_id:
+                del self.auth_tokens[token_hash]
+                removed += 1
+        return removed
 
     def register_guest_session(self, guest_id: str, property_id: str) -> int:
         key = f"{property_id}:{guest_id}"

@@ -16,6 +16,7 @@ from app.services.property_db_mock import PropertyStoreMixin
 from app.services.property_db_supabase import PropertyStoreSupabase
 from app.core.config import get_settings
 from functools import lru_cache
+import os
 import uuid
 import logging
 import hashlib
@@ -67,7 +68,12 @@ class DatabaseProtocol(Protocol):
     ) -> None:
         ...
 
-    def consume_auth_token(self, token_hash: str) -> Optional[dict]:
+    def validate_auth_token(self, token_hash: str) -> Optional[dict]:
+        ...
+
+    def revoke_auth_tokens_for_booking(
+        self, property_id: str, booking_id: str
+    ) -> int:
         ...
 
     def register_guest_session(self, guest_id: str, property_id: str) -> int:
@@ -1254,6 +1260,24 @@ class SupabaseDatabase(PropertyStoreSupabase):
             return []
 
 
+def _resolve_database_type(settings) -> str:
+    """Use Supabase on Vercel when credentials exist (mock auth tokens do not persist)."""
+    database_type = settings.database_type.lower()
+    if database_type == "supabase":
+        return "supabase"
+    if (
+        database_type == "mock"
+        and os.getenv("VERCEL")
+        and (settings.supabase_url or "").strip()
+        and (settings.supabase_key or "").strip()
+    ):
+        logger.info(
+            "DATABASE_TYPE=mock on Vercel but Supabase credentials are set; using Supabase"
+        )
+        return "supabase"
+    return database_type
+
+
 @lru_cache()
 def get_database() -> DatabaseProtocol:
     """
@@ -1262,7 +1286,7 @@ def get_database() -> DatabaseProtocol:
     """
     try:
         settings = get_settings()
-        database_type = settings.database_type.lower()
+        database_type = _resolve_database_type(settings)
         
         if database_type == "supabase":
             try:

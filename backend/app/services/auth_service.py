@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import urlencode
 
-from app.core.config import get_settings
+from app.core.config import get_settings, resolve_frontend_url
 from app.integrations.pms.registry import get_pms_provider
 from app.models.schemas import GuestProfile
 from app.services.database import get_database
@@ -37,9 +37,18 @@ def create_magic_link_token(property_id: str, booking_id: str) -> tuple[str, dat
     return raw, expires
 
 
-def build_verify_url(token: str) -> str:
-    settings = get_settings()
-    base = (settings.frontend_url or "http://localhost:3000").rstrip("/")
+def build_verify_url(
+    token: str,
+    *,
+    request_host: str | None = None,
+    forwarded_host: str | None = None,
+    forwarded_proto: str | None = None,
+) -> str:
+    base = resolve_frontend_url(
+        request_host=request_host,
+        forwarded_host=forwarded_host,
+        forwarded_proto=forwarded_proto,
+    ).rstrip("/")
     return f"{base}/auth/verify?{urlencode({'t': token})}"
 
 
@@ -54,7 +63,7 @@ async def send_magic_link_email(
     body = (
         f"Use this link to access the guest assistant for {property_name}:\n\n"
         f"{verify_url}\n\n"
-        "This link expires soon and can only be used once."
+        "This link expires soon — bookmark it to sign back in during your stay."
     )
     if settings.debug:
         logger.info("Magic link for %s: %s", email, verify_url)
@@ -78,6 +87,10 @@ async def request_magic_link(
     property_id: str,
     booking_id: str,
     email: str,
+    *,
+    request_host: str | None = None,
+    forwarded_host: str | None = None,
+    forwarded_proto: str | None = None,
 ) -> dict:
     """Internal/webhook: create token and send email."""
     db = get_database()
@@ -97,7 +110,12 @@ async def request_magic_link(
         raise ValueError("No email on reservation")
 
     raw, expires = create_magic_link_token(property_id, booking_id)
-    verify_url = build_verify_url(raw)
+    verify_url = build_verify_url(
+        raw,
+        request_host=request_host,
+        forwarded_host=forwarded_host,
+        forwarded_proto=forwarded_proto,
+    )
     await send_magic_link_email(target_email, verify_url, property_name=prop.name)
 
     result = {"sent": True, "expires_at": expires.isoformat()}
@@ -132,9 +150,12 @@ async def verify_magic_link(token: str) -> tuple[GuestProfile, str, int]:
     settings = get_settings()
     db = get_database()
     token_hash = _hash_token(token)
-    row = db.consume_auth_token(token_hash)
+    row = db.validate_auth_token(token_hash)
     if not row:
-        raise ValueError("Invalid or expired link")
+        raise ValueError(
+            "Invalid or expired link. Request a new one from this deployment — "
+            "localhost links do not work on Vercel."
+        )
 
     property_id = row["property_id"]
     booking_id = row["booking_id"]
@@ -164,8 +185,9 @@ async def verify_magic_link(token: str) -> tuple[GuestProfile, str, int]:
 
 
 async def revoke_sessions_for_booking(property_id: str, booking_id: str) -> int:
-    """Invalidate sessions on checkout webhook."""
+    """Invalidate sessions and stay links on checkout webhook."""
     db = get_database()
+    db.revoke_auth_tokens_for_booking(property_id, booking_id)
     guest = db.get_guest_by_booking(booking_id, property_id=property_id)
     if not guest:
         return 0

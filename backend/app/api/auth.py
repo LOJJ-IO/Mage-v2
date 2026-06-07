@@ -1,6 +1,8 @@
 """Guest authentication — magic link verify and session cookie."""
 from __future__ import annotations
 
+from urllib.parse import urlencode
+
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse
 
@@ -19,16 +21,19 @@ settings = get_settings()
 
 
 @router.post("/magic-link")
-async def create_magic_link(request: MagicLinkRequest):
+async def create_magic_link(body: MagicLinkRequest, request: Request):
     """
     Internal/webhook: create one-time token and send email.
     Returns verify_url when DEBUG=true.
     """
     try:
         return await auth_service.request_magic_link(
-            request.property_id,
-            request.booking_id,
-            request.email or "",
+            body.property_id,
+            body.booking_id,
+            body.email or "",
+            request_host=request.headers.get("host"),
+            forwarded_host=request.headers.get("x-forwarded-host"),
+            forwarded_proto=request.headers.get("x-forwarded-proto"),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -44,6 +49,11 @@ async def verify_magic_link(
     try:
         guest, cookie_value, _version = await auth_service.verify_magic_link(t)
     except ValueError as e:
+        if redirect:
+            return RedirectResponse(
+                url=f"/welcome?{urlencode({'auth_error': str(e)})}",
+                status_code=302,
+            )
         raise HTTPException(status_code=400, detail=str(e))
 
     if redirect:
