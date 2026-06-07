@@ -49,7 +49,7 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
     <HydrationGate>
       <main className="min-h-screen bg-white dark:bg-mage-gray-900 flex flex-col max-w-md mx-auto px-6 py-12 justify-center">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-2xl font-semibold text-mage-black dark:text-white mb-10">Mage</h1>
+          <h1 className="text-2xl font-semibold text-mage-black dark:text-white mb-10">lojj</h1>
 
           {error && (
             <div className="mb-6 p-4 rounded-uber-xl border border-red-200 bg-red-50 text-red-800 text-sm dark:border-red-900 dark:bg-red-950 dark:text-red-200">
