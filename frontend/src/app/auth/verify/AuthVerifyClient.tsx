@@ -31,8 +31,8 @@ export default function AuthVerifyClient() {
             Sign-in failed
           </h1>
           <p className="text-mage-gray-500 text-sm mb-6">{error}</p>
-          <a href="/welcome" className="text-sm underline text-mage-gray-600">
-            Back to welcome
+          <a href="/" className="text-sm underline text-mage-gray-600">
+            Back
           </a>
         </div>
       </main>

@@ -1,23 +1,24 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StateRenderer } from '@/components/StateRenderer';
+import { SignInScreen } from '@/components/SignInScreen';
 import { HydrationGate } from '@/components/HydrationGate';
 import { useMageStore } from '@/store/mageStore';
 import { useAgentAvailabilityWebSocket } from '@/hooks/useAgentAvailabilityWebSocket';
 import { apiClient } from '@/lib/api';
+import { GuestProfile } from '@/types';
+
+type HomeView = 'loading' | 'sign-in' | 'app';
 
 export default function Home() {
-  const router = useRouter();
-  const { context, guestProfile } = useMageStore();
-  const [allowRender, setAllowRender] = useState(false);
+  const { context, guestProfile, setGuestProfile } = useMageStore();
+  const [view, setView] = useState<HomeView>('loading');
   const didInitRef = useRef(false);
 
   useAgentAvailabilityWebSocket();
 
   useEffect(() => {
-    // Guard against double-invocation in React StrictMode dev.
     if (didInitRef.current) return;
     didInitRef.current = true;
 
@@ -37,7 +38,7 @@ export default function Home() {
       }
 
       if (!guestId && !useMageStore.getState().guestProfile) {
-        router.replace('/welcome');
+        setView('sign-in');
         return;
       }
 
@@ -45,13 +46,27 @@ export default function Home() {
         useMageStore.setState({ currentState: 'S-G-003' });
       }
 
-      setAllowRender(true);
+      setView('app');
     })();
-  }, [router, guestProfile, context.hasSeenWelcome]);
+  }, [guestProfile, context.hasSeenWelcome]);
 
-  // While we redirect (or decide), render nothing so we never leave a stale loader on the page.
-  if (!allowRender) {
+  const handleSignedIn = useCallback(
+    (profile: GuestProfile) => {
+      setGuestProfile(profile);
+      if (context.hasSeenWelcome) {
+        useMageStore.setState({ currentState: 'S-G-003' });
+      }
+      setView('app');
+    },
+    [setGuestProfile, context.hasSeenWelcome]
+  );
+
+  if (view === 'loading') {
     return null;
+  }
+
+  if (view === 'sign-in') {
+    return <SignInScreen onSignedIn={handleSignedIn} />;
   }
 
   return (

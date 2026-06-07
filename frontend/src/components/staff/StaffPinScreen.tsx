@@ -54,10 +54,10 @@ export function StaffPinScreen({ onSubmit, error }: StaffPinScreenProps) {
           </button>
         </form>
         <a
-          href="/welcome"
+          href="/"
           className="mt-6 block text-center text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white underline"
         >
-          Back to welcome
+          Back
         </a>
       </motion.div>
     </div>
