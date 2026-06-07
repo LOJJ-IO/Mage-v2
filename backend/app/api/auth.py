@@ -37,6 +37,10 @@ async def create_magic_link(body: MagicLinkRequest, request: Request):
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        if settings.debug:
+            raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Magic link failed. Check server logs.")
 
 
 @router.get("/verify")

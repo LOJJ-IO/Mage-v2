@@ -1,7 +1,10 @@
 """Helpers for property rows used by crawl and onboarding."""
 from __future__ import annotations
 
+import logging
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from app.knowledge.pipeline.crawl_scope import (
     crawl_scope_from_seed,
@@ -40,7 +43,15 @@ def ensure_demo_property(db, property_id: str) -> Optional[Property]:
     template = _DEMO_PROPERTIES.get(property_id)
     if not template:
         return None
-    return db.upsert_property(template)
+    try:
+        return db.upsert_property(template)
+    except Exception as e:
+        logger.error("Could not persist demo property %s: %s", property_id, e)
+        raise ValueError(
+            "Database not ready for this property. Run "
+            "docs/supabase_properties_auth_knowledge_migration.sql in Supabase, "
+            "or set DATABASE_TYPE=mock until migration is complete."
+        ) from e
 
 
 def ensure_property_for_crawl(db, property_id: str, seed_url: str) -> Property:

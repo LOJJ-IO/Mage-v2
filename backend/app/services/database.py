@@ -16,7 +16,6 @@ from app.services.property_db_mock import PropertyStoreMixin
 from app.services.property_db_supabase import PropertyStoreSupabase
 from app.core.config import get_settings
 from functools import lru_cache
-import os
 import uuid
 import logging
 import hashlib
@@ -1261,21 +1260,8 @@ class SupabaseDatabase(PropertyStoreSupabase):
 
 
 def _resolve_database_type(settings) -> str:
-    """Use Supabase on Vercel when credentials exist (mock auth tokens do not persist)."""
-    database_type = settings.database_type.lower()
-    if database_type == "supabase":
-        return "supabase"
-    if (
-        database_type == "mock"
-        and os.getenv("VERCEL")
-        and (settings.supabase_url or "").strip()
-        and (settings.supabase_key or "").strip()
-    ):
-        logger.info(
-            "DATABASE_TYPE=mock on Vercel but Supabase credentials are set; using Supabase"
-        )
-        return "supabase"
-    return database_type
+    """Only use Supabase when DATABASE_TYPE=supabase (requires migration + env on Vercel)."""
+    return settings.database_type.lower()
 
 
 @lru_cache()
