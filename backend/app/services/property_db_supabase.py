@@ -82,8 +82,9 @@ class PropertyStoreSupabase:
             "profile": prop.profile.value,
             "pms_type": prop.pms_type,
             "knowledge_mode": prop.knowledge_mode.value,
-            "published_snapshot_id": prop.published_snapshot_id,
         }
+        if prop.published_snapshot_id is not None:
+            row["published_snapshot_id"] = prop.published_snapshot_id
         try:
             existing = self.get_property(prop.id)
             if existing:
