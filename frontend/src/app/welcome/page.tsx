@@ -36,6 +36,12 @@ export default function WelcomePage() {
   const router = useRouter();
   const setGuestProfile = useMageStore((s) => s.setGuestProfile);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const err = new URLSearchParams(window.location.search).get('auth_error');
+    if (err) setAuthError(err);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -85,6 +91,12 @@ export default function WelcomePage() {
           <p className="text-mage-gray-500 dark:text-mage-gray-400 mb-10 text-sm">
             Sign in with the link from your confirmation email, or continue in demo mode.
           </p>
+
+          {authError && (
+            <div className="mb-6 p-4 rounded-uber-xl border border-red-200 bg-red-50 text-red-800 text-sm dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+              {authError} Request a new link from this deployment if needed.
+            </div>
+          )}
 
           <p className="text-xs font-medium text-mage-gray-500 uppercase tracking-wide mb-3">
             Email sign-in

@@ -143,13 +143,12 @@ class PropertyStoreSupabase:
             logger.error("Error creating auth token: %s", e)
             raise
 
-    def consume_auth_token(self, token_hash: str) -> Optional[dict]:
+    def validate_auth_token(self, token_hash: str) -> Optional[dict]:
         try:
             response = (
                 self.client.table("auth_tokens")
                 .select("*")
                 .eq("token_hash", token_hash)
-                .is_("used_at", "null")
                 .execute()
             )
             if not response.data:
@@ -158,13 +157,24 @@ class PropertyStoreSupabase:
             expires = datetime.fromisoformat(str(row["expires_at"]).replace("Z", "+00:00")).replace(tzinfo=None)
             if expires < datetime.utcnow():
                 return None
-            self.client.table("auth_tokens").update(
-                {"used_at": datetime.utcnow().isoformat()}
-            ).eq("token_hash", token_hash).execute()
             return {"property_id": row["property_id"], "booking_id": row["booking_id"]}
         except Exception as e:
-            logger.error("Error consuming auth token: %s", e)
+            logger.error("Error validating auth token: %s", e)
             return None
+
+    def revoke_auth_tokens_for_booking(self, property_id: str, booking_id: str) -> int:
+        try:
+            response = (
+                self.client.table("auth_tokens")
+                .delete()
+                .eq("property_id", property_id)
+                .eq("booking_id", booking_id)
+                .execute()
+            )
+            return len(response.data or [])
+        except Exception as e:
+            logger.error("Error revoking auth tokens: %s", e)
+            return 0
 
     def register_guest_session(self, guest_id: str, property_id: str) -> int:
         try:
