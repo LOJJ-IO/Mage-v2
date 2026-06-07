@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse
 
 from app.core.config import get_settings
-from app.models.schemas import GuestProfile, MagicLinkRequest
+from app.models.schemas import GuestEmailSignInRequest, GuestProfile, MagicLinkRequest
 from app.services import auth_service
 from app.services.guest_session import (
     SESSION_COOKIE,
@@ -75,6 +75,29 @@ async def verify_magic_link(
         path="/",
     )
     return resp
+
+
+@router.post("/email-sign-in", response_model=GuestProfile)
+async def email_sign_in(body: GuestEmailSignInRequest, response: Response):
+    """Guest sign-in by email lookup against PMS (dev/demo)."""
+    try:
+        guest, cookie_value, _version = await auth_service.sign_in_guest_by_email(
+            body.email,
+            body.property_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=cookie_value,
+        httponly=True,
+        samesite="lax",
+        secure=not settings.debug,
+        max_age=settings.session_ttl_hours * 3600,
+        path="/",
+    )
+    return guest
 
 
 @router.post("/logout")

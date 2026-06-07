@@ -183,6 +183,12 @@ class MagicLinkRequest(BaseModel):
     email: Optional[str] = None
 
 
+class GuestEmailSignInRequest(BaseModel):
+    """Guest sign-in by email lookup (dev/demo)."""
+    email: str
+    property_id: Optional[str] = None
+
+
 class PropertyFactPatch(BaseModel):
     """Staff edit of a single knowledge slot."""
     value: Optional[object] = None

@@ -28,23 +28,20 @@ export function StaffPinScreen({ onSubmit, error }: StaffPinScreenProps) {
           <IconMageLogo className="w-10 h-10" />
           <div>
             <h1 className="text-xl font-semibold text-neutral-900 dark:text-white">
-              Staff workspace
+              Staff sign in
             </h1>
-            <p className="text-sm text-neutral-500">Mage Hotel</p>
           </div>
         </div>
-        <p className="text-neutral-500 dark:text-neutral-400 mb-6 text-sm">
-          Enter your staff access key to open the task board and manage guest requests.
-        </p>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <label className="block text-xs font-medium text-neutral-500 uppercase tracking-wide">
+          <label className="sr-only" htmlFor="staff-access-key">
             Access key
           </label>
           <input
+            id="staff-access-key"
             type="password"
             value={pin}
             onChange={(e) => setPin(e.target.value)}
-            placeholder="Staff access key"
+            placeholder="Access key"
             className="w-full px-4 py-3 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:focus:ring-neutral-600"
             autoComplete="off"
           />
@@ -53,7 +50,7 @@ export function StaffPinScreen({ onSubmit, error }: StaffPinScreenProps) {
             type="submit"
             className="w-full py-3 rounded-lg bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 font-medium text-sm hover:opacity-90 transition-opacity"
           >
-            Continue to board
+            Continue
           </button>
         </form>
         <a

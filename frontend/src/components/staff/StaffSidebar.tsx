@@ -12,6 +12,7 @@ import {
   IconList,
   IconMageLogo,
   IconHeadset,
+  IconLayers,
   IconMessage,
   IconSearch,
   IconStar,
@@ -44,6 +45,8 @@ function NavIcon({ icon, className }: { icon: string; className?: string }) {
       return <IconMessage className={cn} />;
     case 'book':
       return <IconBook className={cn} />;
+    case 'layers':
+      return <IconLayers className={cn} />;
     default:
       return null;
   }

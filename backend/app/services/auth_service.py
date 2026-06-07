@@ -143,6 +143,48 @@ def _reservation_to_guest(reservation, existing_id: Optional[str] = None) -> Gue
     )
 
 
+async def sign_in_guest_by_email(
+    email: str,
+    property_id: Optional[str] = None,
+) -> tuple[GuestProfile, str, int]:
+    """Look up an in-house stay by email via PMS and open a guest session."""
+    settings = get_settings()
+    if not settings.allow_dev_guest_login:
+        raise ValueError("Email sign-in is not enabled")
+
+    pid = (property_id or settings.property_id).strip()
+    email_l = (email or "").strip().lower()
+    if not email_l:
+        raise ValueError("Email is required")
+
+    pms = get_pms_provider(pid)
+    reservations = await pms.find_reservations_by_contact(pid, email_l, None)
+    if not reservations:
+        raise ValueError("No stay found for this email")
+
+    now = datetime.utcnow()
+    grace = timedelta(hours=settings.stay_grace_hours)
+    active = [
+        r
+        for r in reservations
+        if now >= r.check_in - grace and now <= r.check_out + grace
+    ]
+    if not active:
+        raise ValueError("No active stay found for this email")
+
+    reservation = active[0]
+    db = get_database()
+    existing = db.get_guest_by_booking(reservation.booking_id, property_id=pid)
+    guest = _reservation_to_guest(
+        reservation,
+        existing_id=existing.id if existing else None,
+    )
+    guest = db.upsert_guest(guest)
+    session_version = db.register_guest_session(guest.id, pid)
+    cookie_value = create_session_token(guest.id, pid, session_version)
+    return guest, cookie_value, session_version
+
+
 async def verify_magic_link(token: str) -> tuple[GuestProfile, str, int]:
     """
     Validate token, hydrate guest from PMS, upsert guest row.
