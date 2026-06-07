@@ -5,7 +5,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { StaffAction } from '@/types';
 import { StaffSidebar } from './StaffSidebar';
 import { StaffKanbanBoard } from './StaffKanbanBoard';
-import { StaffNavId } from './staffNav';
+import { StaffKnowledgeOnboarding } from './StaffKnowledgeOnboarding';
+import { parseStaffNavId, StaffNavId } from './staffNav';
 import { IconList } from './StaffIcons';
 import { StaffScheduleView } from './StaffScheduleView';
 import { StaffGuestInbox } from './StaffGuestInbox';
@@ -86,6 +87,11 @@ export function StaffWorkspace({
     setFilters(queryState.filters);
     setSortKey(queryState.sortKey);
   }, [queryState]);
+
+  useEffect(() => {
+    const nav = parseStaffNavId(searchParams.get('nav'));
+    if (nav) setActiveNav(nav);
+  }, [searchParams]);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -226,12 +232,18 @@ export function StaffWorkspace({
         {activeNav === 'schedule' && <StaffScheduleView staffKey={staffKey} />}
         {activeNav === 'review' && <StaffReviewDashboard actions={actions} staffKey={staffKey} />}
         {activeNav === 'help-desk' && <StaffHelpDesk />}
+        {activeNav === 'knowledge' && (
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <StaffKnowledgeOnboarding staffKey={staffKey} embedded />
+          </div>
+        )}
         {activeNav !== 'tasks' &&
           activeNav !== 'assigned' &&
           activeNav !== 'guest-chat' &&
           activeNav !== 'schedule' &&
           activeNav !== 'review' &&
-          activeNav !== 'help-desk' && (
+          activeNav !== 'help-desk' &&
+          activeNav !== 'knowledge' && (
             <StaffEmptyState
               title="Coming soon"
               description="This workspace section is reserved for a future staff module."

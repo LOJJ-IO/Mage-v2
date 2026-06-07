@@ -408,6 +408,17 @@ class ApiClient {
     };
   }
 
+  async signInGuestByEmail(email: string): Promise<ApiResponse<GuestProfile>> {
+    const res = await this.request<Record<string, unknown>>('/api/auth/email-sign-in', {
+      method: 'POST',
+      body: JSON.stringify({ email: email.trim() }),
+    });
+    if (!res.success || !res.data) {
+      return { success: false, error: res.error };
+    }
+    return { success: true, data: mapGuestProfile(res.data) };
+  }
+
   // Agent availability endpoints
   async checkAgentAvailability(): Promise<ApiResponse<{
     humanAgentAvailable: boolean;

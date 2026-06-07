@@ -2,45 +2,25 @@
 
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useMageStore } from '@/store/mageStore';
 import { HydrationGate } from '@/components/HydrationGate';
 import { apiClient } from '@/lib/api';
 
-const GUEST_PRESETS = [
-  {
-    id: 'guest-001',
-    name: 'Alex Johnson',
-    roomNumber: '412',
-    bookingId: 'BK-2026-0412',
-    membershipTier: 'Platinum',
-    email: 'alex.johnson@email.com',
-    phone: '+1 555-0123',
-  },
-  {
-    id: 'guest-002',
-    name: 'Sarah Williams',
-    roomNumber: '305',
-    bookingId: 'BK-2026-0305',
-    membershipTier: 'Gold',
-    email: 'sarah.w@email.com',
-    phone: '+1 555-0456',
-  },
-] as const;
-
-const ALLOW_DEV =
-  process.env.NEXT_PUBLIC_ALLOW_DEV_GUEST_LOGIN === 'true' ||
-  process.env.NODE_ENV === 'development';
+type WelcomeMode = 'choose' | 'guest';
 
 export default function WelcomePage() {
   const router = useRouter();
   const setGuestProfile = useMageStore((s) => s.setGuestProfile);
   const [checkingSession, setCheckingSession] = useState(true);
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [mode, setMode] = useState<WelcomeMode>('choose');
+  const [email, setEmail] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const err = new URLSearchParams(window.location.search).get('auth_error');
-    if (err) setAuthError(err);
+    if (err) setError(err);
   }, []);
 
   useEffect(() => {
@@ -59,20 +39,25 @@ export default function WelcomePage() {
     })();
   }, [router, setGuestProfile]);
 
-  const startAsGuest = (preset: (typeof GUEST_PRESETS)[number]) => {
-    setGuestProfile({
-      id: preset.id,
-      name: preset.name,
-      roomNumber: preset.roomNumber,
-      checkIn: new Date('2026-01-01'),
-      checkOut: new Date('2026-07-14'),
-      bookingId: preset.bookingId,
-      membershipTier: preset.membershipTier,
-      email: preset.email,
-      phone: preset.phone,
-    });
-    sessionStorage.setItem('mage-guest-id', preset.id);
-    router.replace('/');
+  const handleGuestSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
+    const trimmed = email.trim();
+    if (!trimmed) return;
+
+    setSubmitting(true);
+    try {
+      const res = await apiClient.signInGuestByEmail(trimmed);
+      if (!res.success || !res.data) {
+        setError(res.error || 'Sign-in failed.');
+        return;
+      }
+      setGuestProfile(res.data);
+      sessionStorage.setItem('mage-guest-id', res.data.id);
+      router.replace('/');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (checkingSession) {
@@ -85,84 +70,72 @@ export default function WelcomePage() {
 
   return (
     <HydrationGate>
-      <main className="min-h-screen bg-white dark:bg-mage-gray-900 flex flex-col max-w-md mx-auto px-6 py-12">
+      <main className="min-h-screen bg-white dark:bg-mage-gray-900 flex flex-col max-w-md mx-auto px-6 py-12 justify-center">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-2xl font-semibold text-mage-black dark:text-white mb-2">Mage</h1>
-          <p className="text-mage-gray-500 dark:text-mage-gray-400 mb-10 text-sm">
-            Sign in with the link from your confirmation email, or continue in demo mode.
-          </p>
+          <h1 className="text-2xl font-semibold text-mage-black dark:text-white mb-10">Mage</h1>
 
-          {authError && (
+          {error && (
             <div className="mb-6 p-4 rounded-uber-xl border border-red-200 bg-red-50 text-red-800 text-sm dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-              {authError} Request a new link from this deployment if needed.
+              {error}
             </div>
           )}
 
-          <p className="text-xs font-medium text-mage-gray-500 uppercase tracking-wide mb-3">
-            Email sign-in
-          </p>
-          <div className="mb-8 p-4 rounded-uber-xl border border-mage-gray-200 dark:border-mage-gray-700 bg-mage-gray-50 dark:bg-mage-gray-800">
-            <p className="text-sm text-mage-gray-600 dark:text-mage-gray-300">
-              Open the magic link we send after booking or check-in. No room number or name in the
-              URL — your stay is verified securely.
-            </p>
-          </div>
-
-          {ALLOW_DEV && (
-            <>
-              <p className="text-xs font-medium text-mage-gray-500 uppercase tracking-wide mb-3">
-                Dev guest picker
-              </p>
-              <motion.div
-                className="space-y-2 mb-8"
-                initial="hidden"
-                animate="visible"
-                variants={{
-                  visible: { transition: { staggerChildren: 0.06 } },
-                  hidden: {},
+          {mode === 'choose' ? (
+            <div className="space-y-3">
+              <motion.button
+                type="button"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.28 }}
+                onClick={() => {
+                  setError(null);
+                  setMode('guest');
                 }}
+                className="block w-full py-3.5 text-center rounded-uber-full border-2 border-mage-black dark:border-white text-mage-black dark:text-white font-medium"
               >
-                {GUEST_PRESETS.map((preset) => (
-                  <motion.button
-                    key={preset.id}
-                    type="button"
-                    variants={{
-                      hidden: { opacity: 0, y: 8 },
-                      visible: { opacity: 1, y: 0 },
-                    }}
-                    transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
-                    onClick={() => startAsGuest(preset)}
-                    className="w-full text-left p-4 rounded-uber-xl border border-mage-gray-200 dark:border-mage-gray-700 hover:bg-mage-gray-50 dark:hover:bg-mage-gray-800 transition-colors"
-                  >
-                    <span className="font-medium text-mage-black dark:text-white">{preset.name}</span>
-                    <span className="block text-sm text-mage-gray-500">Room {preset.roomNumber}</span>
-                  </motion.button>
-                ))}
-              </motion.div>
-            </>
+                Guest sign in
+              </motion.button>
+              <motion.button
+                type="button"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.08, duration: 0.28 }}
+                onClick={() => router.push('/staff')}
+                className="block w-full py-3.5 text-center rounded-uber-full border border-mage-gray-300 dark:border-mage-gray-600 text-mage-gray-700 dark:text-mage-gray-200 font-medium"
+              >
+                Staff sign in
+              </motion.button>
+            </div>
+          ) : (
+            <form onSubmit={handleGuestSubmit} className="space-y-3">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email"
+                autoComplete="email"
+                disabled={submitting}
+                className="w-full px-4 py-3.5 rounded-uber-full border border-mage-gray-300 dark:border-mage-gray-600 bg-white dark:bg-mage-gray-900 text-mage-black dark:text-white focus:outline-none focus:ring-2 focus:ring-mage-gray-400 disabled:opacity-60"
+              />
+              <button
+                type="submit"
+                disabled={submitting || !email.trim()}
+                className="block w-full py-3.5 text-center rounded-uber-full border-2 border-mage-black dark:border-white text-mage-black dark:text-white font-medium disabled:opacity-60"
+              >
+                {submitting ? 'Signing in…' : 'Continue'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('choose');
+                  setError(null);
+                }}
+                className="block w-full py-2 text-center text-sm text-mage-gray-500"
+              >
+                Back
+              </button>
+            </form>
           )}
-
-          <p className="text-xs font-medium text-mage-gray-500 uppercase tracking-wide mb-3">
-            Staff
-          </p>
-          <motion.a
-            href="/staff"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15, duration: 0.28 }}
-            className="block w-full py-3.5 text-center rounded-uber-full border-2 border-mage-black dark:border-white text-mage-black dark:text-white font-medium mb-3"
-          >
-            Staff workspace
-          </motion.a>
-          <motion.a
-            href="/staff/onboarding"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.28 }}
-            className="block w-full py-3.5 text-center rounded-uber-full border border-mage-gray-300 dark:border-mage-gray-600 text-mage-gray-700 dark:text-mage-gray-200 text-sm"
-          >
-            Knowledge onboarding
-          </motion.a>
         </motion.div>
       </main>
     </HydrationGate>

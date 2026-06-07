@@ -4,12 +4,13 @@ export type StaffNavId =
   | 'schedule'
   | 'review'
   | 'guest-chat'
-  | 'help-desk';
+  | 'help-desk'
+  | 'knowledge';
 
 export interface StaffNavItem {
   id: StaffNavId;
   label: string;
-  icon: 'star' | 'user' | 'list' | 'calendar' | 'message' | 'book';
+  icon: 'star' | 'user' | 'list' | 'calendar' | 'message' | 'book' | 'layers';
   href?: string;
   badge?: number;
 }
@@ -20,5 +21,13 @@ export const STAFF_NAV_ITEMS: StaffNavItem[] = [
   { id: 'tasks', label: 'Tasks', icon: 'list' },
   { id: 'schedule', label: 'Schedule', icon: 'calendar' },
   { id: 'guest-chat', label: 'Chat with guests', icon: 'message' },
+  { id: 'knowledge', label: 'Knowledge', icon: 'layers' },
   { id: 'help-desk', label: 'Help desk', icon: 'book' },
 ];
+
+const STAFF_NAV_IDS = new Set<string>(STAFF_NAV_ITEMS.map((item) => item.id));
+
+export function parseStaffNavId(value: string | null | undefined): StaffNavId | null {
+  if (!value || !STAFF_NAV_IDS.has(value)) return null;
+  return value as StaffNavId;
+}
