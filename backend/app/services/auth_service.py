@@ -10,6 +10,7 @@ from typing import Optional
 from urllib.parse import urlencode
 
 from app.core.config import get_settings, resolve_frontend_url
+from app.knowledge.property_helpers import ensure_demo_property
 from app.integrations.pms.registry import get_pms_provider
 from app.models.schemas import GuestProfile
 from app.services.database import get_database
@@ -94,7 +95,7 @@ async def request_magic_link(
 ) -> dict:
     """Internal/webhook: create token and send email."""
     db = get_database()
-    prop = db.get_property(property_id)
+    prop = ensure_demo_property(db, property_id)
     if not prop:
         raise ValueError(f"Unknown property: {property_id}")
 

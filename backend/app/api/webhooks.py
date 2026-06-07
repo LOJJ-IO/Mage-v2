@@ -8,6 +8,7 @@ import logging
 from fastapi import APIRouter, Header, HTTPException, Request
 
 from app.core.config import get_settings
+from app.knowledge.property_helpers import ensure_demo_property
 from app.services import auth_service
 from app.services.database import get_database
 
@@ -36,7 +37,7 @@ async def pms_webhook(
     """
     body = await request.body()
     db = get_database()
-    prop = db.get_property(property_id)
+    prop = ensure_demo_property(db, property_id)
     if not prop:
         raise HTTPException(status_code=404, detail="Property not found")
 
