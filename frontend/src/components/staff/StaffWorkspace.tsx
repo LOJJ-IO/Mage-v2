@@ -224,7 +224,7 @@ export function StaffWorkspace({
 
         {activeNav === 'guest-chat' && <StaffGuestInbox staffKey={staffKey} />}
         {activeNav === 'schedule' && <StaffScheduleView staffKey={staffKey} />}
-        {activeNav === 'review' && <StaffReviewDashboard actions={actions} />}
+        {activeNav === 'review' && <StaffReviewDashboard actions={actions} staffKey={staffKey} />}
         {activeNav === 'help-desk' && <StaffHelpDesk />}
         {activeNav !== 'tasks' &&
           activeNav !== 'assigned' &&
