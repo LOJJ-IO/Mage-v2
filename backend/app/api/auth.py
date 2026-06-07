@@ -55,7 +55,7 @@ async def verify_magic_link(
     except ValueError as e:
         if redirect:
             return RedirectResponse(
-                url=f"/welcome?{urlencode({'auth_error': str(e)})}",
+                url=f"/?{urlencode({'auth_error': str(e)})}",
                 status_code=302,
             )
         raise HTTPException(status_code=400, detail=str(e))
