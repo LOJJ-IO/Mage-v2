@@ -203,6 +203,14 @@ class GuestHappinessScore(BaseModel):
     score: Optional[int] = None
 
 
+class GuestReviewSummary(BaseModel):
+    guest_id: str
+    score: Optional[int] = None
+    name: str
+    room_number: str
+    check_out: datetime
+
+
 @router.get("/guests/happiness-scores", response_model=List[GuestHappinessScore])
 async def list_guest_happiness_scores(_: bool = Depends(verify_staff_key)):
     """Pre-computed VADER happiness scores for all guests. Cheap single-table read."""
@@ -210,6 +218,23 @@ async def list_guest_happiness_scores(_: bool = Depends(verify_staff_key)):
     return [
         GuestHappinessScore(guest_id=g.id, score=g.happiness_score)
         for g in db.list_guests()
+    ]
+
+
+@router.get("/guests/review-summary", response_model=List[GuestReviewSummary])
+async def list_guest_review_summary(_: bool = Depends(verify_staff_key)):
+    """Guest profile + VADER score for guests who have sent at least one chat message."""
+    db = get_database()
+    return [
+        GuestReviewSummary(
+            guest_id=g.id,
+            score=g.happiness_score,
+            name=g.name,
+            room_number=g.room_number,
+            check_out=g.check_out,
+        )
+        for g in db.list_guests()
+        if g.happiness_score is not None
     ]
 
 

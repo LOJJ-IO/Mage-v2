@@ -21,6 +21,9 @@ import {
   startOfMonth,
   validateCalendarUrl,
 } from '@/lib/staffCalendar';
+import { StaffModuleBody, StaffPageHeader } from './StaffPageHeader';
+import { StaffNavIcon } from './StaffNavIcon';
+import { StaffNavShortcut } from './StaffNavShortcut';
 
 interface CalendarSource {
   id: string;
@@ -455,23 +458,28 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white dark:bg-neutral-950">
-      <div className="shrink-0 border-b border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-900/80 md:px-4">
-        <div className="flex flex-wrap items-center gap-2">
+      <StaffPageHeader
+        icon={<StaffNavIcon nav="schedule" />}
+        title="Schedule"
+        subtitle={rangeLabel}
+        actions={<StaffNavShortcut target="tasks" label="Tasks" />}
+        toolbar={
+          <>
           <button
             type="button"
             disabled
             title="Local calendars only — API sync coming later"
-            className="rounded-md bg-[#0078d4] px-3 py-1.5 text-xs font-semibold text-white opacity-60"
+            className="rounded-lg border border-neutral-200 bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-500 opacity-60 dark:border-neutral-700 dark:bg-neutral-900"
           >
             New event
           </button>
-          <div className="inline-flex rounded-md border border-neutral-200 bg-white p-0.5 dark:border-neutral-700 dark:bg-neutral-950">
+          <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5 dark:border-neutral-700 dark:bg-neutral-950">
             {VIEW_OPTIONS.map((option) => (
               <button
                 key={option.id}
                 type="button"
                 onClick={() => setView(option.id)}
-                className={`rounded px-2.5 py-1 text-xs font-medium ${
+                className={`rounded-md px-2.5 py-1 text-xs font-medium ${
                   view === option.id
                     ? 'bg-neutral-200 text-neutral-900 dark:bg-neutral-700 dark:text-white'
                     : 'text-neutral-600 dark:text-neutral-400'
@@ -489,14 +497,14 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
                 setAnchorDate(today);
                 setSelectedDay(startOfDay(today));
               }}
-              className="rounded-md border border-neutral-200 bg-white px-2.5 py-1 text-xs font-medium dark:border-neutral-700 dark:bg-neutral-900"
+              className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
             >
               Today
             </button>
             <button
               type="button"
               onClick={() => setAnchorDate((prev) => shiftAnchor(view, prev, -1))}
-              className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+              className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
               aria-label="Previous"
             >
               ‹
@@ -504,28 +512,26 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
             <button
               type="button"
               onClick={() => setAnchorDate((prev) => shiftAnchor(view, prev, 1))}
-              className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+              className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
               aria-label="Next"
             >
               ›
             </button>
-            <span className="min-w-[140px] text-sm font-semibold text-neutral-900 dark:text-white">
-              {rangeLabel}
-            </span>
           </div>
-        </div>
-        {statusMessage && (
-          <p
-            className={`mt-2 text-xs ${
-              statusMessage.type === 'ok' ? 'text-green-700 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-            }`}
-          >
-            {statusMessage.text}
-          </p>
-        )}
-      </div>
+          </>
+        }
+      />
+      {statusMessage && (
+        <p
+          className={`border-b border-neutral-100 px-4 py-2 text-xs dark:border-neutral-900 md:px-6 ${
+            statusMessage.type === 'ok' ? 'text-green-700 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+          }`}
+        >
+          {statusMessage.text}
+        </p>
+      )}
 
-      <div className="flex min-h-0 flex-1">
+      <StaffModuleBody className="flex min-h-0 flex-1">
         {isScheduleSidebar ? (
         <ResizablePanel
           storageKey="staff-schedule-sidebar"
@@ -736,7 +742,7 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
           </div>
         </ResizablePanel>
         ) : null}
-      </div>
+      </StaffModuleBody>
     </div>
   );
 }

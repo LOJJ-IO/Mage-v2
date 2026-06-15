@@ -6,7 +6,7 @@ import { StaffAction } from '@/types';
 import { StaffSidebar } from './StaffSidebar';
 import { StaffKanbanBoard } from './StaffKanbanBoard';
 import { StaffKnowledgeOnboarding } from './StaffKnowledgeOnboarding';
-import { parseStaffNavId, StaffNavId } from './staffNav';
+import { parseStaffNavId, staffNavLabel, StaffNavId } from './staffNav';
 import { IconList } from './StaffIcons';
 import { StaffScheduleView } from './StaffScheduleView';
 import { StaffGuestInbox } from './StaffGuestInbox';
@@ -203,7 +203,7 @@ export function StaffWorkspace({
             <IconList className="w-5 h-5" />
           </button>
           <span className="text-sm font-semibold text-neutral-900 dark:text-white">
-            Mage Staff
+            {staffNavLabel(activeNav)}
           </span>
         </div>
 
@@ -217,12 +217,13 @@ export function StaffWorkspace({
             sortKey={sortKey}
             availableFloors={availableFloors}
             isLoading={isLoading}
+            title={activeNav === 'assigned' ? 'Assigned to me' : 'Tasks'}
+            showCalendarShortcut={activeNav === 'tasks'}
             onSelect={onSelect}
             onToggleServiceType={toggleServiceType}
             onToggleFloor={toggleFloor}
             onChangeSort={(nextSort) => persistTaskView(filters, nextSort)}
             onResetView={resetTaskView}
-            onOpenCalendar={() => setActiveNav('schedule')}
             onMoveAction={(actionId, status) => void handleMoveAction(actionId, status)}
             guestMessageCounts={guestMessageCounts}
           />
