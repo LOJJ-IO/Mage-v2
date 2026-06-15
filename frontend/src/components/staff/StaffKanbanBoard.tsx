@@ -2,8 +2,11 @@
 
 import { useRef, useState } from 'react';
 import { ActionType, StaffAction, StaffActionStatus } from '@/types';
-import { IconCalendar, IconFilter, IconList, IconSort, IconX } from './StaffIcons';
+import { IconFilter, IconSort, IconX } from './StaffIcons';
 import { StaffKanbanColumn } from './StaffKanbanColumn';
+import { StaffNavIcon } from './StaffNavIcon';
+import { StaffNavShortcut } from './StaffNavShortcut';
+import { StaffModuleBody, StaffPageHeader } from './StaffPageHeader';
 import { TaskFilters, TaskSortKey } from './staffTaskQuery';
 import { useClickOutside } from './useClickOutside';
 
@@ -16,12 +19,13 @@ interface StaffKanbanBoardProps {
   sortKey: TaskSortKey;
   availableFloors: string[];
   isLoading: boolean;
+  title?: string;
+  showCalendarShortcut?: boolean;
   onSelect: (id: string) => void;
   onToggleServiceType: (type: ActionType) => void;
   onToggleFloor: (floor: string) => void;
   onChangeSort: (sort: TaskSortKey) => void;
   onResetView: () => void;
-  onOpenCalendar: () => void;
   onMoveAction: (actionId: string, status: StaffActionStatus) => void;
   guestMessageCounts: Record<string, number>;
 }
@@ -35,12 +39,13 @@ export function StaffKanbanBoard({
   sortKey,
   availableFloors,
   isLoading,
+  title = 'Tasks',
+  showCalendarShortcut = true,
   onSelect,
   onToggleServiceType,
   onToggleFloor,
   onChangeSort,
   onResetView,
-  onOpenCalendar,
   onMoveAction,
   guestMessageCounts,
 }: StaffKanbanBoardProps) {
@@ -79,22 +84,14 @@ export function StaffKanbanBoard({
 
   return (
     <div className="flex h-full flex-col min-h-0">
-      <header className="shrink-0 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-4 py-4 md:px-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <IconList className="w-5 h-5 text-neutral-700 dark:text-neutral-300" />
-            <h1 className="font-heading text-lg font-semibold text-neutral-900 dark:text-white">Tasks</h1>
-          </div>
-          <button
-            type="button"
-            onClick={onOpenCalendar}
-            className="inline-flex items-center gap-2 rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-1.5 text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900"
-          >
-            <IconCalendar className="w-4 h-4" />
-            Calendar
-          </button>
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2 relative">
+      <StaffPageHeader
+        icon={<StaffNavIcon nav={title === 'Assigned to me' ? 'assigned' : 'tasks'} />}
+        title={title}
+        actions={
+          showCalendarShortcut ? <StaffNavShortcut target="schedule" label="Calendar" /> : undefined
+        }
+        toolbar={
+          <>
           <div className="relative" ref={filterRef}>
             <button
               type="button"
@@ -224,10 +221,11 @@ export function StaffKanbanBoard({
           <span className="ml-auto text-xs text-neutral-500">
             {totalVisible} visible / {allActions.length} total
           </span>
-        </div>
-      </header>
+          </>
+        }
+      />
 
-      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden p-4 md:p-6">
+      <StaffModuleBody className="overflow-x-auto overflow-y-hidden p-4 md:p-6">
         {isLoading && todo.length === 0 && ongoing.length === 0 && done.length === 0 ? (
           <div className="flex gap-3 h-full min-w-[900px]">
             {[1, 2, 3].map((i) => (
@@ -265,7 +263,7 @@ export function StaffKanbanBoard({
             />
           </div>
         )}
-      </div>
+      </StaffModuleBody>
     </div>
   );
 }

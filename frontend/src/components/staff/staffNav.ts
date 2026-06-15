@@ -31,3 +31,7 @@ export function parseStaffNavId(value: string | null | undefined): StaffNavId | 
   if (!value || !STAFF_NAV_IDS.has(value)) return null;
   return value as StaffNavId;
 }
+
+export function staffNavLabel(nav: StaffNavId): string {
+  return STAFF_NAV_ITEMS.find((item) => item.id === nav)?.label ?? nav;
+}

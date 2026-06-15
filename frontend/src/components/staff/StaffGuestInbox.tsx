@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   useSendStaffMessage,
   useStaffGuestConversation,
@@ -9,6 +10,9 @@ import {
 import { formatMessageTime, parseApiTimestamp } from '@/lib/parseTimestamp';
 import { useMediaQuery } from '@/hooks/useResizableWidth';
 import { StaffCard } from './StaffLayoutPrimitives';
+import { StaffModuleBody, StaffPageHeader } from './StaffPageHeader';
+import { StaffNavIcon } from './StaffNavIcon';
+import { StaffNavShortcut } from './StaffNavShortcut';
 import { ResizableSplit } from './ResizablePanel';
 import { staffChatBubbleClasses, staffChatMetaClasses } from './staffChatBubble';
 import { IconHeadset } from './StaffIcons';
@@ -34,9 +38,18 @@ function initials(name: string): string {
 }
 
 export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
+  const searchParams = useSearchParams();
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
   const [reply, setReply] = useState('');
   const userPickedGuestRef = useRef(false);
+
+  useEffect(() => {
+    const guestId = searchParams.get('guestId');
+    if (guestId) {
+      setSelectedGuestId(guestId);
+      userPickedGuestRef.current = true;
+    }
+  }, [searchParams]);
 
   const { data: threads = [], isLoading: threadsLoading, error: threadsError } =
     useStaffInboxThreads(staffKey);
@@ -80,13 +93,7 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
 
   const threadList = (
       <StaffCard className="h-full min-h-0 overflow-hidden flex flex-col max-h-[260px] lg:max-h-none">
-        <div className="border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
-          <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">Guest inbox</h2>
-          <p className="text-xs text-neutral-500 mt-1">
-            {threads.length} conversation{threads.length === 1 ? '' : 's'}
-          </p>
-        </div>
-        <div className="overflow-y-auto p-2 space-y-1.5">
+        <div className="overflow-y-auto p-2 space-y-1.5 flex-1">
           {threadsLoading && (
             <p className="px-3 py-4 text-xs text-neutral-500">Loading conversations…</p>
           )}
@@ -240,7 +247,14 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden p-4 md:p-5">
+    <div className="flex h-full min-h-0 flex-col">
+      <StaffPageHeader
+        icon={<StaffNavIcon nav="guest-chat" />}
+        title="Chat with guests"
+        subtitle={`${threads.length} conversation${threads.length === 1 ? '' : 's'}`}
+        actions={<StaffNavShortcut target="tasks" label="Tasks" />}
+      />
+      <StaffModuleBody className="p-4 md:p-5">
       {isDesktop ? (
         <ResizableSplit
           storageKey="staff-guest-inbox"
@@ -257,6 +271,7 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
           {conversationPanel}
         </div>
       )}
+      </StaffModuleBody>
     </div>
   );
 }

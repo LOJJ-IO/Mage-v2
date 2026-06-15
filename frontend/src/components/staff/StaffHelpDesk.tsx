@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 import { HelpDeskNode, STAFF_HELP_DESK_TREE } from '@/data/staffHelpDeskTree';
 import { useMediaQuery } from '@/hooks/useResizableWidth';
 import { StaffCard } from './StaffLayoutPrimitives';
+import { StaffModuleBody, StaffPageHeader } from './StaffPageHeader';
+import { StaffNavIcon } from './StaffNavIcon';
 import { ResizableSplit } from './ResizablePanel';
 
 function flattenNodes(nodes: HelpDeskNode[], path: string[] = []): Array<{
@@ -107,16 +109,6 @@ export function StaffHelpDesk() {
 
   const treePanel = (
       <StaffCard className="h-full min-h-0 overflow-hidden flex flex-col">
-        <div className="border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
-          <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">Help desk</h2>
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search hotel knowledge..."
-            className="mt-2 w-full rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-1.5 text-sm"
-          />
-        </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-1">
           {displayedTree.map((node) => (
             <TreeNode
@@ -169,7 +161,22 @@ export function StaffHelpDesk() {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden p-4 md:p-5">
+    <div className="flex h-full min-h-0 flex-col">
+      <StaffPageHeader
+        icon={<StaffNavIcon nav="help-desk" />}
+        title="Help desk"
+        subtitle="Guest-facing answers for front desk"
+        toolbar={
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search hotel knowledge…"
+            className="w-full max-w-md rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-white dark:placeholder:text-neutral-500"
+          />
+        }
+      />
+      <StaffModuleBody className="p-4 md:p-5">
       {isDesktop ? (
         <ResizableSplit
           storageKey="staff-help-desk"
@@ -186,6 +193,7 @@ export function StaffHelpDesk() {
           {detailPanel}
         </div>
       )}
+      </StaffModuleBody>
     </div>
   );
 }

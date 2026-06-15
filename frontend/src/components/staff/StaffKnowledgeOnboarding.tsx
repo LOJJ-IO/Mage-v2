@@ -23,6 +23,8 @@ import {
 } from '@/components/knowledge';
 import type { BookingSuggest } from '@/components/knowledge/onboardingTypes';
 import '@/components/knowledge/onboarding.css';
+import { StaffModuleBody, StaffPageHeader } from './StaffPageHeader';
+import { StaffNavIcon } from './StaffNavIcon';
 
 const DEFAULT_PROPERTY_ID = process.env.NEXT_PUBLIC_PROPERTY_ID || 'grand-horizon';
 
@@ -601,39 +603,45 @@ export function StaffKnowledgeOnboarding({
   };
 
   const rootClassName = embedded
-    ? `staff-ui knowledge-onboarding flex-1 overflow-y-auto bg-neutral-100 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100${
+    ? `staff-ui knowledge-onboarding flex h-full min-h-0 flex-col overflow-hidden bg-neutral-100 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100${
         crawling || crawlJustCompleted ? ' has-crawl-float' : ''
       }`
     : `staff-ui knowledge-onboarding min-h-screen bg-neutral-100 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100${
         crawling || crawlJustCompleted ? ' has-crawl-float' : ''
       }`;
 
-  return (
-    <div className={rootClassName}>
-      <div className="onboarding-top mx-auto w-full max-w-[1600px] px-4 pt-6 sm:px-6 lg:px-10">
-        <div className="page-hdr">
-          <div>
-            <h1 className="font-heading page-title">Knowledge onboarding</h1>
-            <p className="page-sub">
-              Property: <strong>{propertyId}</strong>
-            </p>
+  const knowledgeActions = (
+    <>
+      {!embedded && <OnboardingThemeToggle />}
+      {!embedded && (
+        <a href="/staff?nav=knowledge" className="btn-ghost">
+          Staff workspace
+        </a>
+      )}
+      <button type="button" className="btn-ghost" onClick={seed}>
+        Seed demo facts
+      </button>
+      <button type="button" className="btn-primary" onClick={publish}>
+        <IconUpload size={15} stroke={2} aria-hidden />
+        Publish snapshot
+      </button>
+    </>
+  );
+
+  const onboardingScroll = (
+    <>
+      <div className={`onboarding-top mx-auto w-full max-w-[1600px] px-4 ${embedded ? 'pt-4' : 'pt-6'} sm:px-6 lg:px-10`}>
+        {!embedded ? (
+          <div className="page-hdr">
+            <div>
+              <h1 className="font-heading page-title">Knowledge onboarding</h1>
+              <p className="page-sub">
+                Property: <strong>{propertyId}</strong>
+              </p>
+            </div>
+            <div className="hdr-actions">{knowledgeActions}</div>
           </div>
-          <div className="hdr-actions">
-            {!embedded && <OnboardingThemeToggle />}
-            {!embedded && (
-              <a href="/staff?nav=knowledge" className="btn-ghost">
-                Staff workspace
-              </a>
-            )}
-            <button type="button" className="btn-ghost" onClick={seed}>
-              Seed demo facts
-            </button>
-            <button type="button" className="btn-primary" onClick={publish}>
-              <IconUpload size={15} stroke={2} aria-hidden />
-              Publish snapshot
-            </button>
-          </div>
-        </div>
+        ) : null}
 
         <ProgressBar {...progressStats} hasCrawlRun={hasCrawlRun} />
         {completeness && (
@@ -767,6 +775,24 @@ export function StaffKnowledgeOnboarding({
         factsMerged={crawlJob?.facts_merged ?? lastCrawlFactsMerged}
         onReviewFields={() => scrollToSection(coreSlotsByDomain[0]?.domain ?? 'property')}
       />
+    </>
+  );
+
+  return (
+    <div className={rootClassName}>
+      {embedded ? (
+        <>
+          <StaffPageHeader
+            icon={<StaffNavIcon nav="knowledge" />}
+            title="Knowledge"
+            subtitle={`Property: ${propertyId}`}
+            actions={knowledgeActions}
+          />
+          <StaffModuleBody className="overflow-y-auto">{onboardingScroll}</StaffModuleBody>
+        </>
+      ) : (
+        onboardingScroll
+      )}
     </div>
   );
 }

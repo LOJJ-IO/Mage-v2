@@ -536,6 +536,41 @@ class ApiClient {
     return { success: true, data: result.data.map(mapStaffAction) };
   }
 
+  async listGuestReviewSummaries(staffKey: string): Promise<
+    ApiResponse<
+      Array<{
+        guestId: string;
+        name: string;
+        roomNumber: string;
+        checkOut: Date;
+        score: number | null;
+      }>
+    >
+  > {
+    const result = await this.request<
+      Array<{
+        guest_id: string;
+        name: string;
+        room_number: string;
+        check_out: string;
+        score: number | null;
+      }>
+    >('/api/staff/guests/review-summary', {}, staffKey);
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    return {
+      success: true,
+      data: result.data.map((row) => ({
+        guestId: row.guest_id,
+        name: row.name,
+        roomNumber: row.room_number,
+        checkOut: new Date(row.check_out),
+        score: row.score,
+      })),
+    };
+  }
+
   async listGuestHappinessScores(staffKey: string): Promise<ApiResponse<Record<string, number>>> {
     const result = await this.request<Array<{ guest_id: string; score: number | null }>>(
       '/api/staff/guests/happiness-scores',
