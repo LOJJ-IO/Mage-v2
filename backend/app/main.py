@@ -8,6 +8,7 @@ from datetime import datetime
 
 from app.core.config import get_settings
 from app.models.schemas import HealthResponse
+from app.services.database import get_database
 from app.api import chat, tickets, guests, agents, transcription, staff, auth, staff_knowledge, webhooks
 from app.services import transcription_service
 
@@ -104,9 +105,31 @@ async def root():
 @app.get(f"{settings.api_prefix}/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint."""
+    db_type = settings.database_type
+    db_ok = True
+    db_error: str | None = None
+
+    if db_type == "supabase":
+        try:
+            db = get_database()
+            client = getattr(db, "client", None)
+            if client is None:
+                db_ok = False
+                db_error = "Supabase client not initialized"
+            else:
+                client.table("conversations").select("guest_id").limit(1).execute()
+        except Exception as exc:
+            db_ok = False
+            db_error = str(exc)[:300]
+            logger.warning("Health check database probe failed: %s", exc)
+
+    status = "healthy" if db_ok else "degraded"
     return HealthResponse(
-        status="healthy",
-        timestamp=datetime.utcnow()
+        status=status,
+        timestamp=datetime.utcnow(),
+        database_type=db_type,
+        database_ok=db_ok,
+        database_error=db_error,
     )
 
 

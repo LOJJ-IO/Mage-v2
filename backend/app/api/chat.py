@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Optional
 import uuid
 import json
+import logging
 
 from app.models.schemas import (
     ChatMessageRequest,
@@ -25,12 +26,22 @@ from app.services.guest_session import resolve_guest_id_for_chat
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 async def _require_guest(request: Request, guest_id: Optional[str]) -> tuple[str, Optional[str]]:
     resolved_id, property_id = await resolve_guest_id_for_chat(request, guest_id)
     if not resolved_id:
-        raise HTTPException(status_code=401, detail="Guest session required")
+        raise HTTPException(
+            status_code=401,
+            detail="Guest session required. Please sign in again.",
+        )
+    db = get_database()
+    if not db.get_guest(resolved_id):
+        raise HTTPException(
+            status_code=401,
+            detail="Guest not found. Please sign in again.",
+        )
     return resolved_id, property_id
 
 
@@ -164,11 +175,21 @@ async def send_message(request: ChatMessageRequest, http_request: Request):
         ]
         
         if not request.task_continuation:
-            db.add_message_to_conversation(
-                guest_id,
-                "user",
-                request.content,
-            )
+            try:
+                db.add_message_to_conversation(
+                    guest_id,
+                    "user",
+                    request.content,
+                )
+            except Exception as exc:
+                logger.exception("Failed to persist guest message for %s", guest_id)
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "Could not save your message right now. "
+                        "Please try again in a moment or contact the front desk."
+                    ),
+                ) from exc
     
     continue_task = False
     task_message = None

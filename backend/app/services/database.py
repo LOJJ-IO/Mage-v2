@@ -1275,12 +1275,8 @@ def get_database() -> DatabaseProtocol:
         database_type = _resolve_database_type(settings)
         
         if database_type == "supabase":
-            try:
-                logger.info("Initializing Supabase database")
-                return SupabaseDatabase()
-            except Exception as e:
-                logger.warning(f"Failed to initialize Supabase database: {e}. Falling back to MockDatabase.")
-                return MockDatabase()
+            logger.info("Initializing Supabase database")
+            return SupabaseDatabase()
         elif database_type == "mock":
             logger.info("Using MockDatabase")
             return MockDatabase()

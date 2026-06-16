@@ -1,4 +1,5 @@
 -- Mage v2: staff_actions escalation columns (run in Supabase SQL editor)
+-- Run AFTER docs/supabase_core_migration.sql (columns may already exist on fresh install).
 ALTER TABLE staff_actions
   ADD COLUMN IF NOT EXISTS escalation_type VARCHAR(20) NOT NULL DEFAULT 'normal',
   ADD COLUMN IF NOT EXISTS allow_staff_jump_in BOOLEAN NOT NULL DEFAULT true,
