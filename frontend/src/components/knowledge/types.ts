@@ -31,6 +31,7 @@ export type Slot = {
   options?: string[];
   placeholder?: string;
   suggestions?: string[];
+  markdown_section?: string;
   /** core = auto-fill friendly, shown first; detail = staff-heavy, shown before Staff Knowledge */
   form_group?: 'core' | 'detail';
 };

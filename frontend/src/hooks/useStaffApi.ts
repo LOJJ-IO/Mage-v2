@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
-import { StaffActionStatus, StaffGuestConversation } from '@/types';
+import { Message, StaffActionStatus, StaffGuestConversation } from '@/types';
 import { getStoredStaffKey } from '@/lib/stateMachineStaff';
 
 export const staffQueryKeys = {
@@ -67,6 +67,7 @@ export function useStaffInboxThreads(staffKey: string | null) {
     },
     enabled: !!staffKey,
     refetchInterval: 3000,
+    placeholderData: (previous) => previous,
   });
 }
 
@@ -83,6 +84,7 @@ export function useStaffGuestConversation(staffKey: string | null, guestId: stri
     retry: 2,
     staleTime: 0,
     gcTime: 5 * 60 * 1000,
+    placeholderData: (previous) => previous,
   });
 }
 
@@ -149,22 +151,89 @@ export function useSendStaffMessage() {
       if (!response.success) throw new Error(response.error || 'Send failed');
       return response.data!;
     },
-    onSuccess: (_, variables) => {
+    onMutate: async (variables) => {
       const key = variables.staffKey || getStoredStaffKey() || '';
+      const optimisticId = `optimistic-staff-${Date.now()}`;
+      const optimisticMessage: Message = {
+        id: optimisticId,
+        role: 'staff',
+        content: variables.content,
+        timestamp: new Date(),
+      };
+
       if (variables.guestId) {
-        queryClient.invalidateQueries({
-          queryKey: staffQueryKeys.guestConversation(key, variables.guestId),
+        const queryKey = staffQueryKeys.guestConversation(key, variables.guestId);
+        await queryClient.cancelQueries({ queryKey });
+        const previous = queryClient.getQueryData<StaffGuestConversation>(queryKey);
+        if (previous) {
+          queryClient.setQueryData<StaffGuestConversation>(queryKey, {
+            ...previous,
+            messages: [...previous.messages, optimisticMessage],
+          });
+        }
+        return { previous, queryKey, optimisticId };
+      }
+
+      if (variables.actionId) {
+        const queryKey = staffQueryKeys.conversation(key, variables.actionId);
+        await queryClient.cancelQueries({ queryKey });
+        const previous = queryClient.getQueryData<{ messages: Message[] }>(queryKey);
+        if (previous) {
+          queryClient.setQueryData(queryKey, {
+            ...previous,
+            messages: [...previous.messages, optimisticMessage],
+          });
+        }
+        return { previous, queryKey, optimisticId };
+      }
+
+      return undefined;
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous !== undefined && context?.queryKey) {
+        queryClient.setQueryData(context.queryKey, context.previous);
+      }
+    },
+    onSuccess: (sentMessage, variables, context) => {
+      const key = variables.staffKey || getStoredStaffKey() || '';
+
+      const applySentMessage = (
+        queryKey: readonly string[],
+        previous: { messages: Message[] } | undefined
+      ) => {
+        if (!previous) return;
+        const withoutOptimistic = previous.messages.filter(
+          (m) => !m.id.startsWith('optimistic-staff-')
+        );
+        const alreadyPresent = withoutOptimistic.some((m) => m.id === sentMessage.id);
+        queryClient.setQueryData(queryKey, {
+          ...previous,
+          messages: alreadyPresent
+            ? withoutOptimistic
+            : [...withoutOptimistic, sentMessage],
         });
+      };
+
+      if (variables.guestId) {
+        const queryKey = staffQueryKeys.guestConversation(key, variables.guestId);
+        const cached =
+          queryClient.getQueryData<StaffGuestConversation>(queryKey) ??
+          context?.previous;
+        applySentMessage(queryKey, cached);
         queryClient.invalidateQueries({ queryKey: staffQueryKeys.inboxThreads(key) });
       }
+
       if (variables.actionId) {
-        queryClient.invalidateQueries({
-          queryKey: staffQueryKeys.conversation(key, variables.actionId),
-        });
+        const queryKey = staffQueryKeys.conversation(key, variables.actionId);
+        const cached =
+          queryClient.getQueryData<{ messages: Message[] }>(queryKey) ??
+          context?.previous;
+        applySentMessage(queryKey, cached);
         queryClient.invalidateQueries({
           queryKey: staffQueryKeys.action(key, variables.actionId),
         });
       }
+
       queryClient.invalidateQueries({ queryKey: staffQueryKeys.actions(key) });
     },
   });

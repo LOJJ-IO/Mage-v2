@@ -64,26 +64,26 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
     }
   }, [threads, selectedGuestId]);
 
-  const guestId = selectedThread?.guestId ?? null;
+  const activeGuestId = selectedGuestId;
   const {
     data: conversation,
     isLoading: conversationLoading,
     isFetching: conversationFetching,
     isError: conversationError,
     error: conversationErrorDetail,
-  } = useStaffGuestConversation(staffKey, guestId);
+  } = useStaffGuestConversation(staffKey, activeGuestId);
   const sendMutation = useSendStaffMessage();
   const isDesktop = useMediaQuery('(min-width: 1024px)');
 
   const messages = conversation?.messages ?? [];
   const showConversationLoading =
-    !!guestId && conversationLoading && messages.length === 0;
+    !!activeGuestId && conversationLoading && messages.length === 0;
 
   const handleSend = async () => {
     const text = reply.trim();
-    if (!text || !guestId || sendMutation.isPending) return;
+    if (!text || !activeGuestId || sendMutation.isPending) return;
     await sendMutation.mutateAsync({
-      guestId,
+      guestId: activeGuestId,
       actionId: selectedThread?.linkedActionId ?? undefined,
       content: text,
       staffKey,
@@ -92,8 +92,8 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
   };
 
   const threadList = (
-      <StaffCard className="h-full min-h-0 overflow-hidden flex flex-col max-h-[260px] lg:max-h-none">
-        <div className="overflow-y-auto p-2 space-y-1.5 flex-1">
+      <StaffCard className="flex max-h-[260px] shrink-0 flex-col overflow-hidden lg:h-full lg:max-h-none lg:min-h-0">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 space-y-1.5">
           {threadsLoading && (
             <p className="px-3 py-4 text-xs text-neutral-500">Loading conversations…</p>
           )}
@@ -116,7 +116,7 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
                 setSelectedGuestId(thread.guestId);
               }}
               className={`w-full text-left rounded-lg px-3 py-2 ${
-                selectedThread?.guestId === thread.guestId
+                selectedGuestId === thread.guestId
                   ? 'bg-neutral-100 dark:bg-neutral-800'
                   : 'hover:bg-neutral-50 dark:hover:bg-neutral-900'
               }`}
@@ -149,15 +149,17 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
   );
 
   const conversationPanel = (
-      <StaffCard className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
-          {selectedThread ? (
+      <StaffCard className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
+          {activeGuestId ? (
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
-                {selectedThread.guestName ?? selectedThread.guestId}
+                {selectedThread?.guestName ?? activeGuestId}
               </h2>
               <span className="text-xs text-neutral-500">
-                {selectedThread.roomNumber ? `Room ${selectedThread.roomNumber}` : 'No room'}
+                {selectedThread?.roomNumber
+                  ? `Room ${selectedThread.roomNumber}`
+                  : 'No room'}
               </span>
               {conversationFetching && messages.length > 0 && (
                 <span className="text-[10px] text-neutral-400">Updating…</span>
@@ -170,8 +172,8 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
           )}
         </div>
 
-        <div className="relative flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-neutral-50/70 dark:bg-neutral-950/40">
-          {!selectedThread ? (
+        <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 space-y-2 bg-neutral-50/70 dark:bg-neutral-950/40">
+          {!activeGuestId ? (
             <p className="text-sm text-neutral-500">
               All guest chats with Mage appear here, even when no task was logged.
             </p>
@@ -217,7 +219,7 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
           )}
         </div>
 
-        <div className="border-t border-neutral-200 dark:border-neutral-800 p-3">
+        <div className="shrink-0 border-t border-neutral-200 dark:border-neutral-800 p-3">
           <div className="flex gap-2">
             <input
               type="text"
@@ -231,12 +233,12 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
                   void handleSend();
                 }
               }}
-              disabled={!guestId}
+              disabled={!activeGuestId}
             />
             <button
               type="button"
               onClick={() => void handleSend()}
-              disabled={!guestId || !reply.trim() || sendMutation.isPending}
+              disabled={!activeGuestId || !reply.trim() || sendMutation.isPending}
               className="rounded-lg bg-mage-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-50 hover:opacity-90"
             >
               Send
@@ -247,14 +249,14 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <StaffPageHeader
         icon={<StaffNavIcon nav="guest-chat" />}
         title="Chat with guests"
         subtitle={`${threads.length} conversation${threads.length === 1 ? '' : 's'}`}
         actions={<StaffNavShortcut target="tasks" label="Tasks" />}
       />
-      <StaffModuleBody className="p-4 md:p-5">
+      <StaffModuleBody className="flex min-h-0 flex-1 flex-col p-4 md:p-5">
       {isDesktop ? (
         <ResizableSplit
           storageKey="staff-guest-inbox"
@@ -266,7 +268,7 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
           right={conversationPanel}
         />
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
           {threadList}
           {conversationPanel}
         </div>
