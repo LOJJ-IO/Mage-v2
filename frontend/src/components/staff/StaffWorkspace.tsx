@@ -229,10 +229,14 @@ export function StaffWorkspace({
           />
         )}
 
-        {activeNav === 'guest-chat' && <StaffGuestInbox staffKey={staffKey} />}
+        {activeNav === 'guest-chat' && (
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <StaffGuestInbox staffKey={staffKey} />
+          </div>
+        )}
         {activeNav === 'schedule' && <StaffScheduleView staffKey={staffKey} />}
         {activeNav === 'review' && <StaffReviewDashboard actions={actions} staffKey={staffKey} />}
-        {activeNav === 'help-desk' && <StaffHelpDesk />}
+        {activeNav === 'help-desk' && <StaffHelpDesk staffKey={staffKey} />}
         {activeNav === 'knowledge' && (
           <div className="flex min-h-0 flex-1 overflow-hidden">
             <StaffKnowledgeOnboarding staffKey={staffKey} embedded />

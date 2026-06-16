@@ -88,18 +88,18 @@ export function ChatScreen() {
   }, [guestProfile?.id]);
 
   useEffect(() => {
-    if (
-      !historyLoaded ||
-      historyData == null ||
-      historyHydratedRef.current ||
-      sendMessageMutation.isPending ||
-      faqFeedbackMutation.isPending
-    ) {
+    if (!historyLoaded || historyData == null) return;
+
+    if (!historyHydratedRef.current) {
+      if (sendMessageMutation.isPending || faqFeedbackMutation.isPending) return;
+      const current = useMageStore.getState().messages;
+      setMessages(mergeConversationMessages(current, historyData));
+      historyHydratedRef.current = true;
       return;
     }
+
     const current = useMageStore.getState().messages;
     setMessages(mergeConversationMessages(current, historyData));
-    historyHydratedRef.current = true;
   }, [
     historyLoaded,
     historyData,
@@ -107,19 +107,6 @@ export function ChatScreen() {
     sendMessageMutation.isPending,
     faqFeedbackMutation.isPending,
   ]);
-
-  // Poll staff jump-in while on front desk — merge server history without wiping local bubbles
-  useEffect(() => {
-    if (
-      context.conversationContext !== 'FRONT_DESK_AGENT' ||
-      !historyHydratedRef.current ||
-      historyData == null
-    ) {
-      return;
-    }
-    const current = useMageStore.getState().messages;
-    setMessages(mergeConversationMessages(current, historyData));
-  }, [context.conversationContext, historyData, setMessages]);
 
   // Determine current sub-state
   const isIdle = currentState === 'S-G-003';

@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
 import { toGuestFriendlyError } from '@/lib/guestErrors';
+import { mergeConversationMessages } from '@/lib/mergeMessages';
 import { ConversationContext, Ticket, GuestProfile, Message } from '@/types';
 import { useMageStore } from '@/store/mageStore';
 
@@ -43,8 +44,6 @@ export function useAgentAvailability() {
 }
 
 export function useConversationHistory(guestId: string | undefined) {
-  const conversationContext = useMageStore((s) => s.context.conversationContext);
-
   return useQuery({
     queryKey: queryKeys.conversationHistory(guestId || ''),
     queryFn: async () => {
@@ -58,14 +57,13 @@ export function useConversationHistory(guestId: string | undefined) {
     staleTime: 30_000,
     placeholderData: (previous) => previous,
     refetchOnWindowFocus: false,
-    refetchInterval:
-      conversationContext === 'FRONT_DESK_AGENT' ? 4000 : false,
+    refetchInterval: guestId ? 4000 : false,
   });
 }
 
 // Send message mutation
 export function useSendMessage() {
-  const { addMessage, context, guestProfile } = useMageStore();
+  const { addMessage, setMessages, context, guestProfile } = useMageStore();
 
   return useMutation({
     mutationFn: async ({
@@ -102,18 +100,9 @@ export function useSendMessage() {
     },
     onSuccess: (data) => {
       const list = data.messages ?? [];
-      for (const m of list) {
-        addMessage({
-          role: m.role,
-          content: m.content,
-          kind: m.kind,
-          intro: m.intro,
-          faqItems: m.faqItems,
-          triggerContent: m.triggerContent,
-          faqResolved: m.faqResolved,
-          requireContactConfirmation: m.requireContactConfirmation,
-        });
-      }
+      if (list.length === 0) return;
+      const current = useMageStore.getState().messages;
+      setMessages(mergeConversationMessages(current, list));
     },
     onError: (error) => {
       addMessage({
@@ -127,7 +116,7 @@ export function useSendMessage() {
 }
 
 export function useFaqFeedback() {
-  const { addMessage, updateMessage, guestProfile } = useMageStore();
+  const { setMessages, updateMessage, guestProfile } = useMageStore();
 
   return useMutation({
     mutationFn: async ({
@@ -160,17 +149,10 @@ export function useFaqFeedback() {
       return response.data;
     },
     onSuccess: (data, variables) => {
-      for (const m of data.messages ?? []) {
-        addMessage({
-          role: m.role,
-          content: m.content,
-          kind: m.kind,
-          intro: m.intro,
-          faqItems: m.faqItems,
-          triggerContent: m.triggerContent,
-          faqResolved: m.faqResolved,
-          requireContactConfirmation: m.requireContactConfirmation,
-        });
+      const list = data.messages ?? [];
+      if (list.length > 0) {
+        const current = useMageStore.getState().messages;
+        setMessages(mergeConversationMessages(current, list));
       }
       updateMessage(variables.faqPanelMessageId, {
         faqResolved: variables.helpful,
