@@ -186,7 +186,7 @@ function MonthGrid({
               key={day.toISOString()}
               type="button"
               onClick={() => onSelectDay(day)}
-              className={`flex min-h-[88px] flex-col border-b border-r border-neutral-200 p-1 text-left last:border-r-0 dark:border-neutral-800 ${
+              className={`flex min-h-[64px] flex-col border-b border-r border-neutral-200 p-1 text-left last:border-r-0 dark:border-neutral-800 sm:min-h-[88px] ${
                 isSelected ? 'ring-2 ring-inset ring-[#0078d4]' : ''
               } ${!inMonth ? 'bg-neutral-50/80 dark:bg-neutral-950/40' : 'bg-white dark:bg-neutral-950'}`}
             >
@@ -455,6 +455,8 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
   const rangeLabel = getRangeLabel(view, anchorDate);
   const isLargeDesktop = useMediaQuery('(min-width: 1280px)');
   const isScheduleSidebar = useMediaQuery('(min-width: 1024px)');
+  const isMobile = !isScheduleSidebar;
+  const [mobileSourcesOpen, setMobileSourcesOpen] = useState(false);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white dark:bg-neutral-950">
@@ -473,7 +475,7 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
           >
             New event
           </button>
-          <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5 dark:border-neutral-700 dark:bg-neutral-950">
+          <div className="inline-flex max-w-full overflow-x-auto rounded-lg border border-neutral-200 bg-white p-0.5 dark:border-neutral-700 dark:bg-neutral-950 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {VIEW_OPTIONS.map((option) => (
               <button
                 key={option.id}
@@ -645,17 +647,75 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
         ) : null}
 
         <main className="flex min-w-0 flex-1 flex-col">
-          <div className="border-b border-neutral-200 px-3 py-2 text-xs text-neutral-500 dark:border-neutral-800 lg:hidden">
-            <label className="block">
-              Import (.ics / .csv / .xml)
-              <input
-                type="file"
-                accept=".ics,.csv,.xml,text/calendar"
-                onChange={(e) => void handleFileUpload(e.target.files?.[0])}
-                className="mt-1 block w-full"
+          {isMobile && (
+            <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-800">
+              <MiniMonth
+                anchor={anchorDate}
+                selected={selectedDay}
+                onSelectDay={(day) => {
+                  setSelectedDay(startOfDay(day));
+                  setAnchorDate(day);
+                }}
+                onPrevMonth={() =>
+                  setAnchorDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+                }
+                onNextMonth={() =>
+                  setAnchorDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+                }
               />
-            </label>
-          </div>
+              <div className="border-t border-neutral-200 px-3 py-2 dark:border-neutral-800">
+                <button
+                  type="button"
+                  onClick={() => setMobileSourcesOpen((open) => !open)}
+                  className="flex w-full items-center justify-between text-left text-xs font-medium text-neutral-700 dark:text-neutral-300"
+                >
+                  <span>Calendars ({sources.length})</span>
+                  <span className="text-neutral-400">{mobileSourcesOpen ? '▲' : '▼'}</span>
+                </button>
+                {mobileSourcesOpen && (
+                  <div className="mt-2 space-y-2">
+                    <label className="block text-[11px] text-neutral-500">
+                      Import file (.ics, .csv, .xml)
+                      <input
+                        type="file"
+                        accept=".ics,.csv,.xml,text/calendar"
+                        onChange={(e) => void handleFileUpload(e.target.files?.[0])}
+                        className="mt-1 block w-full text-[11px]"
+                      />
+                    </label>
+                    <div className="space-y-1.5">
+                      {sources.map((source) => (
+                        <label
+                          key={source.id}
+                          className="flex items-center gap-2 text-xs text-neutral-800 dark:text-neutral-200"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={source.visible}
+                            onChange={() =>
+                              setSources((prev) =>
+                                prev.map((row) =>
+                                  row.id === source.id ? { ...row, visible: !row.visible } : row
+                                )
+                              )
+                            }
+                          />
+                          <span
+                            className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: source.color }}
+                          />
+                          <span className="truncate">{source.name}</span>
+                        </label>
+                      ))}
+                      {sources.length === 0 && (
+                        <p className="text-xs text-neutral-500">No calendars yet.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {view === 'month' && (
             <MonthGrid
@@ -742,6 +802,67 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
           </div>
         </ResizablePanel>
         ) : null}
+
+        {isMobile && selectedEvent && (
+          <div
+            className="fixed inset-0 z-50 flex items-end bg-black/40 lg:hidden"
+            onClick={() => setSelectedEventId(null)}
+            role="presentation"
+          >
+            <div
+              className="max-h-[70vh] w-full overflow-y-auto rounded-t-2xl border-t border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-label="Event details"
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">Event</h3>
+                <button
+                  type="button"
+                  onClick={() => setSelectedEventId(null)}
+                  className="rounded-lg px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                >
+                  Close
+                </button>
+              </div>
+              <div className="space-y-2 text-sm text-neutral-700 dark:text-neutral-300">
+                <p
+                  className="inline-block rounded px-2 py-0.5 text-xs font-medium text-white"
+                  style={{ backgroundColor: selectedEvent.sourceColor }}
+                >
+                  {selectedEvent.sourceName}
+                </p>
+                <p className="text-base font-semibold text-neutral-900 dark:text-white">
+                  {selectedEvent.title}
+                </p>
+                <p>
+                  {new Date(selectedEvent.start).toLocaleString(undefined, {
+                    weekday: 'long',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: selectedEvent.allDay ? undefined : 'numeric',
+                    minute: selectedEvent.allDay ? undefined : '2-digit',
+                  })}
+                </p>
+                {selectedEvent.end && (
+                  <p className="text-neutral-500">
+                    Ends{' '}
+                    {new Date(selectedEvent.end).toLocaleString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: selectedEvent.allDay ? undefined : 'numeric',
+                      minute: selectedEvent.allDay ? undefined : '2-digit',
+                    })}
+                  </p>
+                )}
+                {selectedEvent.location && <p>Location: {selectedEvent.location}</p>}
+                {selectedEvent.notes && (
+                  <p className="whitespace-pre-wrap text-neutral-500">{selectedEvent.notes}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </StaffModuleBody>
     </div>
   );

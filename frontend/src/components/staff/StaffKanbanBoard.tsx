@@ -2,8 +2,10 @@
 
 import { useRef, useState } from 'react';
 import { ActionType, StaffAction, StaffActionStatus } from '@/types';
-import { IconFilter, IconSort, IconX } from './StaffIcons';
+import { useMediaQuery } from '@/hooks/useResizableWidth';
+import { IconCheckCircle, IconCheckSquare, IconCircle, IconFilter, IconSort, IconX } from './StaffIcons';
 import { StaffKanbanColumn } from './StaffKanbanColumn';
+import { StaffKanbanMobileColumn } from './StaffKanbanMobileColumn';
 import { StaffNavIcon } from './StaffNavIcon';
 import { StaffNavShortcut } from './StaffNavShortcut';
 import { StaffModuleBody, StaffPageHeader } from './StaffPageHeader';
@@ -49,6 +51,7 @@ export function StaffKanbanBoard({
   onMoveAction,
   guestMessageCounts,
 }: StaffKanbanBoardProps) {
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
@@ -211,32 +214,46 @@ export function StaffKanbanBoard({
           </button>
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900"
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900"
           >
             Automate
             <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-600">
               Pro
             </span>
           </button>
-          <span className="ml-auto text-xs text-neutral-500">
+          <span className="ml-auto hidden text-xs text-neutral-500 sm:inline">
             {totalVisible} visible / {allActions.length} total
           </span>
           </>
         }
       />
 
-      <StaffModuleBody className="overflow-x-auto overflow-y-hidden p-4 md:p-6">
+      <StaffModuleBody
+        className={
+          isDesktop
+            ? 'overflow-x-auto overflow-y-hidden p-4 md:p-6'
+            : 'overflow-y-auto overflow-x-hidden bg-neutral-50/80 p-4 pb-24 dark:bg-neutral-950/80'
+        }
+      >
         {isLoading && todo.length === 0 && ongoing.length === 0 && done.length === 0 ? (
-          <div className="flex gap-3 h-full min-w-[900px]">
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="flex-1 min-w-[280px] rounded-xl bg-neutral-100 dark:bg-neutral-800 animate-pulse h-64"
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="flex gap-1 h-full min-w-min lg:min-w-0 lg:grid lg:grid-cols-3 lg:gap-1">
+          isDesktop ? (
+            <div className="flex h-full min-w-[900px] gap-3">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="h-64 min-w-[280px] flex-1 animate-pulse rounded-xl bg-neutral-100 dark:bg-neutral-800"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-40 animate-pulse rounded-2xl bg-neutral-100 dark:bg-neutral-800" />
+              ))}
+            </div>
+          )
+        ) : isDesktop ? (
+          <div className="flex h-full min-w-min gap-1 lg:min-w-0 lg:grid lg:grid-cols-3 lg:gap-1">
             <StaffKanbanColumn
               columnId="todo"
               actions={todo}
@@ -260,6 +277,39 @@ export function StaffKanbanBoard({
               guestMessageCounts={guestMessageCounts}
               onSelect={onSelect}
               onMoveAction={onMoveAction}
+            />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-6">
+            <StaffKanbanMobileColumn
+              columnId="todo"
+              title="To-do"
+              icon={<IconCheckSquare className="h-4 w-4 text-neutral-600 dark:text-neutral-300" />}
+              iconBgClass="bg-neutral-100 dark:bg-neutral-800"
+              actions={todo}
+              allActions={allActions}
+              guestMessageCounts={guestMessageCounts}
+              onSelect={onSelect}
+            />
+            <StaffKanbanMobileColumn
+              columnId="ongoing"
+              title="In progress"
+              icon={<IconCircle className="h-4 w-4 text-sky-600 dark:text-sky-400" />}
+              iconBgClass="bg-sky-50 dark:bg-sky-950/50"
+              actions={ongoing}
+              allActions={allActions}
+              guestMessageCounts={guestMessageCounts}
+              onSelect={onSelect}
+            />
+            <StaffKanbanMobileColumn
+              columnId="done"
+              title="Done"
+              icon={<IconCheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
+              iconBgClass="bg-emerald-50 dark:bg-emerald-950/40"
+              actions={done}
+              allActions={allActions}
+              guestMessageCounts={guestMessageCounts}
+              onSelect={onSelect}
             />
           </div>
         )}

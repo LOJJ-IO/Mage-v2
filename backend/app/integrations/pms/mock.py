@@ -9,6 +9,7 @@ from typing import Optional
 
 from app.integrations.pms.base import PMSProvider, Reservation
 from app.services.database import get_database
+from app.services.datetime_helpers import is_within_stay_window, utc_naive
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +30,8 @@ class MockPMS:
             property_id=property_id,
             guest_name=guest.name,
             room_number=guest.room_number,
-            check_in=guest.check_in,
-            check_out=guest.check_out,
+            check_in=utc_naive(guest.check_in),
+            check_out=utc_naive(guest.check_out),
             email=guest.email,
             phone=guest.phone,
             membership_tier=guest.membership_tier,
@@ -52,8 +53,8 @@ class MockPMS:
                         property_id=property_id,
                         guest_name=row["guest_name"],
                         room_number=row["room_number"],
-                        check_in=datetime.fromisoformat(row["check_in"]),
-                        check_out=datetime.fromisoformat(row["check_out"]),
+                        check_in=utc_naive(datetime.fromisoformat(row["check_in"])),
+                        check_out=utc_naive(datetime.fromisoformat(row["check_out"])),
                         email=row.get("email"),
                         phone=row.get("phone"),
                         membership_tier=row.get("membership_tier"),
@@ -91,6 +92,7 @@ class MockPMS:
         in_house_only: bool = True,
     ) -> list[Reservation]:
         results: list[Reservation] = []
+        seen_bookings: set[str] = set()
         email_l = (email or "").strip().lower()
         phone_n = _normalize_phone(phone)
 
@@ -98,15 +100,21 @@ class MockPMS:
             if email_l and (res.email or "").lower() == email_l:
                 if not in_house_only or res.in_house:
                     results.append(res)
+                    seen_bookings.add(res.booking_id)
             elif phone_n and _normalize_phone(res.phone) == phone_n:
                 if not in_house_only or res.in_house:
                     results.append(res)
+                    seen_bookings.add(res.booking_id)
 
         for guest in self._db.list_guests(property_id=property_id):
+            if guest.booking_id in seen_bookings:
+                continue
             if email_l and (guest.email or "").lower() == email_l:
                 results.append(self._reservation_from_guest(guest, property_id))
+                seen_bookings.add(guest.booking_id)
             elif phone_n and _normalize_phone(guest.phone) == phone_n:
                 results.append(self._reservation_from_guest(guest, property_id))
+                seen_bookings.add(guest.booking_id)
         return results
 
     async def find_in_house_by_room(
@@ -115,12 +123,17 @@ class MockPMS:
         room_number: str,
         at: datetime,
     ) -> Optional[Reservation]:
+        at_n = utc_naive(at)
         room = room_number.strip()
         for res in self._load_fixture_reservations(property_id):
-            if res.room_number == room and res.check_in <= at <= res.check_out:
+            if res.room_number == room and is_within_stay_window(
+                at_n, res.check_in, res.check_out
+            ):
                 return res
         for guest in self._db.list_guests(property_id=property_id):
-            if guest.room_number == room and guest.check_in <= at <= guest.check_out:
+            if guest.room_number == room and is_within_stay_window(
+                at_n, guest.check_in, guest.check_out
+            ):
                 return self._reservation_from_guest(guest, property_id)
         return None
 
