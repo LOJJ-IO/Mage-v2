@@ -272,3 +272,6 @@ class HealthResponse(BaseModel):
     """Health check response."""
     status: str = "healthy"
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+    database_type: str = "mock"
+    database_ok: bool = True
+    database_error: Optional[str] = None

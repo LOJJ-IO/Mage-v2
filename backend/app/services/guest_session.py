@@ -130,7 +130,4 @@ async def resolve_guest_id_for_chat(
         if guest:
             prop = getattr(guest, "property_id", None) or settings.property_id
             return guest_id, prop
-        return guest_id, settings.property_id
-    if guest_id and settings.allow_dev_guest_login:
-        return guest_id, settings.property_id
     return None, None

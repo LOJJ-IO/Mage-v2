@@ -1,5 +1,5 @@
 -- Mage v2: properties, guest auth, and hotel knowledge infrastructure
--- Run in Supabase SQL editor after existing guests/tickets tables.
+-- Run in Supabase SQL editor AFTER docs/supabase_core_migration.sql
 
 -- ---------------------------------------------------------------------------
 -- Properties (multi-tenant hub)
