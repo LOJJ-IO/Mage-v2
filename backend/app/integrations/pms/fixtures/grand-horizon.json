@@ -1,0 +1,26 @@
+{
+  "reservations": [
+    {
+      "booking_id": "BK-2026-0412",
+      "guest_name": "Alex Johnson",
+      "room_number": "412",
+      "check_in": "2026-01-01T15:00:00",
+      "check_out": "2026-12-31T11:00:00",
+      "email": "alex.johnson@email.com",
+      "phone": "+15550123",
+      "membership_tier": "Platinum",
+      "in_house": true
+    },
+    {
+      "booking_id": "BK-2026-0305",
+      "guest_name": "Sarah Williams",
+      "room_number": "305",
+      "check_in": "2026-01-01T15:00:00",
+      "check_out": "2026-12-31T11:00:00",
+      "email": "sarah.w@email.com",
+      "phone": "+15550456",
+      "membership_tier": "Gold",
+      "in_house": true
+    }
+  ]
+}
