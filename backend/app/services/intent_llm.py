@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -104,6 +105,26 @@ class ClassifierResult:
 
 class ClassifierError(Exception):
     """Classifier could not produce valid JSON after retries."""
+
+
+@dataclass
+class ClassifierCallMeta:
+    latency_ms: int = 0
+    model: Optional[str] = None
+    prompt_cache_hit: bool = False
+    fallback_used: bool = False
+
+
+def _usage_cache_hit(data: dict) -> bool:
+    usage = data.get("usage") or {}
+    if usage.get("cache_read_input_tokens", 0) > 0:
+        return True
+    if usage.get("cached_tokens", 0) > 0:
+        return True
+    details = usage.get("prompt_tokens_details") or {}
+    if details.get("cached_tokens", 0) > 0:
+        return True
+    return False
 
 
 def _disqualified_classifier_patterns() -> List[str]:
@@ -536,7 +557,7 @@ async def call_classifier(
     conversation_history: Optional[List[Dict[str, str]]] = None,
     *,
     api_key: Optional[str] = None,
-) -> ClassifierResult:
+) -> tuple[ClassifierResult, ClassifierCallMeta]:
     key = (api_key or settings.openrouter_api_key or "").strip()
     if not key:
         raise ClassifierError("OPENROUTER_API_KEY is not set")
@@ -549,11 +570,15 @@ async def call_classifier(
         "X-Title": "Mage Hotel Assistant",
     }
     last_raw = ""
-    for model in models:
+    fallback_used = False
+    for model_index, model in enumerate(models):
+        if model_index > 0:
+            fallback_used = True
         messages = build_classifier_messages(
             user_message, conversation_history, model=model
         )
         try:
+            started = time.perf_counter()
             async with httpx.AsyncClient(timeout=float(settings.llm_request_timeout_small)) as client:
                 response = await client.post(
                     f"{settings.openrouter_base_url}/chat/completions",
@@ -562,7 +587,9 @@ async def call_classifier(
                 )
                 response.raise_for_status()
                 data = response.json()
+                latency_ms = int((time.perf_counter() - started) * 1000)
                 resolved_model = (data.get("model") or model) or ""
+                cache_hit = _usage_cache_hit(data)
                 if is_disqualified_classifier_model(resolved_model):
                     logger.warning(
                         "Classifier resolved to disqualified model %s; trying next.",
@@ -575,6 +602,12 @@ async def call_classifier(
                 last_raw = raw
                 finish = choice.get("finish_reason") or ""
                 parsed = parse_classifier_json(raw, salvaged=False, user_message=user_message)
+                meta = ClassifierCallMeta(
+                    latency_ms=latency_ms,
+                    model=resolved_model,
+                    prompt_cache_hit=cache_hit,
+                    fallback_used=fallback_used,
+                )
                 if parsed:
                     if finish == "length":
                         parsed = _copy_classifier_result(
@@ -583,7 +616,7 @@ async def call_classifier(
                             salvaged=True,
                             raw=raw,
                         )
-                    return parsed
+                    return parsed, meta
                 salvaged = parse_classifier_json(
                     raw, salvaged=True, user_message=user_message
                 )
@@ -593,7 +626,7 @@ async def call_classifier(
                         resolved_model,
                         finish,
                     )
-                    return salvaged
+                    return salvaged, meta
                 logger.warning(
                     "Classifier %s: unparseable (finish=%s); trying next.",
                     resolved_model,
@@ -616,5 +649,5 @@ async def call_classifier(
             last_raw, salvaged=True, user_message=user_message
         )
         if salvaged:
-            return salvaged
+            return salvaged, ClassifierCallMeta(fallback_used=True)
     raise ClassifierError("Could not obtain valid classifier JSON from any model")
