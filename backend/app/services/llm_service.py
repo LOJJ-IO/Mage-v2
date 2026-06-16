@@ -52,10 +52,12 @@ from app.services.intent_llm import (
     call_classifier,
     ClassifierError,
     ClassifierResult,
+    ClassifierCallMeta,
     format_classifier_routing_json,
     build_copy_writer_user_content,
     is_disqualified_classifier_model,
 )
+from app.services.metrics_service import RoutingTelemetry
 
 STAFF_LOG_TYPES = frozenset({
     "MAINTENANCE",
@@ -286,7 +288,7 @@ def _try_log_staff_action(
             conversation_history,
         )
     try:
-        return get_database().log_staff_action(
+        action = get_database().log_staff_action(
             guest_id=guest_id,
             action_type=resolved_type,
             summary=summary_text,
@@ -294,6 +296,10 @@ def _try_log_staff_action(
             escalation_type=escalation_type,
             guest_conversation_thread_id=guest_id,
         )
+        if action and llm_service._active_telemetry is not None:
+            llm_service._active_telemetry.staff_action_logged = True
+            llm_service._active_telemetry.escalation_type = escalation_type.value
+        return action
     except Exception as e:
         logger.exception("Staff action log error: %s", e)
         return None
@@ -655,6 +661,52 @@ class LLMService:
         self.base_url = settings.openrouter_base_url
         self.api_key = (settings.openrouter_api_key or "").strip()
         self.model = settings.llm_model
+        self._active_telemetry: Optional[RoutingTelemetry] = None
+        self._route_started: float = 0.0
+
+    def _begin_route_telemetry(
+        self,
+        *,
+        guest_id: Optional[str],
+        property_id: Optional[str],
+        user_message: str,
+        history: Optional[List[Dict[str, str]]],
+    ) -> RoutingTelemetry:
+        telemetry = RoutingTelemetry(
+            guest_id=guest_id,
+            property_id=property_id,
+            turn_count=len(history or []),
+            metadata={"user_message_preview": (user_message or "")[:120]},
+        )
+        self._active_telemetry = telemetry
+        self._route_started = time.perf_counter()
+        return telemetry
+
+    def _finalize_route_telemetry(self, telemetry: RoutingTelemetry) -> RoutingTelemetry:
+        telemetry.total_latency_ms = int((time.perf_counter() - self._route_started) * 1000)
+        if telemetry.guest_id:
+            guest = get_database().get_guest(telemetry.guest_id)
+            if guest and guest.happiness_score is not None:
+                telemetry.happiness_score = guest.happiness_score
+        self._active_telemetry = None
+        return telemetry
+
+    def _apply_classifier_telemetry(
+        self,
+        telemetry: RoutingTelemetry,
+        classified: ClassifierResult,
+        meta: ClassifierCallMeta,
+    ) -> None:
+        telemetry.abilities = list(classified.abilities or [])
+        telemetry.confidence = classified.confidence
+        telemetry.request_type = classified.request_type
+        telemetry.salvaged = classified.salvaged
+        telemetry.classifier_model = meta.model
+        telemetry.classifier_latency_ms = meta.latency_ms
+        telemetry.prompt_cache_hit = meta.prompt_cache_hit
+        telemetry.fallback_used = meta.fallback_used or telemetry.fallback_used
+        primary = (classified.abilities or [None])[0]
+        telemetry.ability_executed = primary
 
     @staticmethod
     def _no_api_key_fallback_text(user_message: str) -> str:
@@ -1619,12 +1671,20 @@ class LLMService:
         conversation_history: Optional[List[Dict[str, str]]],
         images: Optional[List[str]],
         guest_id: Optional[str],
+        telemetry: Optional[RoutingTelemetry] = None,
     ) -> List[Dict[str, Any]]:
         history = trim_history(conversation_history)
         try:
-            classified = await call_classifier(user_message, history, api_key=self.api_key)
+            classified, meta = await call_classifier(user_message, history, api_key=self.api_key)
+            if telemetry:
+                self._apply_classifier_telemetry(telemetry, classified, meta)
+                telemetry.routing_path = "two_layer"
         except ClassifierError as e:
             logger.error("Classifier failed: %s", e)
+            if telemetry:
+                telemetry.success = False
+                telemetry.error_code = "classifier_error"
+                telemetry.routing_path = "two_layer_error"
             return [
                 {
                     "content": "I'm having trouble connecting right now. Please try again in a moment.",
@@ -1769,7 +1829,7 @@ class LLMService:
         segments: List[Dict[str, Any]] = []
         if settings.llm_use_two_layer_routing:
             try:
-                classified = await call_classifier(
+                classified, _meta = await call_classifier(
                     llm_prompt, conversation_history, api_key=self.api_key
                 )
             except ClassifierError:
@@ -1836,11 +1896,15 @@ class LLMService:
         *,
         task_continuation: bool = False,
         property_id: Optional[str] = None,
+        telemetry: Optional[RoutingTelemetry] = None,
     ) -> Tuple[List[Dict[str, Any]], bool, Optional[str]]:
         history = trim_history(conversation_history)
         pid = _resolve_property_id(guest_id, property_id)
         simple = self._get_simple_response(user_message, history)
         if simple is not None:
+            if telemetry:
+                telemetry.routing_path = "social_shortcut"
+                telemetry.ability_executed = "G"
             return (
                 _finalize_segments(
                     [{"content": simple, "kind": MessageKind.TEXT.value, "require_contact_confirmation": False}]
@@ -1862,11 +1926,17 @@ class LLMService:
         if faq_matches and task_like and should_show_faq_with_task(message_lower, words, faq_matches):
             faq_seg = self._build_faq_segment(user_message, guest_id, history, property_id=pid)
             if faq_seg:
+                if telemetry:
+                    telemetry.routing_path = "faq_with_task"
+                    telemetry.ability_executed = "F"
                 return (_finalize_segments([faq_seg]), True, user_message)
 
         if faq_matches and not task_like:
             faq_seg = self._build_faq_segment(user_message, guest_id, history, property_id=pid)
             if faq_seg:
+                if telemetry:
+                    telemetry.routing_path = "faq"
+                    telemetry.ability_executed = "F"
                 return (_finalize_segments([faq_seg]), False, None)
         
         if not self.api_key:
@@ -1894,6 +1964,8 @@ class LLMService:
                         substantive[:200] or "Housekeeping request", substantive,
                         conversation_history=history, user_message=user_message,
                     )
+            if telemetry:
+                telemetry.routing_path = "no_api_key"
             return (
                 _finalize_segments(
                     [{"content": self._no_api_key_fallback_text(user_message), "kind": MessageKind.TEXT.value, "require_contact_confirmation": False}]
@@ -1904,11 +1976,13 @@ class LLMService:
         
         if settings.llm_use_two_layer_routing:
             segments = await self._route_via_two_layer(
-                user_message, history, images, guest_id
+                user_message, history, images, guest_id, telemetry=telemetry
             )
             return (_finalize_segments(segments), False, None)
 
         small_text, outcome, action = await self._call_small_model(user_message, history, images, guest_id)
+        if telemetry:
+            telemetry.routing_path = "legacy_small_model"
         if outcome == "non_answer":
             if is_in_room_issue(user_message) or task_like:
                 classified = classify_service(user_message, history)
@@ -1970,7 +2044,7 @@ class LLMService:
             return [{"content": "I'm currently experiencing high demand. Please try again in a moment.", "require_contact_confirmation": False}]
         if context == ConversationContext.FRONT_DESK_AGENT:
             return [{"content": "Your message has been sent to the front desk. They will respond shortly.", "require_contact_confirmation": False}]
-        segments, _, _ = await self._route_bot_message(
+        segments, _, _, _ = await self._route_bot_message(
             user_message, conversation_history, images, guest_id, property_id=property_id
         )
         return segments
@@ -1984,16 +2058,32 @@ class LLMService:
         *,
         task_continuation: bool = False,
         property_id: Optional[str] = None,
-    ) -> Tuple[List[Dict[str, Any]], bool, Optional[str]]:
-        """Route message; returns (segments, continue_task, task_message)."""
-        return await self._route_bot_message(
-            user_message,
-            conversation_history,
-            images,
-            guest_id,
-            task_continuation=task_continuation,
-            property_id=property_id,
+    ) -> Tuple[List[Dict[str, Any]], bool, Optional[str], RoutingTelemetry]:
+        """Route message; returns (segments, continue_task, task_message, telemetry)."""
+        pid = _resolve_property_id(guest_id, property_id)
+        telemetry = self._begin_route_telemetry(
+            guest_id=guest_id,
+            property_id=pid,
+            user_message=user_message,
+            history=conversation_history,
         )
+        try:
+            segments, continue_task, task_message = await self._route_bot_message(
+                user_message,
+                conversation_history,
+                images,
+                guest_id,
+                task_continuation=task_continuation,
+                property_id=property_id,
+                telemetry=telemetry,
+            )
+        except Exception:
+            telemetry.success = False
+            telemetry.error_code = "route_error"
+            raise
+        finally:
+            self._finalize_route_telemetry(telemetry)
+        return segments, continue_task, task_message, telemetry
     
     async def generate_stream(
         self,
@@ -2016,7 +2106,7 @@ class LLMService:
                 yield word + " "
             return
         
-        segments, _, _ = await self._route_bot_message(
+        segments, _, _, _ = await self._route_bot_message(
             user_message, conversation_history, images, guest_id, property_id=property_id
         )
         parts: List[str] = []

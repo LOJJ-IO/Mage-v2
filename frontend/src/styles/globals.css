@@ -36,6 +36,52 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .animate-in {
+    animation-name: enter;
+    animation-duration: 500ms;
+    --tw-enter-opacity: initial;
+    --tw-enter-scale: initial;
+    --tw-enter-translate-x: initial;
+    --tw-enter-translate-y: initial;
+  }
+  .fade-in {
+    --tw-enter-opacity: 0;
+  }
+  .slide-in-from-bottom-2 {
+    --tw-enter-translate-y: 0.5rem;
+  }
+  .fill-mode-both {
+    animation-fill-mode: both;
+  }
+}
+
+@keyframes enter {
+  from {
+    opacity: var(--tw-enter-opacity, 1);
+    transform: translate3d(
+      var(--tw-enter-translate-x, 0),
+      var(--tw-enter-translate-y, 0),
+      0
+    ) scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), 1);
+  }
+}
+
+.dashboard-theme {
+  --chart-1: #05944f;
+  --chart-2: #276ef1;
+  --chart-3: #8b5cf6;
+  --chart-4: #f59e0b;
+  --chart-5: #e11900;
+  font-family: 'Clash Display', system-ui, sans-serif;
+}
+
+.dashboard-theme h1,
+.dashboard-theme h2,
+.dashboard-theme h3 {
+  font-family: 'Season Mix', 'Clash Display', Georgia, serif;
+}
+
 :root {
   --color-primary: #000000;
   --color-secondary: #276EF1;

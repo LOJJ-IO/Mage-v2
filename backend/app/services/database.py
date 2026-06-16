@@ -285,6 +285,31 @@ class DatabaseProtocol(Protocol):
         """Guest questions that triggered CONTACT_FRONT_DESK with no knowledge match."""
         ...
 
+    # Metrics / analytics
+    def is_metrics_db_enabled(self) -> bool:
+        """Runtime DB toggle for metrics collection."""
+        ...
+
+    def set_metrics_db_enabled(self, enabled: bool) -> bool:
+        """Set runtime metrics toggle."""
+        ...
+
+    def record_metrics_event(self, payload: dict) -> None:
+        """Insert a metrics event row."""
+        ...
+
+    def list_metrics_events(
+        self,
+        *,
+        limit: int = 500,
+        event_type: Optional[str] = None,
+        since: Optional[datetime] = None,
+        until: Optional[datetime] = None,
+        property_id: Optional[str] = None,
+    ) -> List[dict]:
+        """List metrics events newest first."""
+        ...
+
 
 def _staff_action_from_row(row: dict) -> StaffAction:
     """Build StaffAction from DB/mock row with backward-compatible defaults."""
@@ -390,6 +415,8 @@ class MockDatabase(PropertyStoreMixin):
         
         # Conversation histories per guest
         self.conversations: Dict[str, List[Dict[str, str]]] = {}
+        self.metrics_db_enabled: bool = False
+        self.metrics_events: List[dict] = []
         self._init_property_stores()
     
     # Guest operations
@@ -502,6 +529,15 @@ class MockDatabase(PropertyStoreMixin):
                 guest = self.guests.get(guest_id)
                 if guest:
                     guest.happiness_score = score
+                    try:
+                        from app.services.metrics_service import record_sentiment_snapshot
+                        record_sentiment_snapshot(
+                            guest_id=guest_id,
+                            property_id=guest.property_id,
+                            happiness_score=score,
+                        )
+                    except Exception:
+                        pass
             except Exception as e:
                 logger.warning("Sentiment scoring failed for %s: %s", guest_id, e)
 
@@ -702,6 +738,54 @@ class MockDatabase(PropertyStoreMixin):
             min_occurrences=min_occurrences,
             limit=limit,
         )
+
+    def is_metrics_db_enabled(self) -> bool:
+        return self.metrics_db_enabled
+
+    def set_metrics_db_enabled(self, enabled: bool) -> bool:
+        self.metrics_db_enabled = bool(enabled)
+        return self.metrics_db_enabled
+
+    def record_metrics_event(self, payload: dict) -> None:
+        row = dict(payload)
+        row.setdefault("id", str(uuid.uuid4()))
+        row.setdefault("created_at", datetime.utcnow().isoformat())
+        self.metrics_events.append(row)
+
+    def list_metrics_events(
+        self,
+        *,
+        limit: int = 500,
+        event_type: Optional[str] = None,
+        since: Optional[datetime] = None,
+        until: Optional[datetime] = None,
+        property_id: Optional[str] = None,
+    ) -> List[dict]:
+        rows = list(self.metrics_events)
+        rows.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+        out: List[dict] = []
+        for row in rows:
+            if event_type and row.get("event_type") != event_type:
+                continue
+            if property_id and row.get("property_id") and row.get("property_id") != property_id:
+                continue
+            created = row.get("created_at")
+            try:
+                ts = (
+                    datetime.fromisoformat(str(created).replace("Z", "+00:00")).replace(tzinfo=None)
+                    if created
+                    else None
+                )
+            except ValueError:
+                ts = None
+            if since and ts and ts < since:
+                continue
+            if until and ts and ts > until:
+                continue
+            out.append(row)
+            if len(out) >= limit:
+                break
+        return out
 
 
 class SupabaseDatabase(PropertyStoreSupabase):
@@ -933,6 +1017,16 @@ class SupabaseDatabase(PropertyStoreSupabase):
                     self.client.table("guests").update(
                         {"happiness_score": score}
                     ).eq("id", guest_id).execute()
+                    try:
+                        from app.services.metrics_service import record_sentiment_snapshot
+                        guest_row = self.get_guest(guest_id)
+                        record_sentiment_snapshot(
+                            guest_id=guest_id,
+                            property_id=guest_row.property_id if guest_row else None,
+                            happiness_score=score,
+                        )
+                    except Exception:
+                        pass
                 except Exception as sentiment_err:
                     logger.warning("Sentiment scoring failed for %s: %s", guest_id, sentiment_err)
 
@@ -1256,6 +1350,94 @@ class SupabaseDatabase(PropertyStoreSupabase):
             )
         except Exception as e:
             logger.error(f"Error listing unanswered guest questions: {e}")
+            return []
+
+    def is_metrics_db_enabled(self) -> bool:
+        try:
+            response = (
+                self.client.table("metrics_config")
+                .select("enabled")
+                .eq("id", 1)
+                .limit(1)
+                .execute()
+            )
+            if response.data:
+                return bool(response.data[0].get("enabled"))
+        except Exception as e:
+            logger.warning("metrics_config read failed (run migration?): %s", e)
+        return False
+
+    def set_metrics_db_enabled(self, enabled: bool) -> bool:
+        try:
+            self.client.table("metrics_config").upsert(
+                {
+                    "id": 1,
+                    "enabled": bool(enabled),
+                    "updated_at": datetime.utcnow().isoformat(),
+                }
+            ).execute()
+            return bool(enabled)
+        except Exception as e:
+            logger.error("Failed to set metrics_config: %s", e)
+            raise
+
+    def record_metrics_event(self, payload: dict) -> None:
+        row = dict(payload)
+        metadata = row.pop("metadata", {}) or {}
+        insert = {
+            "event_type": row.get("event_type"),
+            "guest_id": row.get("guest_id"),
+            "property_id": row.get("property_id"),
+            "abilities": row.get("abilities"),
+            "ability_executed": row.get("ability_executed"),
+            "confidence": row.get("confidence"),
+            "request_type": row.get("request_type"),
+            "escalation_type": row.get("escalation_type"),
+            "salvaged": row.get("salvaged"),
+            "classifier_model": row.get("classifier_model"),
+            "copy_model": row.get("copy_model"),
+            "prompt_cache_hit": row.get("prompt_cache_hit"),
+            "fallback_used": row.get("fallback_used"),
+            "classifier_latency_ms": row.get("classifier_latency_ms"),
+            "copy_latency_ms": row.get("copy_latency_ms"),
+            "total_latency_ms": row.get("total_latency_ms"),
+            "success": row.get("success"),
+            "error_code": row.get("error_code"),
+            "staff_action_logged": row.get("staff_action_logged"),
+            "happiness_score": row.get("happiness_score"),
+            "metadata": metadata,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        self.client.table("metrics_events").insert(insert).execute()
+
+    def list_metrics_events(
+        self,
+        *,
+        limit: int = 500,
+        event_type: Optional[str] = None,
+        since: Optional[datetime] = None,
+        until: Optional[datetime] = None,
+        property_id: Optional[str] = None,
+    ) -> List[dict]:
+        try:
+            query = (
+                self.client.table("metrics_events")
+                .select("*")
+                .order("created_at", desc=True)
+                .limit(limit)
+            )
+            if event_type:
+                query = query.eq("event_type", event_type)
+            if property_id:
+                query = query.eq("property_id", property_id)
+            if since:
+                query = query.gte("created_at", since.isoformat())
+            if until:
+                query = query.lte("created_at", until.isoformat())
+            response = query.execute()
+            return response.data or []
+        except Exception as e:
+            logger.error("Error listing metrics events: %s", e)
             return []
 
 

@@ -21,6 +21,7 @@ from app.services.llm_service import llm_service
 from app.services.database import get_database
 from app.services.message_codec import encode_faq_payload, parse_stored_message
 from app.services.conversation_helpers import is_internal_conversation_message
+from app.services.metrics_service import record_routing_event, record_faq_feedback_event
 from app.core.config import get_settings
 from app.services.guest_session import resolve_guest_id_for_chat
 
@@ -158,6 +159,13 @@ async def faq_feedback(request: FaqFeedbackRequest, http_request: Request):
     )
 
     response_messages = _persist_assistant_segments(request.guest_id, assistant_segments)
+    record_faq_feedback_event(
+        guest_id=guest_id,
+        property_id=property_id,
+        helpful=request.helpful,
+        trigger_content=request.trigger_content,
+        faq_titles=request.faq_titles,
+    )
     return ChatMessageResponse(messages=response_messages)
 
 
@@ -202,7 +210,7 @@ async def send_message(request: ChatMessageRequest, http_request: Request):
             }
         ]
     else:
-        assistant_segments, continue_task, task_message = await llm_service.route_message(
+        assistant_segments, continue_task, task_message, telemetry = await llm_service.route_message(
             user_message=request.content,
             conversation_history=conversation_history,
             images=request.images,
@@ -210,6 +218,7 @@ async def send_message(request: ChatMessageRequest, http_request: Request):
             property_id=property_id,
             task_continuation=request.task_continuation,
         )
+        record_routing_event(telemetry)
 
     response_messages: list[Message] = []
     if guest_id:

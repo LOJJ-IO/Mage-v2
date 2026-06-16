@@ -170,6 +170,21 @@ class Settings(BaseSettings):
 
     staff_access_key: str = os.getenv("STAFF_ACCESS_KEY", "mage-staff-dev")
 
+    # Analytics dashboard
+    metrics_tracking_enabled: bool = os.getenv(
+        "METRICS_TRACKING_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    dashboard_access_key: str = os.getenv("DASHBOARD_ACCESS_KEY", "lojj-dash-dev")
+    metrics_labor_cost_per_call: float = float(
+        os.getenv("METRICS_LABOR_COST_PER_CALL", "8.00")
+    )
+    metrics_avg_call_minutes: float = float(
+        os.getenv("METRICS_AVG_CALL_MINUTES", "5")
+    )
+    metrics_happiness_threshold: int = int(
+        os.getenv("METRICS_HAPPINESS_THRESHOLD", "70")
+    )
+
     # Multi-tenant / property scope (single-hotel pilots set PROPERTY_ID)
     property_id: str = os.getenv("PROPERTY_ID", "grand-horizon")
 
