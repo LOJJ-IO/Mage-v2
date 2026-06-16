@@ -40,7 +40,7 @@ export function StaffPageHeader({
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
       {toolbar ? (
-        <div className="flex flex-wrap items-center gap-2 border-t border-neutral-100 px-4 py-3 dark:border-neutral-900 md:px-6">
+        <div className="flex flex-wrap items-center gap-2 overflow-x-auto border-t border-neutral-100 px-4 py-3 dark:border-neutral-900 md:px-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {toolbar}
         </div>
       ) : null}

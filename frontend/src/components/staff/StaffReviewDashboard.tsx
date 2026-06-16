@@ -277,15 +277,15 @@ export function StaffReviewDashboard({ actions, staffKey }: StaffReviewDashboard
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Filter guests…"
-              className="min-w-[180px] rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-[13px] text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-600 dark:focus:border-neutral-600"
+              className="w-full min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-[13px] text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-600 dark:focus:border-neutral-600 sm:min-w-[180px] sm:flex-none"
             />
-            <div className="ml-auto flex overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <div className="flex w-full overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800 sm:ml-auto sm:w-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {SEGMENTS.map((item, index) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => setSegment(item.id)}
-                  className={`border-neutral-200 px-3 py-1.5 text-xs dark:border-neutral-800 ${
+                  className={`shrink-0 border-neutral-200 px-3 py-1.5 text-xs dark:border-neutral-800 ${
                     index < SEGMENTS.length - 1 ? 'border-r' : ''
                   } ${
                     segment === item.id
@@ -334,8 +334,130 @@ export function StaffReviewDashboard({ actions, staffKey }: StaffReviewDashboard
           </div>
         </div>
 
-        {/* Table */}
-        <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+        {/* Mobile card list */}
+        <div className="space-y-3 lg:hidden">
+          {filteredRows.length === 0 ? (
+            <p className="py-8 text-center text-sm text-neutral-500">No guests match this filter.</p>
+          ) : (
+            filteredRows.map((row) => {
+              const reviewReady = isReviewReady(row.mood, row.reviewStatus, row.guestActions);
+              const showResolve =
+                row.mood.kind === 'upset' || hasEscalatedPending(row.guestActions);
+              const showCheckIn =
+                !showResolve &&
+                (row.mood.kind === 'frustrated' ||
+                  (row.checkoutUrgency === 'urgent' && hasPendingRequests(row.guestActions)));
+
+              return (
+                <article
+                  key={row.guestId}
+                  className={`rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900 ${
+                    row.rowAccent === 'urgent'
+                      ? 'border-l-[3px] border-l-red-500 dark:border-l-[#E24B4A]'
+                      : row.rowAccent === 'warn'
+                        ? 'border-l-[3px] border-l-amber-500 dark:border-l-[#EF9F27]'
+                        : ''
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-medium ${guestAvatarClass(row.guestId)}`}
+                    >
+                      {guestInitials(row.guestName)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h3 className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                            {row.guestName}
+                          </h3>
+                          <p className="text-xs text-neutral-500">Room {row.roomNumber}</p>
+                        </div>
+                        <span
+                          className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs ${moodPillClass(row.mood.kind)}`}
+                        >
+                          {moodIcon(row.mood.kind)}
+                          {row.mood.label}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                        <span className={checkoutClass(row.checkoutUrgency)}>{row.checkoutLabel}</span>
+                        <span className="text-neutral-500">
+                          {row.requestCount} {row.requestCount === 1 ? 'request' : 'requests'}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-neutral-600 dark:text-neutral-500">
+                          {platformIcon(row.reviewStatus.platform, 'w-3.5 h-3.5')}
+                          {row.reviewStatus.platform}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                        {row.reviewStatus.posted ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] text-emerald-800 dark:bg-[#0a2e1f] dark:text-[#1D9E75]">
+                            <IconCircleCheck className="w-3 h-3" aria-hidden />
+                            Posted
+                          </span>
+                        ) : row.reviewStatus.sent ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] text-blue-700 dark:bg-[#0f2940] dark:text-[#5ba0d8]">
+                            <IconSend className="w-3 h-3" aria-hidden />
+                            Sent
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-500 dark:bg-neutral-800">
+                            <IconMinus className="w-3 h-3" aria-hidden />
+                            Not sent
+                          </span>
+                        )}
+                        {showResolve && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] text-red-700 dark:bg-[#2e0a0a] dark:text-[#E24B4A]">
+                            <IconAlertTriangle className="w-3 h-3" aria-hidden />
+                            Resolve first
+                          </span>
+                        )}
+                        {showCheckIn && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-800 dark:bg-[#2a1f08] dark:text-[#BA7517]">
+                            <IconClock className="w-3 h-3" aria-hidden />
+                            Check in
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {reviewReady && (
+                          <button
+                            type="button"
+                            onClick={() => updateReviewStatus(row.guestId, { sent: true })}
+                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-600 px-2.5 py-1 text-[11px] text-emerald-700 dark:border-[#1D9E75] dark:text-[#1D9E75]"
+                          >
+                            <IconStar className="w-3 h-3" aria-hidden />
+                            Ask for review
+                          </button>
+                        )}
+                        {row.reviewStatus.sent && !row.reviewStatus.posted && (
+                          <button
+                            type="button"
+                            onClick={() => updateReviewStatus(row.guestId, { posted: true })}
+                            className="rounded-lg border border-neutral-200 px-2.5 py-1 text-[11px] text-neutral-600 dark:border-neutral-800 dark:text-neutral-400"
+                          >
+                            Mark posted
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => openGuestChat(row.guestId)}
+                          className="rounded-lg border border-neutral-200 px-2.5 py-1 text-[11px] text-neutral-600 dark:border-neutral-800 dark:text-neutral-500"
+                        >
+                          View chat
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden min-h-0 flex-1 overflow-auto rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900 lg:block">
           <table className="w-full min-w-[920px] table-fixed border-collapse">
             <colgroup>
               <col className="w-[18%]" />

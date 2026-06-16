@@ -48,6 +48,7 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
     if (guestId) {
       setSelectedGuestId(guestId);
       userPickedGuestRef.current = true;
+      setMobileShowConversation(true);
     }
   }, [searchParams]);
 
@@ -74,6 +75,7 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
   } = useStaffGuestConversation(staffKey, activeGuestId);
   const sendMutation = useSendStaffMessage();
   const isDesktop = useMediaQuery('(min-width: 1024px)');
+  const [mobileShowConversation, setMobileShowConversation] = useState(false);
 
   const messages = conversation?.messages ?? [];
   const showConversationLoading =
@@ -92,7 +94,7 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
   };
 
   const threadList = (
-      <StaffCard className="flex max-h-[260px] shrink-0 flex-col overflow-hidden lg:h-full lg:max-h-none lg:min-h-0">
+      <StaffCard className={`flex flex-col overflow-hidden ${isDesktop ? 'h-full min-h-0' : mobileShowConversation ? 'hidden' : 'min-h-0 flex-1'}`}>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 space-y-1.5">
           {threadsLoading && (
             <p className="px-3 py-4 text-xs text-neutral-500">Loading conversations…</p>
@@ -114,6 +116,7 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
               onClick={() => {
                 userPickedGuestRef.current = true;
                 setSelectedGuestId(thread.guestId);
+                if (!isDesktop) setMobileShowConversation(true);
               }}
               className={`w-full text-left rounded-lg px-3 py-2 ${
                 selectedGuestId === thread.guestId
@@ -149,10 +152,20 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
   );
 
   const conversationPanel = (
-      <StaffCard className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-800 px-4 py-3">
+      <StaffCard className={`flex min-w-0 flex-col overflow-hidden ${isDesktop ? 'min-h-0 flex-1' : mobileShowConversation ? 'min-h-0 flex-1' : 'hidden'}`}>
+        <div className="shrink-0 border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
           {activeGuestId ? (
             <div className="flex items-center gap-2">
+              {!isDesktop && (
+                <button
+                  type="button"
+                  onClick={() => setMobileShowConversation(false)}
+                  className="rounded-lg border border-neutral-200 px-2 py-1 text-xs text-neutral-600 dark:border-neutral-700 dark:text-neutral-400"
+                  aria-label="Back to conversations"
+                >
+                  ← Back
+                </button>
+              )}
               <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
                 {selectedThread?.guestName ?? activeGuestId}
               </h2>

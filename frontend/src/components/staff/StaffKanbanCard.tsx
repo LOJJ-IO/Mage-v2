@@ -112,9 +112,14 @@ function EscalationTitleIcon({ type }: { type: StaffActionEscalationType }) {
   return null;
 }
 
+function formatShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
 interface StaffKanbanCardProps {
   action: StaffAction;
   onSelect: (id: string) => void;
+  variant?: 'default' | 'mobile';
   requestIndexLabel?: string;
   requestIndex?: number;
   requestTotal?: number;
@@ -125,6 +130,7 @@ interface StaffKanbanCardProps {
 export function StaffKanbanCard({
   action,
   onSelect,
+  variant = 'default',
   requestIndexLabel,
   requestIndex,
   requestTotal,
@@ -159,6 +165,71 @@ export function StaffKanbanCard({
     if (didDragRef.current) return;
     onSelect(action.id);
   };
+
+  if (variant === 'mobile') {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={handleClick}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onSelect(action.id);
+          }
+        }}
+        className="flex w-full cursor-pointer flex-col rounded-2xl border border-neutral-100 bg-white p-4 text-left shadow-[0_2px_12px_rgba(0,0,0,0.06)] transition-shadow active:shadow-md dark:border-neutral-700 dark:bg-neutral-900 dark:shadow-[0_2px_12px_rgba(0,0,0,0.25)]"
+      >
+        <div className="flex items-start gap-2">
+          <h3 className="flex-1 text-[15px] font-semibold leading-snug text-neutral-900 line-clamp-2 dark:text-white">
+            {action.summary}
+          </h3>
+          {showEscalationIcon && <EscalationTitleIcon type={escalation} />}
+        </div>
+
+        <div className="mt-2 flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+          <IconStatusClock className="h-3.5 w-3.5 shrink-0" />
+          <span>{formatShortDate(action.createdAt)}</span>
+          {action.roomNumber && (
+            <>
+              <span className="text-neutral-300 dark:text-neutral-600">·</span>
+              <span>Room {action.roomNumber}</span>
+            </>
+          )}
+        </div>
+
+        <div className="mt-4 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-neutral-200 text-[10px] font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+              {guestInitials(action)}
+            </span>
+            {messageCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-xs text-neutral-600 dark:text-neutral-300">
+                <IconMessage className="h-3.5 w-3.5" />
+                {messageCount}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {isDuplicate && (
+              <IconFrame tone="violet">
+                <IconRepeat className="w-3.5 h-3.5" />
+              </IconFrame>
+            )}
+            <span className="inline-flex items-center gap-1 text-xs text-neutral-500">
+              <IconChecklist className="h-3.5 w-3.5" />
+              {requestIndexLabel ?? '—'}
+            </span>
+            <span
+              className={`inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full ${actionTypeBadgeClass(action.actionType)}`}
+            >
+              {actionTypeLabel(action.actionType)}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

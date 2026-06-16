@@ -14,6 +14,12 @@ from app.knowledge.property_helpers import ensure_demo_property
 from app.integrations.pms.registry import get_pms_provider
 from app.models.schemas import GuestProfile
 from app.services.database import get_database
+from app.services.datetime_helpers import (
+    is_within_stay_window,
+    stay_has_ended,
+    stay_has_not_started,
+    utc_naive,
+)
 from app.services.guest_session import create_session_token
 
 logger = logging.getLogger(__name__)
@@ -131,8 +137,8 @@ def _reservation_to_guest(reservation, existing_id: Optional[str] = None) -> Gue
         id=guest_id,
         name=reservation.guest_name,
         room_number=reservation.room_number,
-        check_in=reservation.check_in,
-        check_out=reservation.check_out,
+        check_in=utc_naive(reservation.check_in),
+        check_out=utc_naive(reservation.check_out),
         booking_id=reservation.booking_id,
         email=reservation.email,
         phone=reservation.phone,
@@ -167,7 +173,7 @@ async def sign_in_guest_by_email(
     active = [
         r
         for r in reservations
-        if now >= r.check_in - grace and now <= r.check_out + grace
+        if is_within_stay_window(now, r.check_in, r.check_out, grace=grace)
     ]
     if not active:
         raise ValueError("No active stay found for this email")
@@ -219,9 +225,9 @@ async def verify_magic_link(token: str) -> tuple[GuestProfile, str, int]:
 
     now = datetime.utcnow()
     grace = timedelta(hours=settings.stay_grace_hours)
-    if now < reservation.check_in - grace:
+    if stay_has_not_started(now, reservation.check_in, grace=grace):
         raise ValueError("Your stay has not started yet")
-    if now > reservation.check_out + grace:
+    if stay_has_ended(now, reservation.check_out, grace=grace):
         raise ValueError("Your stay has ended")
 
     existing = db.get_guest_by_booking(booking_id, property_id=property_id)

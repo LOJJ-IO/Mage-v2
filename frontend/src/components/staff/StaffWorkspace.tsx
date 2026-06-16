@@ -12,6 +12,7 @@ import { StaffScheduleView } from './StaffScheduleView';
 import { StaffGuestInbox } from './StaffGuestInbox';
 import { StaffReviewDashboard } from './StaffReviewDashboard';
 import { StaffHelpDesk } from './StaffHelpDesk';
+import { StaffMobileBottomNav } from './StaffMobileBottomNav';
 import {
   applyTaskFilters,
   applyTaskSort,
@@ -193,20 +194,21 @@ export function StaffWorkspace({
       />
 
       <StaffContentShell>
-        <div className="flex lg:hidden items-center gap-3 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-4 py-3 shrink-0">
+        <div className="flex shrink-0 items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-950 lg:hidden">
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}
-            className="rounded-lg border border-neutral-200 dark:border-neutral-700 p-2 text-neutral-700 dark:text-neutral-300"
+            className="rounded-lg border border-neutral-200 p-2 text-neutral-700 dark:border-neutral-700 dark:text-neutral-300"
             aria-label="Open menu"
           >
-            <IconList className="w-5 h-5" />
+            <IconList className="h-5 w-5" />
           </button>
           <span className="text-sm font-semibold text-neutral-900 dark:text-white">
             {staffNavLabel(activeNav)}
           </span>
         </div>
 
+        <div className="flex min-h-0 flex-1 flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
         {(activeNav === 'tasks' || activeNav === 'assigned') && (
           <StaffKanbanBoard
             allActions={actions}
@@ -254,7 +256,15 @@ export function StaffWorkspace({
               description="This workspace section is reserved for a future staff module."
             />
           )}
+        </div>
       </StaffContentShell>
+
+      <StaffMobileBottomNav
+        activeNav={activeNav}
+        guestUnreadCount={guestUnreadCount}
+        onNavChange={setActiveNav}
+        onOpenMenu={() => setMobileNavOpen(true)}
+      />
     </StaffPageShell>
   );
 }
