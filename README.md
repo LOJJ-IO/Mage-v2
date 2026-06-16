@@ -145,7 +145,7 @@ The application utilizes an Uber-inspired, high-contrast design system optimized
 * **Primary:** Black `#000000` / White `#FFFFFF`
 * **Accent:** Blue `#276EF1`
 * **Status:** Green `#05944F` (Success), Red `#E11900` (Error), Yellow `#FFC043` (Warning)
-* **Typography:** Clash Display (200-700 weights)
+* **Typography:** Booton (body/UI), Season Mix (headings & display numbers)
 * **Geometry:** 8px base border radius (sm), 24px extreme radius (uber-xl)
 
 

@@ -39,6 +39,16 @@ export interface TrackingConfig {
   active: boolean;
 }
 
+export interface PhraseItem {
+  text: string;
+  count: number;
+}
+
+export interface ChartSplitItem {
+  name: string;
+  value: number;
+}
+
 export interface MarketingSummary {
   period_days: number;
   tracking: TrackingConfig;
@@ -66,12 +76,19 @@ export interface MarketingSummary {
     summary?: string;
     created_at?: string;
   }>;
+  phrase_cloud: PhraseItem[];
+  chart_splits: {
+    handled_vs_escalated: ChartSplitItem[];
+    satisfaction_split: ChartSplitItem[];
+    ability_mix: ChartSplitItem[];
+  };
 }
 
 export interface DevMetricsResponse {
   period_days: number;
   tracking: TrackingConfig;
   metrics: Record<string, unknown>;
+  phrase_cloud: PhraseItem[];
 }
 
 export interface TimeseriesResponse {

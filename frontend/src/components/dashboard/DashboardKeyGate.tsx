@@ -52,7 +52,7 @@ export function DashboardKeyGate({ children }: { children: React.ReactNode }) {
         className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-lg"
       >
         <p className="text-sm font-medium uppercase tracking-wider text-emerald-700">Mage Analytics</p>
-        <h1 className="mt-2 font-heading text-3xl font-semibold text-slate-900">Dashboard access</h1>
+        <p className="font-heading mt-2 text-3xl font-semibold text-slate-900">Dashboard access</p>
         <p className="mt-2 text-sm text-slate-500">Enter your dashboard key to view metrics.</p>
         <Input
           className="mt-6"

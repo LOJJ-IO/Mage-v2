@@ -12,9 +12,9 @@ const chartConfig = {
 
 export function VolumeAreaChart({ data }: { data: TimeseriesResponse['series'] }) {
   return (
-    <Card>
+    <Card className="transition-shadow hover:shadow-md">
       <CardHeader>
-        <CardTitle>Conversation volume</CardTitle>
+        <CardTitle className="font-heading text-base">Conversation volume</CardTitle>
         <CardDescription>Messages handled vs staff escalations over time</CardDescription>
       </CardHeader>
       <CardContent>

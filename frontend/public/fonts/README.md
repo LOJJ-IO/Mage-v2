@@ -1,17 +1,21 @@
 # Custom fonts
 
-## Clash Display
+## Booton (body / UI)
 
-Loaded via Fontshare in `src/styles/globals.css` (no files in this folder).
+Place licensed webfont files in `booton/` (from [Displaay Booton](https://displaay.net/typeface/booton)):
 
-## Season Mix (headings)
+- `Booton-Regular.woff2` or `Booton-Regular.otf`
+- `Booton-Medium.woff2` or `Booton-Medium.otf` (optional)
+- `Booton-Bold.woff2` or `Booton-Bold.otf` (optional)
+
+`@font-face` rules live in `src/styles/globals.css`. Until files are added, the stack falls back to `system-ui`.
+
+## Season Mix (headings & display numbers)
 
 Files live in `season-mix/`. Currently using the trial Regular cut:
 
 - `SeasonMix-TRIAL-Regular.otf`
 
-Headings (`h1`–`h6`, `.font-heading`, `.staff-ui` titles) use **Season Mix**. Body copy uses **Clash Display**.
-
-When you add licensed webfont files (e.g. Medium/SemiBold `.woff2`), add matching `@font-face` rules in `src/styles/globals.css`.
+Headings (`h1`–`h6`, `.font-heading`, `.font-display`) and dashboard KPI numbers use **Season Mix**. Body copy uses **Booton**.
 
 See `season-mix/Befonts-License.txt` for trial/license terms.

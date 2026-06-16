@@ -12,8 +12,10 @@ from app.services.database import get_database
 from app.services.metrics_aggregations import (
     aggregate_dev,
     aggregate_marketing,
+    aggregate_phrases,
     build_timeseries,
     filter_events_by_range,
+    marketing_chart_splits,
     recent_wins,
 )
 from app.services.metrics_service import get_tracking_config
@@ -97,6 +99,10 @@ async def marketing_summary(
         "tracking": get_tracking_config(),
         "summary": summary,
         "recent_wins": recent_wins(events, limit=12),
+        "phrase_cloud": aggregate_phrases(events),
+        "chart_splits": marketing_chart_splits(
+            events, happiness_threshold=settings.metrics_happiness_threshold
+        ),
     }
 
 
@@ -110,6 +116,7 @@ async def dev_metrics(
         "period_days": days,
         "tracking": get_tracking_config(),
         "metrics": aggregate_dev(events),
+        "phrase_cloud": aggregate_phrases(events),
     }
 
 
