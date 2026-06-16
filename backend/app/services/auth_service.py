@@ -174,13 +174,22 @@ async def sign_in_guest_by_email(
 
     reservation = active[0]
     db = get_database()
+    ensure_demo_property(db, pid)
     existing = db.get_guest_by_booking(reservation.booking_id, property_id=pid)
     guest = _reservation_to_guest(
         reservation,
         existing_id=existing.id if existing else None,
     )
-    guest = db.upsert_guest(guest)
-    session_version = db.register_guest_session(guest.id, pid)
+    try:
+        guest = db.upsert_guest(guest)
+        session_version = db.register_guest_session(guest.id, pid)
+    except Exception as exc:
+        logger.exception("Guest sign-in database write failed for %s", email_l)
+        raise ValueError(
+            "Database not ready for guest sign-in. Run the Supabase migrations "
+            "(docs/supabase_core_migration.sql, then properties, then staff_actions) "
+            "in the Supabase SQL editor, then try again."
+        ) from exc
     cookie_value = create_session_token(guest.id, pid, session_version)
     return guest, cookie_value, session_version
 
