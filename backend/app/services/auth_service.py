@@ -20,6 +20,7 @@ from app.services.datetime_helpers import (
     stay_has_not_started,
     utc_naive,
 )
+from app.services.email_service import send_email
 from app.services.guest_session import create_session_token
 
 logger = logging.getLogger(__name__)
@@ -65,29 +66,13 @@ async def send_magic_link_email(
     *,
     property_name: str,
 ) -> None:
-    settings = get_settings()
     subject = f"Your link to chat with {property_name}"
     body = (
         f"Use this link to access the guest assistant for {property_name}:\n\n"
         f"{verify_url}\n\n"
         "This link expires soon — bookmark it to sign back in during your stay."
     )
-    if settings.debug:
-        logger.info("Magic link for %s: %s", email, verify_url)
-        return
-    provider = (settings.email_provider or "").strip().lower()
-    if not provider:
-        logger.warning("EMAIL_PROVIDER not set; magic link logged only (debug off)")
-        logger.info("Magic link for %s: %s", email, verify_url)
-        return
-    # Placeholder for Resend/SendGrid — log until credentials wired
-    logger.info(
-        "Would send email via %s to %s: subject=%r body=%r",
-        provider,
-        email,
-        subject,
-        body[:200],
-    )
+    await send_email(email, subject, body)
 
 
 async def request_magic_link(
@@ -237,6 +222,9 @@ async def verify_magic_link(token: str) -> tuple[GuestProfile, str, int]:
     )
     guest = db.upsert_guest(guest)
 
+    # Consume the token so it cannot be replayed.
+    db.mark_auth_token_used(token_hash)
+
     session_version = db.register_guest_session(guest.id, property_id)
     cookie_value = create_session_token(guest.id, property_id, session_version)
     return guest, cookie_value, session_version
@@ -250,3 +238,213 @@ async def revoke_sessions_for_booking(property_id: str, booking_id: str) -> int:
     if not guest:
         return 0
     return db.revoke_guest_sessions(guest.id, property_id)
+
+
+# ---------------------------------------------------------------------------
+# Self-serve guest onboarding (Agent 2)
+# ---------------------------------------------------------------------------
+
+_VERIFY_TOKEN_TTL_HOURS = 24
+
+
+def _build_email_verify_url(
+    token: str,
+    *,
+    request_host: str | None = None,
+    forwarded_host: str | None = None,
+    forwarded_proto: str | None = None,
+) -> str:
+    base = resolve_frontend_url(
+        request_host=request_host,
+        forwarded_host=forwarded_host,
+        forwarded_proto=forwarded_proto,
+    ).rstrip("/")
+    return f"{base}/onboard/guest/verify?{urlencode({'t': token})}"
+
+
+async def register_guest(
+    name: str,
+    email: str,
+    booking_id: str,
+    check_in: datetime,
+    check_out: datetime,
+    *,
+    room_number: str = "",
+    property_id: Optional[str] = None,
+    request_host: str | None = None,
+    forwarded_host: str | None = None,
+    forwarded_proto: str | None = None,
+) -> dict:
+    """
+    Self-serve guest registration.
+
+    Creates (or upserts) the guest record immediately and sends a magic-link
+    email in a single step — no intermediate email-verification hop.
+
+    Returns {"magic_link_sent": True, "email": email} always.
+    In DEBUG mode also returns {"verify_url": <magic-link-url>}.
+    """
+    settings = get_settings()
+    pid = (property_id or settings.property_id).strip()
+
+    name = name.strip()
+    email = email.strip().lower()
+    booking_id = booking_id.strip()
+
+    if not name:
+        raise ValueError("Name is required")
+    if not email:
+        raise ValueError("Email is required")
+    if not booking_id:
+        raise ValueError("Booking ID is required")
+    if not check_in or not check_out:
+        raise ValueError("Check-in and check-out dates are required")
+    if check_out <= check_in:
+        raise ValueError("Check-out must be after check-in")
+
+    db = get_database()
+    prop = ensure_demo_property(db, pid)
+    if not prop:
+        raise ValueError(f"Unknown property: {pid}")
+
+    # Upsert the guest row — preserve existing guest_id if booking already known.
+    existing = db.get_guest_by_booking(booking_id, property_id=pid)
+    guest_id = existing.id if existing else f"guest-{uuid.uuid4().hex[:8]}"
+
+    guest = GuestProfile(
+        id=guest_id,
+        name=name,
+        room_number=room_number or "",
+        check_in=utc_naive(check_in),
+        check_out=utc_naive(check_out),
+        booking_id=booking_id,
+        email=email,
+        property_id=pid,
+    )
+    db.upsert_guest(guest)
+
+    # Issue a magic link directly — one email, one click to sign in.
+    raw_ml, _expires = create_magic_link_token(pid, booking_id)
+    verify_url = build_verify_url(
+        raw_ml,
+        request_host=request_host,
+        forwarded_host=forwarded_host,
+        forwarded_proto=forwarded_proto,
+    )
+    await send_magic_link_email(email, verify_url, property_name=prop.name)
+
+    result: dict = {"magic_link_sent": True, "email": email}
+    if settings.debug:
+        result["verify_url"] = verify_url
+    return result
+
+
+async def verify_guest_email(
+    token: str,
+    *,
+    request_host: str | None = None,
+    forwarded_host: str | None = None,
+    forwarded_proto: str | None = None,
+) -> dict:
+    """
+    Step 2 of self-serve guest onboarding.
+
+    Consumes the email-verification token (one-time use), creates/upserts the
+    guest record, and triggers a magic-link email so the guest can sign in.
+
+    Returns {"verified": True, "magic_link_sent": True}.
+    In DEBUG mode also returns {"verify_url": <magic-link-url>}.
+    """
+    settings = get_settings()
+    db = get_database()
+
+    token_hash = _hash_token(token)
+    row = db.consume_email_verification(token_hash)
+    if not row:
+        raise ValueError("Invalid or expired verification link. Please register again.")
+
+    guest_data: dict = row["guest_data"]
+    pid: str = row["property_id"]
+    email: str = row["email"]
+    booking_id: str = row["booking_id"]
+
+    prop = ensure_demo_property(db, pid)
+    if not prop:
+        raise ValueError(f"Unknown property: {pid}")
+
+    # Upsert the guest row — preserve existing guest_id if booking already known.
+    existing = db.get_guest_by_booking(booking_id, property_id=pid)
+    guest_id = existing.id if existing else f"guest-{uuid.uuid4().hex[:8]}"
+
+    check_in_dt = datetime.fromisoformat(guest_data["check_in"])
+    check_out_dt = datetime.fromisoformat(guest_data["check_out"])
+
+    guest = GuestProfile(
+        id=guest_id,
+        name=guest_data["name"],
+        room_number=guest_data.get("room_number") or "",
+        check_in=utc_naive(check_in_dt),
+        check_out=utc_naive(check_out_dt),
+        booking_id=booking_id,
+        email=email,
+        property_id=pid,
+    )
+    db.upsert_guest(guest)
+
+    # Now issue a magic link for the verified guest.
+    raw_ml, _expires = create_magic_link_token(pid, booking_id)
+    verify_url = build_verify_url(
+        raw_ml,
+        request_host=request_host,
+        forwarded_host=forwarded_host,
+        forwarded_proto=forwarded_proto,
+    )
+    await send_magic_link_email(email, verify_url, property_name=prop.name)
+
+    result: dict = {"verified": True, "magic_link_sent": True}
+    if settings.debug:
+        result["verify_url"] = verify_url
+    return result
+
+
+async def sign_in_guest_by_name_and_booking(
+    name: str,
+    booking_id: str,
+    property_id: Optional[str] = None,
+) -> tuple[GuestProfile, str, int]:
+    """
+    Returning-guest sign-in: name + booking_id → session cookie.
+
+    Name matching is case-insensitive with whitespace trimming.
+    Returns (guest, session_cookie_value, session_version).
+    Preserves existing guest_id so conversation history is intact.
+    """
+    settings = get_settings()
+    pid = (property_id or settings.property_id).strip()
+
+    name = name.strip()
+    booking_id = booking_id.strip()
+
+    if not name:
+        raise ValueError("Name is required")
+    if not booking_id:
+        raise ValueError("Booking ID is required")
+
+    db = get_database()
+    ensure_demo_property(db, pid)
+
+    guest = db.get_guest_by_name_and_booking(name, booking_id, property_id=pid)
+    if not guest:
+        raise ValueError("No stay found matching that name and booking ID.")
+
+    try:
+        session_version = db.register_guest_session(guest.id, pid)
+    except Exception as exc:
+        logger.exception("Session registration failed for booking %s", booking_id)
+        raise ValueError(
+            "Database not ready for guest sign-in. Run the Supabase migrations "
+            "and try again."
+        ) from exc
+
+    cookie_value = create_session_token(guest.id, pid, session_version)
+    return guest, cookie_value, session_version

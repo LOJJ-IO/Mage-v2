@@ -17,6 +17,22 @@ import {
 import { mapApiMessage } from '@/lib/mapMessage';
 import { GUEST_CHAT_ERROR, toGuestFriendlyError } from '@/lib/guestErrors';
 
+export interface TaskAssistMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string;
+}
+
+export interface TaskAssistThread {
+  action_id: string;
+  messages: TaskAssistMessage[];
+}
+
+export interface TaskAssistResponse {
+  reply: string;
+  messages: TaskAssistMessage[];
+}
+
 /** Raw POST /api/chat/message payload (snake_case from FastAPI). */
 type ChatMessageApiPayload = {
   messages: Record<string, unknown>[];
@@ -419,6 +435,87 @@ class ApiClient {
     return { success: true, data: mapGuestProfile(res.data) };
   }
 
+  async registerGuest(data: {
+    name: string;
+    email: string;
+    bookingId: string;
+    roomNumber?: string;
+    checkIn: string;
+    checkOut: string;
+    propertyId?: string;
+  }): Promise<ApiResponse<{ verificationSent: boolean; email: string; verifyUrl?: string }>> {
+    const res = await this.request<{
+      verification_sent: boolean;
+      email: string;
+      verify_url?: string;
+    }>('/api/auth/guest/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: data.name.trim(),
+        email: data.email.trim(),
+        booking_id: data.bookingId.trim(),
+        room_number: data.roomNumber ?? null,
+        check_in: data.checkIn,
+        check_out: data.checkOut,
+        property_id: data.propertyId ?? null,
+      }),
+    });
+    if (!res.success || !res.data) {
+      return { success: false, error: res.error };
+    }
+    return {
+      success: true,
+      data: {
+        verificationSent: res.data.verification_sent,
+        email: res.data.email,
+        verifyUrl: res.data.verify_url,
+      },
+    };
+  }
+
+  async verifyGuestEmail(
+    token: string
+  ): Promise<ApiResponse<{ verified: boolean; magicLinkSent: boolean; verifyUrl?: string }>> {
+    const res = await this.request<{
+      verified: boolean;
+      magic_link_sent: boolean;
+      verify_url?: string;
+    }>('/api/auth/guest/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+    if (!res.success || !res.data) {
+      return { success: false, error: res.error };
+    }
+    return {
+      success: true,
+      data: {
+        verified: res.data.verified,
+        magicLinkSent: res.data.magic_link_sent,
+        verifyUrl: res.data.verify_url,
+      },
+    };
+  }
+
+  async signInGuestByBooking(
+    name: string,
+    bookingId: string,
+    propertyId?: string
+  ): Promise<ApiResponse<GuestProfile>> {
+    const res = await this.request<Record<string, unknown>>('/api/auth/guest/sign-in', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: name.trim(),
+        booking_id: bookingId.trim(),
+        property_id: propertyId ?? null,
+      }),
+    });
+    if (!res.success || !res.data) {
+      return { success: false, error: res.error };
+    }
+    return { success: true, data: mapGuestProfile(res.data) };
+  }
+
   // Agent availability endpoints
   async checkAgentAvailability(): Promise<ApiResponse<{
     humanAgentAvailable: boolean;
@@ -433,6 +530,17 @@ class ApiClient {
   // Health check
   async healthCheck(): Promise<ApiResponse<{ status: string }>> {
     return this.request<{ status: string }>('/api/health');
+  }
+
+  // Staff session
+  async getStaffSession(staffKey: string): Promise<ApiResponse<{
+    role: string;
+    display_name: string;
+    staff_code: string;
+    allowed_nav: string[];
+    allowed_action_types: string[];
+  }>> {
+    return this.request('/api/staff/session', {}, staffKey);
   }
 
   // Staff inbox
@@ -693,6 +801,185 @@ class ApiClient {
       return { success: false, error: result.error ?? 'Could not load calendar feed.' };
     }
     return { success: true, data: result.data };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Staff onboarding (Agent 3)
+  // ---------------------------------------------------------------------------
+
+  /** Submit a staff access request. Returns staff_code + pending status. */
+  async requestStaffAccess(
+    displayName: string,
+    requestedRole: string,
+    propertyId?: string
+  ): Promise<ApiResponse<{ staffCode: string; status: string }>> {
+    const body: Record<string, string> = {
+      display_name: displayName,
+      requested_role: requestedRole,
+    };
+    if (propertyId) body.property_id = propertyId;
+
+    const result = await this.request<{ staff_code: string; status: string }>(
+      '/api/staff/onboarding/request',
+      { method: 'POST', body: JSON.stringify(body) }
+    );
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    return {
+      success: true,
+      data: { staffCode: result.data.staff_code, status: result.data.status },
+    };
+  }
+
+  /**
+   * Exchange a plain-text access key for identity.
+   * Store the raw key in sessionStorage; do NOT pass it back to this method on
+   * subsequent calls — use it directly in X-Staff-Key headers.
+   *
+   * Response shape is the canonical Agent 4 contract:
+   *   { staff_member_id, staff_code, display_name, approved_role, property_id }
+   */
+  async staffSignIn(accessKey: string): Promise<
+    ApiResponse<{
+      staffMemberId: string;
+      staffCode: string;
+      displayName: string;
+      approvedRole: string;
+      propertyId: string;
+    }>
+  > {
+    const result = await this.request<{
+      staff_member_id: string;
+      staff_code: string;
+      display_name: string;
+      approved_role: string;
+      property_id: string;
+    }>('/api/staff/onboarding/sign-in', {
+      method: 'POST',
+      body: JSON.stringify({ access_key: accessKey }),
+    });
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    return {
+      success: true,
+      data: {
+        staffMemberId: result.data.staff_member_id,
+        staffCode: result.data.staff_code,
+        displayName: result.data.display_name,
+        approvedRole: result.data.approved_role,
+        propertyId: result.data.property_id,
+      },
+    };
+  }
+
+  /** List pending staff requests. Requires a manager-role access key. */
+  async listPendingStaff(
+    managerKey: string
+  ): Promise<ApiResponse<Record<string, unknown>[]>> {
+    const result = await this.request<Record<string, unknown>[]>(
+      '/api/admin/staff/pending',
+      {},
+      managerKey
+    );
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    return { success: true, data: result.data };
+  }
+
+  /**
+   * Approve a pending staff member and receive a one-time access key.
+   * The key is shown exactly once; callers must display and hand it off securely.
+   */
+  async approveStaff(
+    memberId: string,
+    managerKey: string,
+    approvedRole?: string
+  ): Promise<
+    ApiResponse<{
+      accessKey: string;
+      staffCode: string;
+      displayName: string;
+      approvedRole: string;
+    }>
+  > {
+    const body: Record<string, string> = {};
+    if (approvedRole) body.approved_role = approvedRole;
+
+    const result = await this.request<{
+      access_key: string;
+      staff_code: string;
+      display_name: string;
+      approved_role: string;
+    }>(
+      `/api/admin/staff/${encodeURIComponent(memberId)}/approve`,
+      { method: 'POST', body: JSON.stringify(body) },
+      managerKey
+    );
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    return {
+      success: true,
+      data: {
+        accessKey: result.data.access_key,
+        staffCode: result.data.staff_code,
+        displayName: result.data.display_name,
+        approvedRole: result.data.approved_role,
+      },
+    };
+  }
+
+  /** Reject a pending staff member. */
+  async rejectStaff(
+    memberId: string,
+    managerKey: string
+  ): Promise<ApiResponse<{ status: string; staffCode: string }>> {
+    const result = await this.request<{ status: string; staff_code: string }>(
+      `/api/admin/staff/${encodeURIComponent(memberId)}/reject`,
+      { method: 'POST', body: JSON.stringify({}) },
+      managerKey
+    );
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    return {
+      success: true,
+      data: { status: result.data.status, staffCode: result.data.staff_code },
+    };
+  }
+
+  async getTaskAssistThread(
+    staffKey: string,
+    actionId: string
+  ): Promise<ApiResponse<TaskAssistThread>> {
+    return this.request<TaskAssistThread>(
+      `/api/staff/task-assist/${encodeURIComponent(actionId)}`,
+      { method: 'GET' },
+      staffKey
+    );
+  }
+
+  async sendTaskAssistMessage(
+    staffKey: string,
+    actionId: string,
+    message: string,
+    staffMemberId?: string
+  ): Promise<ApiResponse<TaskAssistResponse>> {
+    return this.request<TaskAssistResponse>(
+      '/api/staff/task-assist',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          action_id: actionId,
+          message,
+          ...(staffMemberId ? { staff_member_id: staffMemberId } : {}),
+        }),
+      },
+      staffKey
+    );
   }
 }
 

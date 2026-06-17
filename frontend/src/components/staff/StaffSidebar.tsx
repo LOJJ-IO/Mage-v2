@@ -24,6 +24,7 @@ interface StaffSidebarProps {
   activeNav: StaffNavId;
   pendingCount: number;
   guestUnreadCount?: number;
+  allowedNav?: StaffNavId[];
   onNavChange: (id: StaffNavId) => void;
   onLogout: () => void;
   mobileOpen?: boolean;
@@ -56,6 +57,7 @@ export function StaffSidebar({
   activeNav,
   pendingCount,
   guestUnreadCount = 0,
+  allowedNav,
   onNavChange,
   onLogout,
   mobileOpen,
@@ -65,6 +67,9 @@ export function StaffSidebar({
   const theme = useMageStore((s) => s.theme);
   const setTheme = useMageStore((s) => s.setTheme);
   const isDark = theme === 'dark';
+  const visibleNavItems = allowedNav
+    ? STAFF_NAV_ITEMS.filter((item) => allowedNav.includes(item.id))
+    : STAFF_NAV_ITEMS;
 
   const sidebarContent = (
     <div className="flex h-full flex-col bg-white dark:bg-neutral-950 border-r border-neutral-200 dark:border-neutral-800">
@@ -121,7 +126,7 @@ export function StaffSidebar({
           <span>Dashboard</span>
         </button>
 
-        {STAFF_NAV_ITEMS.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = activeNav === item.id;
           const className = `flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
             isActive

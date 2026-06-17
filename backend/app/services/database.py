@@ -11,6 +11,8 @@ from app.models.schemas import (
     StaffActionEscalationType,
     ActionType,
     Property,
+    StaffMember,
+    EmailVerification,
 )
 from app.services.property_db_mock import PropertyStoreMixin
 from app.services.property_db_supabase import PropertyStoreSupabase
@@ -308,6 +310,107 @@ class DatabaseProtocol(Protocol):
         property_id: Optional[str] = None,
     ) -> List[dict]:
         """List metrics events newest first."""
+        ...
+
+    # --- Staff members ---
+
+    def create_staff_request(
+        self, property_id: str, display_name: str, requested_role: str,
+        email: Optional[str] = None,
+    ) -> StaffMember:
+        """Register a new staff access request; returns record with generated staff_code."""
+        ...
+
+    def get_staff_member_by_id(self, id: str) -> Optional[StaffMember]:
+        """Get staff member by UUID."""
+        ...
+
+    def get_staff_member_by_code(
+        self, property_id: str, staff_code: str
+    ) -> Optional[StaffMember]:
+        """Get staff member by property-scoped staff_code."""
+        ...
+
+    def get_staff_member_by_access_key_hash(self, hash: str) -> Optional[StaffMember]:
+        """Get approved staff member by SHA-256 hex of their access key."""
+        ...
+
+    def list_pending_staff(self, property_id: str) -> List[StaffMember]:
+        """List staff members with status=pending for a property."""
+        ...
+
+    def list_staff_members(
+        self, property_id: str, status: Optional[str] = None
+    ) -> List[StaffMember]:
+        """List staff members for a property, optionally filtered by status."""
+        ...
+
+    def approve_staff_member(
+        self,
+        id: str,
+        approved_role: str,
+        access_key_hash: str,
+        approved_by: str,
+    ) -> Optional[StaffMember]:
+        """Approve a pending staff member; sets role, key hash, and approved_at."""
+        ...
+
+    def reject_staff_member(
+        self, id: str, approved_by: Optional[str] = None
+    ) -> Optional[StaffMember]:
+        """Reject a pending staff member."""
+        ...
+
+    # --- Email verifications ---
+
+    def create_email_verification(
+        self,
+        email: str,
+        property_id: str,
+        booking_id: str,
+        token_hash: str,
+        expires_at: datetime,
+        guest_data: dict = {},
+    ) -> None:
+        """Create a guest email verification token record."""
+        ...
+
+    def consume_email_verification(
+        self, token_hash: str
+    ) -> Optional[dict]:
+        """Mark token verified; returns {guest_data, email, property_id, booking_id} or None if expired/already used."""
+        ...
+
+    # --- Task-assist threads ---
+
+    def get_task_assist_thread(
+        self, action_id: str, staff_member_id: Optional[str]
+    ) -> Optional[dict]:
+        """Get help-desk chat thread for a task, optionally scoped to a staff member."""
+        ...
+
+    def upsert_task_assist_thread(
+        self,
+        action_id: str,
+        staff_member_id: Optional[str],
+        property_id: str,
+        messages_json: list,
+    ) -> dict:
+        """Create or replace the messages list for a task-assist thread."""
+        ...
+
+    # --- Guest extension ---
+
+    def get_guest_by_name_and_booking(
+        self, name: str, booking_id: str, property_id: Optional[str] = None
+    ) -> Optional[GuestProfile]:
+        """Get guest by case-insensitive trimmed name + booking_id + property_id."""
+        ...
+
+    # --- Auth token extension ---
+
+    def mark_auth_token_used(self, token_hash: str) -> None:
+        """Mark a magic-link token as used so it cannot be replayed."""
         ...
 
 
@@ -786,6 +889,103 @@ class MockDatabase(PropertyStoreMixin):
             if len(out) >= limit:
                 break
         return out
+
+    # --- Staff members (mock) ---
+
+    def _next_staff_code(self) -> str:
+        import random
+        import string as _string
+        chars = _string.ascii_uppercase + _string.digits
+        for _ in range(100):
+            code = "STF-" + "".join(random.choices(chars, k=4))
+            if not any(m.staff_code == code for m in self.staff_members.values()):
+                return code
+        return f"STF-{uuid.uuid4().hex[:4].upper()}"
+
+    def create_staff_request(
+        self, property_id: str, display_name: str, requested_role: str,
+        email: Optional[str] = None,
+    ) -> StaffMember:
+        from app.models.schemas import StaffRole, StaffMemberStatus
+        member = StaffMember(
+            id=str(uuid.uuid4()),
+            property_id=property_id,
+            staff_code=self._next_staff_code(),
+            display_name=display_name,
+            email=email,
+            requested_role=StaffRole(requested_role),
+            status=StaffMemberStatus.PENDING,
+            created_at=datetime.utcnow(),
+        )
+        self.staff_members[member.id] = member
+        return member
+
+    def get_staff_member_by_id(self, id: str) -> Optional[StaffMember]:
+        return self.staff_members.get(id)
+
+    def get_staff_member_by_code(
+        self, property_id: str, staff_code: str
+    ) -> Optional[StaffMember]:
+        for m in self.staff_members.values():
+            if m.property_id == property_id and m.staff_code == staff_code:
+                return m
+        return None
+
+    def get_staff_member_by_access_key_hash(self, hash: str) -> Optional[StaffMember]:
+        for m in self.staff_members.values():
+            if m.access_key_hash == hash:
+                return m
+        return None
+
+    def list_pending_staff(self, property_id: str) -> List[StaffMember]:
+        return [
+            m for m in self.staff_members.values()
+            if m.property_id == property_id and m.status == "pending"
+        ]
+
+    def list_staff_members(
+        self, property_id: str, status: Optional[str] = None
+    ) -> List[StaffMember]:
+        return [
+            m for m in self.staff_members.values()
+            if m.property_id == property_id
+            and (status is None or m.status == status)
+        ]
+
+    def approve_staff_member(
+        self,
+        id: str,
+        approved_role: str,
+        access_key_hash: str,
+        approved_by: str,
+    ) -> Optional[StaffMember]:
+        from app.models.schemas import StaffRole, StaffMemberStatus
+        member = self.staff_members.get(id)
+        if member is None:
+            return None
+        updated = member.model_copy(update={
+            "approved_role": StaffRole(approved_role),
+            "access_key_hash": access_key_hash,
+            "status": StaffMemberStatus.APPROVED,
+            "approved_at": datetime.utcnow(),
+            "approved_by": approved_by,
+        })
+        self.staff_members[id] = updated
+        return updated
+
+    def reject_staff_member(
+        self, id: str, approved_by: Optional[str] = None
+    ) -> Optional[StaffMember]:
+        from app.models.schemas import StaffMemberStatus
+        member = self.staff_members.get(id)
+        if member is None:
+            return None
+        patch: dict = {"status": StaffMemberStatus.REJECTED}
+        if approved_by:
+            patch["approved_by"] = approved_by
+        updated = member.model_copy(update=patch)
+        self.staff_members[id] = updated
+        return updated
 
 
 class SupabaseDatabase(PropertyStoreSupabase):

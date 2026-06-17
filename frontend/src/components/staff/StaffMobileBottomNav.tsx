@@ -15,6 +15,7 @@ const MOBILE_NAV_ITEMS: { id: StaffNavId | 'menu'; label: string }[] = [
 interface StaffMobileBottomNavProps {
   activeNav: StaffNavId;
   guestUnreadCount: number;
+  allowedNav?: StaffNavId[];
   onNavChange: (nav: StaffNavId) => void;
   onOpenMenu: () => void;
 }
@@ -22,10 +23,14 @@ interface StaffMobileBottomNavProps {
 export function StaffMobileBottomNav({
   activeNav,
   guestUnreadCount,
+  allowedNav,
   onNavChange,
   onOpenMenu,
 }: StaffMobileBottomNavProps) {
   const isTaskView = activeNav === 'tasks' || activeNav === 'assigned';
+  const visibleItems = allowedNav
+    ? MOBILE_NAV_ITEMS.filter((item) => item.id === 'menu' || allowedNav.includes(item.id as StaffNavId))
+    : MOBILE_NAV_ITEMS;
 
   return (
     <nav
@@ -33,7 +38,7 @@ export function StaffMobileBottomNav({
       aria-label="Staff navigation"
     >
       <div className="flex w-full max-w-md items-center justify-around rounded-full border border-neutral-200/80 bg-white/95 px-2 py-2 shadow-[0_4px_24px_rgba(0,0,0,0.08)] backdrop-blur-md dark:border-neutral-700/80 dark:bg-neutral-900/95">
-        {MOBILE_NAV_ITEMS.map((item) => {
+        {visibleItems.map((item) => {
           const isActive =
             item.id === 'menu'
               ? false

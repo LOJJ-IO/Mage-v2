@@ -45,3 +45,18 @@ export function setStoredStaffKey(key: string): void {
 export function clearStoredStaffKey(): void {
   sessionStorage.removeItem(STAFF_STORAGE_KEY);
 }
+
+const STAFF_ROLE_KEY = 'mage-staff-role';
+
+export function getStoredStaffRole(): string | null {
+  if (typeof window === 'undefined') return null;
+  return sessionStorage.getItem(STAFF_ROLE_KEY);
+}
+
+export function setStoredStaffRole(role: string): void {
+  sessionStorage.setItem(STAFF_ROLE_KEY, role);
+}
+
+export function clearStoredStaffRole(): void {
+  sessionStorage.removeItem(STAFF_ROLE_KEY);
+}

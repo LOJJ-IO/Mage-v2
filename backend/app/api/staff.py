@@ -20,11 +20,19 @@ from app.models.schemas import (
     StaffGuestConversationResponse,
     StaffInboxThread,
     StaffMessageRequest,
+    StaffRole,
     UpdateStaffActionRequest,
 )
 from app.services.conversation_helpers import is_internal_conversation_message
 from app.services.database import get_database
 from app.services.message_codec import parse_stored_message
+from app.services.staff_permissions import (
+    ROLE_ACTION_TYPES,
+    ROLE_NAV,
+    StaffContext,
+    get_current_staff,
+    require_role,
+)
 
 router = APIRouter(prefix="/staff", tags=["staff"])
 
@@ -145,11 +153,29 @@ def _enrich_inbox_threads(raw_threads: List[dict], actions: List[StaffAction]) -
     return enriched
 
 
-def verify_staff_key(x_staff_key: Optional[str] = Header(None, alias="X-Staff-Key")):
-    settings = get_settings()
-    if not x_staff_key or x_staff_key != settings.staff_access_key:
-        raise HTTPException(status_code=401, detail="Invalid or missing staff key")
+def verify_staff_key(ctx: StaffContext = Depends(get_current_staff)) -> bool:
+    """Backward-compatible wrapper kept so existing Depends(verify_staff_key) callers work unchanged."""
     return True
+
+
+class StaffSessionResponse(BaseModel):
+    role: str
+    display_name: str
+    staff_code: str
+    allowed_nav: List[str]
+    allowed_action_types: List[str]
+
+
+@router.get("/session", response_model=StaffSessionResponse)
+async def get_staff_session(ctx: StaffContext = Depends(get_current_staff)):
+    """Return the authenticated staff member's role and permitted nav/action-type sets."""
+    return StaffSessionResponse(
+        role=ctx.role.value,
+        display_name=ctx.display_name,
+        staff_code=ctx.staff_code,
+        allowed_nav=sorted(ROLE_NAV[ctx.role]),
+        allowed_action_types=sorted(at.value for at in ROLE_ACTION_TYPES[ctx.role]),
+    )
 
 
 def _conversation_messages_for_guest(guest_id: str) -> List[Message]:
@@ -190,7 +216,7 @@ def _conversation_messages_for_guest(guest_id: str) -> List[Message]:
 @router.get("/inbox/threads", response_model=List[StaffInboxThread])
 async def list_staff_inbox_threads(
     limit: int = 100,
-    _: bool = Depends(verify_staff_key),
+    _: StaffContext = Depends(require_role(StaffRole.MANAGER, StaffRole.FRONT_DESK)),
 ):
     db = get_database()
     raw = db.list_staff_inbox_threads(limit=min(limit, 200))
@@ -212,7 +238,9 @@ class GuestReviewSummary(BaseModel):
 
 
 @router.get("/guests/happiness-scores", response_model=List[GuestHappinessScore])
-async def list_guest_happiness_scores(_: bool = Depends(verify_staff_key)):
+async def list_guest_happiness_scores(
+    _: StaffContext = Depends(require_role(StaffRole.MANAGER, StaffRole.FRONT_DESK)),
+):
     """Pre-computed VADER happiness scores for all guests. Cheap single-table read."""
     db = get_database()
     return [
@@ -222,7 +250,9 @@ async def list_guest_happiness_scores(_: bool = Depends(verify_staff_key)):
 
 
 @router.get("/guests/review-summary", response_model=List[GuestReviewSummary])
-async def list_guest_review_summary(_: bool = Depends(verify_staff_key)):
+async def list_guest_review_summary(
+    _: StaffContext = Depends(require_role(StaffRole.MANAGER, StaffRole.FRONT_DESK)),
+):
     """Guest profile + VADER score for guests who have sent at least one chat message."""
     db = get_database()
     return [
@@ -241,7 +271,7 @@ async def list_guest_review_summary(_: bool = Depends(verify_staff_key)):
 @router.get("/guests/{guest_id}/conversation", response_model=StaffGuestConversationResponse)
 async def get_staff_guest_conversation(
     guest_id: str,
-    _: bool = Depends(verify_staff_key),
+    _: StaffContext = Depends(require_role(StaffRole.MANAGER, StaffRole.FRONT_DESK)),
 ):
     db = get_database()
     guest = db.get_guest(guest_id)
@@ -267,7 +297,7 @@ async def get_staff_guest_conversation(
 async def post_staff_guest_message(
     guest_id: str,
     request: StaffMessageRequest,
-    _: bool = Depends(verify_staff_key),
+    _: StaffContext = Depends(require_role(StaffRole.MANAGER, StaffRole.FRONT_DESK)),
 ):
     db = get_database()
     guest = db.get_guest(guest_id)
@@ -324,10 +354,12 @@ async def post_staff_guest_message(
 async def list_staff_actions(
     status: Optional[StaffActionStatus] = None,
     limit: int = 200,
-    _: bool = Depends(verify_staff_key),
+    ctx: StaffContext = Depends(get_current_staff),
 ):
     db = get_database()
-    return db.list_staff_actions(limit=min(limit, 500), status=status)
+    actions = db.list_staff_actions(limit=min(limit, 500), status=status)
+    allowed = ROLE_ACTION_TYPES[ctx.role]
+    return [a for a in actions if a.action_type in allowed]
 
 
 @router.get("/actions/{action_id}", response_model=StaffAction)
@@ -366,7 +398,7 @@ async def get_staff_action_conversation(
 async def post_staff_action_message(
     action_id: str,
     request: StaffMessageRequest,
-    _: bool = Depends(verify_staff_key),
+    _: StaffContext = Depends(require_role(StaffRole.MANAGER, StaffRole.FRONT_DESK)),
 ):
     db = get_database()
     action = db.get_staff_action(action_id)

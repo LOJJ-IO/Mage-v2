@@ -23,6 +23,7 @@ interface StaffDetailPanelProps {
   isUpdating: boolean;
   onClose: () => void;
   onUpdateStatus: (status: 'acknowledged' | 'resolved') => void;
+  onGetHelp?: () => void;
 }
 
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -42,6 +43,7 @@ export function StaffDetailPanel({
   isUpdating,
   onClose,
   onUpdateStatus,
+  onGetHelp,
 }: StaffDetailPanelProps) {
   const created = new Date(action.createdAt).toLocaleString();
   const [reply, setReply] = useState('');
@@ -218,6 +220,15 @@ export function StaffDetailPanel({
                 className="w-full py-3 rounded-full border border-neutral-300 dark:border-neutral-600 font-medium text-sm disabled:opacity-50"
               >
                 Mark done
+              </button>
+            )}
+            {onGetHelp && (
+              <button
+                type="button"
+                onClick={onGetHelp}
+                className="w-full py-3 rounded-full border border-blue-500 text-blue-600 dark:text-blue-400 font-medium text-sm hover:bg-blue-50 dark:hover:bg-blue-950/30"
+              >
+                ✦ Get help with this task
               </button>
             )}
           </footer>

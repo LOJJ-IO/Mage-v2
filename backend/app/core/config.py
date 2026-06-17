@@ -195,6 +195,8 @@ class Settings(BaseSettings):
     stay_grace_hours: int = int(os.getenv("STAY_GRACE_HOURS", "12"))
     frontend_url: str = resolve_frontend_url()
     email_provider: str = os.getenv("EMAIL_PROVIDER", "")
+    resend_api_key: str = os.getenv("RESEND_API_KEY", "")
+    resend_from_email: str = os.getenv("RESEND_FROM_EMAIL", "noreply@lojj.com")
     allow_dev_guest_login: bool = os.getenv(
         "ALLOW_DEV_GUEST_LOGIN", os.getenv("DEBUG", "true")
     ).lower() in ("1", "true", "yes")

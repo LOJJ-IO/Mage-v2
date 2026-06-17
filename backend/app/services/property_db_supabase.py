@@ -6,7 +6,19 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 
-from app.models.schemas import GuestProfile, Property, KnowledgeMode, PropertyProfile
+import random
+import string
+
+from app.models.schemas import (
+    EmailVerification,
+    GuestProfile,
+    KnowledgeMode,
+    Property,
+    PropertyProfile,
+    StaffMember,
+    StaffMemberStatus,
+    StaffRole,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -144,25 +156,6 @@ class PropertyStoreSupabase:
             logger.error("Error creating auth token: %s", e)
             raise
 
-    def validate_auth_token(self, token_hash: str) -> Optional[dict]:
-        try:
-            response = (
-                self.client.table("auth_tokens")
-                .select("*")
-                .eq("token_hash", token_hash)
-                .execute()
-            )
-            if not response.data:
-                return None
-            row = response.data[0]
-            expires = datetime.fromisoformat(str(row["expires_at"]).replace("Z", "+00:00")).replace(tzinfo=None)
-            if expires < datetime.utcnow():
-                return None
-            return {"property_id": row["property_id"], "booking_id": row["booking_id"]}
-        except Exception as e:
-            logger.error("Error validating auth token: %s", e)
-            return None
-
     def revoke_auth_tokens_for_booking(self, property_id: str, booking_id: str) -> int:
         try:
             response = (
@@ -235,6 +228,107 @@ class PropertyStoreSupabase:
         except Exception as e:
             logger.error("Error revoking sessions: %s", e)
             return 0
+
+    def mark_auth_token_used(self, token_hash: str) -> None:
+        try:
+            self.client.table("auth_tokens").update(
+                {"used_at": datetime.utcnow().isoformat()}
+            ).eq("token_hash", token_hash).execute()
+        except Exception as e:
+            logger.error("Error marking auth token used: %s", e)
+
+    def validate_auth_token(self, token_hash: str) -> Optional[dict]:
+        try:
+            response = (
+                self.client.table("auth_tokens")
+                .select("*")
+                .eq("token_hash", token_hash)
+                .execute()
+            )
+            if not response.data:
+                return None
+            row = response.data[0]
+            expires = datetime.fromisoformat(str(row["expires_at"]).replace("Z", "+00:00")).replace(tzinfo=None)
+            if expires < datetime.utcnow():
+                return None
+            if row.get("used_at") is not None:
+                return None
+            return {"property_id": row["property_id"], "booking_id": row["booking_id"]}
+        except Exception as e:
+            logger.error("Error validating auth token: %s", e)
+            return None
+
+    def create_email_verification(
+        self,
+        email: str,
+        property_id: str,
+        booking_id: str,
+        token_hash: str,
+        expires_at: datetime,
+        guest_data: dict = {},
+    ) -> None:
+        try:
+            row = {
+                "email": email,
+                "property_id": property_id,
+                "booking_id": booking_id,
+                "guest_data": guest_data,
+                "token_hash": token_hash,
+                "expires_at": expires_at.isoformat(),
+            }
+            self.client.table("email_verifications").insert(row).execute()
+        except Exception as e:
+            logger.error("Error creating email verification: %s", e)
+            raise
+
+    def consume_email_verification(self, token_hash: str) -> Optional[dict]:
+        try:
+            response = (
+                self.client.table("email_verifications")
+                .select("*")
+                .eq("token_hash", token_hash)
+                .execute()
+            )
+            if not response.data:
+                return None
+            row = response.data[0]
+            expires = datetime.fromisoformat(
+                str(row["expires_at"]).replace("Z", "+00:00")
+            ).replace(tzinfo=None)
+            if expires < datetime.utcnow():
+                return None
+            if row.get("verified_at") is not None:
+                return None
+            now = datetime.utcnow().isoformat()
+            self.client.table("email_verifications").update(
+                {"verified_at": now}
+            ).eq("token_hash", token_hash).execute()
+            row["verified_at"] = now
+            return row
+        except Exception as e:
+            logger.error("Error consuming email verification: %s", e)
+            return None
+
+    def get_guest_by_name_and_booking(
+        self, name: str, booking_id: str, property_id: Optional[str] = None
+    ) -> Optional[GuestProfile]:
+        try:
+            query = (
+                self.client.table("guests")
+                .select("*")
+                .eq("booking_id", booking_id)
+            )
+            if property_id:
+                query = query.eq("property_id", property_id)
+            response = query.execute()
+            name_lower = name.strip().lower()
+            for row in (response.data or []):
+                if row.get("name", "").strip().lower() == name_lower:
+                    return GuestProfile(**row)
+            return None
+        except Exception as e:
+            logger.error("Error getting guest by name and booking: %s", e)
+            return None
 
     def list_property_facts(self, property_id: str) -> List[dict]:
         try:
@@ -399,3 +493,245 @@ class PropertyStoreSupabase:
             self.client.table("crawl_pages").update(fields).eq("id", page_id).execute()
         except Exception as e:
             logger.error("Error updating crawl page: %s", e)
+
+    # --- Onboarding helpers ---
+
+    def _generate_staff_code(self, property_id: str) -> str:
+        for _ in range(20):
+            code = "STF-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
+            resp = (
+                self.client.table("staff_members")
+                .select("id")
+                .eq("property_id", property_id)
+                .eq("staff_code", code)
+                .execute()
+            )
+            if not resp.data:
+                return code
+        raise RuntimeError("Could not generate unique staff_code after 20 attempts")
+
+    def _staff_member_from_row(self, row: dict) -> StaffMember:
+        data = dict(row)
+        if isinstance(data.get("requested_role"), str):
+            data["requested_role"] = StaffRole(data["requested_role"])
+        if data.get("approved_role") and isinstance(data["approved_role"], str):
+            data["approved_role"] = StaffRole(data["approved_role"])
+        if isinstance(data.get("status"), str):
+            data["status"] = StaffMemberStatus(data["status"])
+        for dt_field in ("created_at", "approved_at"):
+            if data.get(dt_field) and isinstance(data[dt_field], str):
+                data[dt_field] = datetime.fromisoformat(
+                    str(data[dt_field]).replace("Z", "+00:00")
+                ).replace(tzinfo=None)
+        return StaffMember(**{k: v for k, v in data.items() if k in StaffMember.model_fields})
+
+    def _email_verification_from_row(self, row: dict) -> EmailVerification:
+        data = dict(row)
+        for dt_field in ("expires_at", "verified_at", "created_at"):
+            if data.get(dt_field) and isinstance(data[dt_field], str):
+                data[dt_field] = datetime.fromisoformat(
+                    str(data[dt_field]).replace("Z", "+00:00")
+                ).replace(tzinfo=None)
+        return EmailVerification(**{k: v for k, v in data.items() if k in EmailVerification.model_fields})
+
+    # --- Onboarding: staff members ---
+
+    def create_staff_request(
+        self, property_id: str, display_name: str, requested_role: str,
+        email: Optional[str] = None,
+    ) -> StaffMember:
+        try:
+            staff_code = self._generate_staff_code(property_id)
+            row = {
+                "property_id": property_id,
+                "staff_code": staff_code,
+                "display_name": display_name,
+                "requested_role": requested_role,
+                "status": "pending",
+            }
+            if email is not None:
+                row["email"] = email
+            response = self.client.table("staff_members").insert(row).execute()
+            data = response.data[0] if response.data else row
+            return self._staff_member_from_row(data)
+        except Exception as e:
+            logger.error("Error creating staff request: %s", e)
+            raise
+
+    def get_staff_member_by_id(self, id: str) -> Optional[StaffMember]:
+        try:
+            response = (
+                self.client.table("staff_members").select("*").eq("id", id).execute()
+            )
+            if response.data:
+                return self._staff_member_from_row(response.data[0])
+            return None
+        except Exception as e:
+            logger.error("Error getting staff member by id: %s", e)
+            return None
+
+    def get_staff_member_by_code(
+        self, property_id: str, staff_code: str
+    ) -> Optional[StaffMember]:
+        try:
+            response = (
+                self.client.table("staff_members")
+                .select("*")
+                .eq("property_id", property_id)
+                .eq("staff_code", staff_code)
+                .execute()
+            )
+            if response.data:
+                return self._staff_member_from_row(response.data[0])
+            return None
+        except Exception as e:
+            logger.error("Error getting staff member by code: %s", e)
+            return None
+
+    def get_staff_member_by_access_key_hash(self, hash: str) -> Optional[StaffMember]:
+        try:
+            response = (
+                self.client.table("staff_members")
+                .select("*")
+                .eq("access_key_hash", hash)
+                .execute()
+            )
+            if response.data:
+                return self._staff_member_from_row(response.data[0])
+            return None
+        except Exception as e:
+            logger.error("Error getting staff member by access key hash: %s", e)
+            return None
+
+    def list_pending_staff(self, property_id: str) -> List[StaffMember]:
+        try:
+            response = (
+                self.client.table("staff_members")
+                .select("*")
+                .eq("property_id", property_id)
+                .eq("status", "pending")
+                .execute()
+            )
+            return [self._staff_member_from_row(r) for r in (response.data or [])]
+        except Exception as e:
+            logger.error("Error listing pending staff: %s", e)
+            return []
+
+    def list_staff_members(
+        self, property_id: str, status: Optional[str] = None
+    ) -> List[StaffMember]:
+        try:
+            query = (
+                self.client.table("staff_members")
+                .select("*")
+                .eq("property_id", property_id)
+            )
+            if status is not None:
+                query = query.eq("status", status)
+            response = query.execute()
+            return [self._staff_member_from_row(r) for r in (response.data or [])]
+        except Exception as e:
+            logger.error("Error listing staff members: %s", e)
+            return []
+
+    def approve_staff_member(
+        self,
+        id: str,
+        approved_role: str,
+        access_key_hash: str,
+        approved_by: str,
+    ) -> Optional[StaffMember]:
+        try:
+            updates = {
+                "approved_role": approved_role,
+                "access_key_hash": access_key_hash,
+                "status": "approved",
+                "approved_at": datetime.utcnow().isoformat(),
+                "approved_by": approved_by,
+            }
+            response = (
+                self.client.table("staff_members")
+                .update(updates)
+                .eq("id", id)
+                .execute()
+            )
+            if response.data:
+                return self._staff_member_from_row(response.data[0])
+            return None
+        except Exception as e:
+            logger.error("Error approving staff member: %s", e)
+            return None
+
+    def reject_staff_member(
+        self, id: str, approved_by: Optional[str] = None
+    ) -> Optional[StaffMember]:
+        try:
+            updates: dict = {"status": "rejected"}
+            if approved_by is not None:
+                updates["approved_by"] = approved_by
+            response = (
+                self.client.table("staff_members")
+                .update(updates)
+                .eq("id", id)
+                .execute()
+            )
+            if response.data:
+                return self._staff_member_from_row(response.data[0])
+            return None
+        except Exception as e:
+            logger.error("Error rejecting staff member: %s", e)
+            return None
+
+    # --- Onboarding: task-assist threads ---
+
+    def get_task_assist_thread(
+        self, action_id: str, staff_member_id: Optional[str]
+    ) -> Optional[dict]:
+        try:
+            query = self.client.table("staff_task_assist_threads").select("*").eq(
+                "action_id", action_id
+            )
+            if staff_member_id is None:
+                query = query.is_("staff_member_id", "null")
+            else:
+                query = query.eq("staff_member_id", staff_member_id)
+            response = query.execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error("Error getting task assist thread: %s", e)
+            return None
+
+    def upsert_task_assist_thread(
+        self,
+        action_id: str,
+        staff_member_id: Optional[str],
+        property_id: str,
+        messages_json: list,
+    ) -> dict:
+        try:
+            now = datetime.utcnow().isoformat()
+            existing = self.get_task_assist_thread(action_id, staff_member_id)
+            if existing:
+                response = (
+                    self.client.table("staff_task_assist_threads")
+                    .update({"messages_json": messages_json, "updated_at": now})
+                    .eq("id", existing["id"])
+                    .execute()
+                )
+                return response.data[0] if response.data else existing
+            row: dict = {
+                "action_id": action_id,
+                "property_id": property_id,
+                "messages_json": messages_json,
+                "created_at": now,
+                "updated_at": now,
+            }
+            if staff_member_id is not None:
+                row["staff_member_id"] = staff_member_id
+            response = (
+                self.client.table("staff_task_assist_threads").insert(row).execute()
+            )
+            return response.data[0] if response.data else row
+        except Exception as e:
+            logger.error("Error upserting task assist thread: %s", e)
+            raise
