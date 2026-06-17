@@ -17,6 +17,16 @@ import {
 import { mapApiMessage } from '@/lib/mapMessage';
 import { GUEST_CHAT_ERROR, toGuestFriendlyError } from '@/lib/guestErrors';
 
+export interface PendingStaffMember {
+  id: string;
+  staff_code: string;
+  display_name: string;
+  requested_role: string;
+  status: string;
+  property_id: string;
+  created_at: string | null;
+}
+
 export interface TaskAssistMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -877,8 +887,8 @@ class ApiClient {
   /** List pending staff requests. Requires a manager-role access key. */
   async listPendingStaff(
     managerKey: string
-  ): Promise<ApiResponse<Record<string, unknown>[]>> {
-    const result = await this.request<Record<string, unknown>[]>(
+  ): Promise<ApiResponse<PendingStaffMember[]>> {
+    const result = await this.request<PendingStaffMember[]>(
       '/api/admin/staff/pending',
       {},
       managerKey

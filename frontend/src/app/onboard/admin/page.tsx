@@ -3,21 +3,13 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IconMageLogo } from '@/components/staff/StaffIcons';
-import { apiClient } from '@/lib/api';
+import { apiClient, PendingStaffMember } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface PendingMember {
-  id: string;
-  staff_code: string;
-  display_name: string;
-  requested_role: string;
-  status: string;
-  property_id: string;
-  created_at: string | null;
-}
+type PendingMember = PendingStaffMember;
 
 interface IssuedKey {
   staffCode: string;
@@ -261,7 +253,7 @@ export default function OnboardAdminPage() {
       setPhase({ name: 'gate' });
       return;
     }
-    setPhase({ name: 'list', members: res.data as PendingMember[], managerKey: key });
+    setPhase({ name: 'list', members: res.data, managerKey: key });
   }, []);
 
   async function handleGateSubmit(e: React.FormEvent) {
