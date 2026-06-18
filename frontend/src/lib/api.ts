@@ -104,7 +104,7 @@ export function getAgentAvailabilityWsUrl(): string {
   }
   if (typeof window !== 'undefined') {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.hostname}:8000/api/agents/ws`;
+    return `${protocol}//${window.location.host}/api/agents/ws`;
   }
   return 'ws://127.0.0.1:8000/api/agents/ws';
 }
