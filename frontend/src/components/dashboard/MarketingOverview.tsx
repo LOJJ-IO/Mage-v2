@@ -1,7 +1,9 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardApi } from '@/lib/dashboardApi';
+import { lastSparkline } from '@/lib/dashboardTrend';
 import { DashboardShell } from './DashboardShell';
 import { KpiCard } from './KpiCard';
 import { BlurFade } from './BlurFade';
@@ -17,7 +19,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { useState } from 'react';
 
 export function MarketingOverview() {
   const [days, setDays] = useState(30);
@@ -34,8 +35,34 @@ export function MarketingOverview() {
     refetchInterval: 60_000,
   });
 
+  const latencyQuery = useQuery({
+    queryKey: ['dashboard-timeseries-latency', days],
+    queryFn: () => dashboardApi.getTimeseries('latency', days),
+    refetchInterval: 60_000,
+  });
+
   const s = summaryQuery.data?.summary;
   const wins = summaryQuery.data?.recent_wins ?? [];
+  const splits = summaryQuery.data?.chart_splits;
+
+  const sparklines = useMemo(() => {
+    const series = seriesQuery.data?.series ?? [];
+    const avoided = series.map((d) => Math.max(0, d.messages - d.escalations));
+    const handledPct = series.map((d) =>
+      d.messages > 0 ? ((d.messages - d.escalations) / d.messages) * 100 : 0
+    );
+    const latency = (latencyQuery.data?.series ?? []).map((d) => d.value / 1000);
+    const activity = series.map((d) => d.messages);
+    const satisfactionProxy = handledPct;
+    return {
+      avoided: lastSparkline(avoided),
+      handledPct: lastSparkline(handledPct),
+      latency: lastSparkline(latency),
+      activity: lastSparkline(activity),
+      satisfaction: lastSparkline(satisfactionProxy),
+      wow: lastSparkline(activity),
+    };
+  }, [seriesQuery.data, latencyQuery.data]);
 
   return (
     <DashboardShell
@@ -51,8 +78,9 @@ export function MarketingOverview() {
             title="Calls avoided"
             value={s?.calls_avoided ?? 0}
             subtitle={`~${Math.round((s?.time_saved_minutes ?? 0) / 60)} labor hours saved`}
-            trend="up"
             trendLabel={`$${(s?.labor_saved_usd ?? 0).toLocaleString()} saved`}
+            sparklineData={sparklines.avoided}
+            sparklineColor="#05944F"
           />
         </BlurFade>
         <BlurFade delay={80}>
@@ -61,8 +89,13 @@ export function MarketingOverview() {
             value={s?.guest_satisfaction_pct ?? 0}
             suffix="%"
             subtitle={`${s?.happy_guests ?? 0} happy guests scored`}
-            trend="up"
-            trendLabel="Positive sentiment"
+            trendLabel="Guest sentiment"
+            percentVisual={{
+              mode: 'pie',
+              breakdown: splits?.satisfaction_split,
+            }}
+            sparklineData={sparklines.satisfaction}
+            sparklineColor="#276EF1"
           />
         </BlurFade>
         <BlurFade delay={160}>
@@ -72,8 +105,10 @@ export function MarketingOverview() {
             decimals={2}
             suffix="s"
             subtitle={`p95 ${((s?.p95_response_ms ?? 0) / 1000).toFixed(2)}s`}
-            trend="up"
-            trendLabel="Instant answers"
+            trendLabel="Response speed"
+            higherIsBetter={false}
+            sparklineData={sparklines.latency}
+            sparklineColor="#8B5CF6"
           />
         </BlurFade>
         <BlurFade delay={240}>
@@ -82,8 +117,13 @@ export function MarketingOverview() {
             value={s?.handled_without_staff_pct ?? 0}
             suffix="%"
             subtitle={`${s?.escalation_rate_pct ?? 0}% escalation rate`}
-            trend="up"
             trendLabel={`${s?.total_messages ?? 0} total messages`}
+            percentVisual={{
+              mode: 'pie',
+              breakdown: splits?.handled_vs_escalated,
+            }}
+            sparklineData={sparklines.handledPct}
+            sparklineColor="#14B8A6"
           />
         </BlurFade>
       </div>
@@ -96,13 +136,22 @@ export function MarketingOverview() {
         </div>
         <BlurFade delay={400}>
           <div className="grid gap-4">
-            <KpiCard title="Daily active guests" value={s?.dau ?? 0} subtitle={`${s?.wau ?? 0} weekly active`} />
+            <KpiCard
+              title="Daily active guests"
+              value={s?.dau ?? 0}
+              subtitle={`${s?.wau ?? 0} weekly active`}
+              trendLabel="Daily engagement"
+              sparklineData={sparklines.activity}
+              sparklineColor="#05944F"
+            />
             <KpiCard
               title="Week-over-week growth"
               value={s?.wow_growth_pct ?? 0}
               suffix="%"
-              trend={(s?.wow_growth_pct ?? 0) >= 0 ? 'up' : 'down'}
               trendLabel="Message volume momentum"
+              percentVisual={{ mode: 'slider' }}
+              sparklineData={sparklines.wow}
+              sparklineColor="#F59E0B"
             />
           </div>
         </BlurFade>
@@ -111,7 +160,7 @@ export function MarketingOverview() {
       <BlurFade delay={480} className="mt-6">
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-6 py-4">
-            <h3 className="text-lg font-semibold">Recent wins</h3>
+            <h3 className="font-heading text-lg font-semibold">Recent wins</h3>
             <p className="text-sm text-slate-500">Guest-friendly outcomes — no staff required</p>
           </div>
           <Table>
@@ -140,7 +189,7 @@ export function MarketingOverview() {
                     <TableCell>
                       {row.response_ms != null ? `${(row.response_ms / 1000).toFixed(2)}s` : '—'}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="font-display font-normal">
                       {row.happiness_score != null ? `${row.happiness_score}/100` : '—'}
                     </TableCell>
                   </TableRow>

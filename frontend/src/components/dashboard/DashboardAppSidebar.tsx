@@ -6,6 +6,7 @@ import { BarChart3, LayoutDashboard, List, Settings } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -14,6 +15,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  SidebarTrigger,
 } from '@/components/ui/sidebar';
 
 const NAV = [
@@ -62,6 +64,9 @@ export function DashboardAppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="mt-auto border-t border-sidebar-border">
+        <SidebarTrigger className="mx-auto h-8 w-8" />
+      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   );

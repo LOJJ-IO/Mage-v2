@@ -24,7 +24,7 @@ export function DashboardShell({
         <DashboardAppSidebar />
         <SidebarInset>
           <header className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-200 bg-white/80 px-4 backdrop-blur md:px-6">
-            <SidebarTrigger className="-ml-1" />
+            <SidebarTrigger className="-ml-1 md:hidden" />
             <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-4">
               <div className="min-w-0">
                 <h1 className="font-heading truncate text-2xl font-semibold tracking-tight text-slate-900">
