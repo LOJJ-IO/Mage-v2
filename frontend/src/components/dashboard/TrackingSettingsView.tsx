@@ -70,7 +70,8 @@ export function TrackingSettingsView() {
           </div>
           {!cfg?.env_enabled ? (
             <p className="text-sm text-amber-700">
-              Set METRICS_TRACKING_ENABLED=true in backend .env to allow runtime collection.
+              Demo period not started — follow docs/demo_period_trigger.md: apply migrations,
+              set METRICS_TRACKING_ENABLED=true, then enable runtime collection here.
             </p>
           ) : null}
         </CardContent>

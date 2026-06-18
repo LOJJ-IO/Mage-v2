@@ -40,7 +40,13 @@ class RoutingTelemetry:
 
     def to_event_payload(self) -> Dict[str, Any]:
         data = asdict(self)
-        metadata = data.pop("metadata", {}) or {}
+        metadata = dict(data.pop("metadata", {}) or {})
+        routing_path = data.pop("routing_path", None)
+        turn_count = data.pop("turn_count", None)
+        if routing_path:
+            metadata["routing_path"] = routing_path
+        if turn_count is not None:
+            metadata["turn_count"] = turn_count
         data["event_type"] = "routing"
         data["metadata"] = metadata
         return data

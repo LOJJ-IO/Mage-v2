@@ -13,6 +13,7 @@ Open your Supabase project → SQL Editor and run each file in this exact order:
 3. `docs/supabase_staff_actions_migration.sql`
 4. `docs/supabase_onboarding_migration.sql` ← staff_members, email_verifications, staff_task_assist_threads
 5. `docs/supabase_metrics_migration.sql`
+6. `docs/supabase_dashboard_prebeta_migration.sql` (guest tiers + transcript flags — before demo period)
 
 Copy the **Project URL** and **service_role** key from Supabase → Project Settings → API — you'll need them below.
 

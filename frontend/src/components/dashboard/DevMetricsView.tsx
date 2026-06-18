@@ -6,13 +6,13 @@ import { dashboardApi } from '@/lib/dashboardApi';
 import { DashboardShell } from './DashboardShell';
 import { DateRangeSelect } from './DateRangeSelect';
 import { TrackingBanner } from './TrackingBanner';
+import { MetricTag } from './MetricTag';
 import { SimpleBarChart } from './charts/SimpleBarChart';
 import { BlurFade } from './BlurFade';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-function toChartData(record: Record<string, number> | undefined, nameKey = 'name') {
+function toChartData(record: Record<string, number> | undefined) {
   if (!record) return [];
-  return Object.entries(record).map(([k, v]) => ({ [nameKey]: k, value: v }));
+  return Object.entries(record).map(([name, value]) => ({ name, value }));
 }
 
 export function DevMetricsView() {
@@ -33,51 +33,28 @@ export function DevMetricsView() {
   return (
     <DashboardShell
       title="Dev metrics"
-      subtitle="Engineering health — proxies labeled where ground truth is unavailable"
+      subtitle="Internal engineering health — not for client reporting"
       headerRight={<DateRangeSelect value={days} onChange={setDays} />}
     >
       <TrackingBanner tracking={query.data?.tracking} />
 
+      <div className="mb-4 flex items-center gap-2">
+        <MetricTag measurementType="proxy" notForClientReporting />
+        <span className="text-xs text-slate-500">Dev health only</span>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-slate-500">First-attempt resolution</CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-bold">
-            {(m?.first_attempt_resolution_pct as number) ?? 0}%
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-slate-500">Re-ask rate (proxy)</CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-bold">
-            {(m?.repetition_rate_pct as number) ?? 0}%
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-slate-500">FAQ rejection rate</CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-bold">
-            {(m?.faq_rejection_rate_pct as number) ?? 0}%
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-slate-500">Misclassification proxy</CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-bold text-amber-700">
-            {(m?.misclassification_proxy_pct as number) ?? 0}%
-          </CardContent>
-        </Card>
+        <DevMetricCard title="First-attempt resolution" value={`${(m?.first_attempt_resolution_pct as number) ?? 0}%`} measurementType="proxy" />
+        <DevMetricCard title="Re-ask rate (proxy)" value={`${(m?.repetition_rate_pct as number) ?? 0}%`} measurementType="proxy" />
+        <DevMetricCard title="FAQ rejection rate" value={`${(m?.faq_rejection_rate_pct as number) ?? 0}%`} measurementType="real" />
+        <DevMetricCard title="Misclassification proxy" value={`${(m?.misclassification_proxy_pct as number) ?? 0}%`} measurementType="proxy" notForClientReporting />
       </div>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-2">
         <BlurFade>
           <SimpleBarChart
             title="Classifier confidence"
-            description="Low / medium / high buckets"
+            description="NOT FOR CLIENT REPORTING"
             data={[
               { name: 'Low', value: confidence.low ?? 0 },
               { name: 'Medium', value: confidence.medium ?? 0 },
@@ -86,67 +63,65 @@ export function DevMetricsView() {
           />
         </BlurFade>
         <BlurFade delay={80}>
-          <SimpleBarChart
-            title="Ability usage"
-            data={toChartData(abilityUsage)}
-          />
+          <SimpleBarChart title="Ability usage" data={toChartData(abilityUsage)} />
         </BlurFade>
         <BlurFade delay={160}>
-          <SimpleBarChart
-            title="Request types"
-            description="repetition = re-asks, status_check = clarification proxy"
-            data={toChartData(requestTypes)}
-          />
+          <SimpleBarChart title="Request types" data={toChartData(requestTypes)} />
         </BlurFade>
         <BlurFade delay={240}>
-          <SimpleBarChart
-            title="Escalation reasons"
-            data={toChartData(escalationReasons)}
-          />
+          <SimpleBarChart title="Escalation reasons" data={toChartData(escalationReasons)} />
         </BlurFade>
       </div>
 
       <BlurFade delay={320} className="mt-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Latency & reliability</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <p className="text-sm text-slate-500">Classifier avg</p>
-              <p className="text-2xl font-semibold">{latency.classifier ?? 0} ms</p>
-            </div>
-            <div>
-              <p className="text-sm text-slate-500">Copy writer avg</p>
-              <p className="text-2xl font-semibold">{latency.copy ?? 0} ms</p>
-            </div>
-            <div>
-              <p className="text-sm text-slate-500">Total avg</p>
-              <p className="text-2xl font-semibold">{latency.total ?? 0} ms</p>
-            </div>
-            <div>
-              <p className="text-sm text-slate-500">p95/p50 consistency</p>
-              <p className="text-2xl font-semibold">{(m?.response_consistency_ratio as number) ?? 0}x</p>
-            </div>
-            <div>
-              <p className="text-sm text-slate-500">Fallback rate</p>
-              <p className="text-2xl font-semibold">{(m?.fallback_rate_pct as number) ?? 0}%</p>
-            </div>
-            <div>
-              <p className="text-sm text-slate-500">Prompt cache hit rate</p>
-              <p className="text-2xl font-semibold">{(m?.prompt_cache_hit_rate_pct as number) ?? 0}%</p>
-            </div>
-            <div>
-              <p className="text-sm text-slate-500">Multi-turn guests</p>
-              <p className="text-2xl font-semibold">{(m?.multi_turn_guests as number) ?? 0}</p>
-            </div>
-            <div>
-              <p className="text-sm text-slate-500">Routing events</p>
-              <p className="text-2xl font-semibold">{(m?.total_routing_events as number) ?? 0}</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center gap-2">
+            <h3 className="font-semibold">Latency & reliability</h3>
+            <MetricTag measurementType="real" notForClientReporting />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat label="Classifier avg" value={`${latency.classifier ?? 0} ms`} />
+            <Stat label="Copy writer avg" value={`${latency.copy ?? 0} ms`} />
+            <Stat label="Total avg" value={`${latency.total ?? 0} ms`} />
+            <Stat label="p95/p50 consistency" value={`${(m?.response_consistency_ratio as number) ?? 0}x`} />
+            <Stat label="Fallback rate" value={`${(m?.fallback_rate_pct as number) ?? 0}%`} />
+            <Stat label="Prompt cache hit rate" value={`${(m?.prompt_cache_hit_rate_pct as number) ?? 0}%`} />
+            <Stat label="Multi-turn guests" value={String((m?.multi_turn_guests as number) ?? 0)} />
+            <Stat label="Routing events" value={String((m?.total_routing_events as number) ?? 0)} />
+          </div>
+        </div>
       </BlurFade>
     </DashboardShell>
+  );
+}
+
+function DevMetricCard({
+  title,
+  value,
+  measurementType,
+  notForClientReporting,
+}: {
+  title: string;
+  value: string;
+  measurementType: 'real' | 'proxy';
+  notForClientReporting?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm text-slate-500">{title}</p>
+        <MetricTag measurementType={measurementType} notForClientReporting={notForClientReporting} />
+      </div>
+      <p className="mt-2 text-3xl font-bold">{value}</p>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="text-2xl font-semibold">{value}</p>
+    </div>
   );
 }

@@ -159,6 +159,20 @@ class Property(BaseModel):
     published_snapshot_id: Optional[str] = None
 
 
+class GuestAccountTier(str, Enum):
+    """Metrics inclusion tier for dashboard / demo period."""
+    DEV_INTERNAL = "dev_internal"
+    PILOT_TESTER = "pilot_tester"
+
+
+class TranscriptFlagCategory(str, Enum):
+    """Demo walk-through bookmark categories for Event Log curation."""
+    CLEAN_ROUTINE = "clean_routine"
+    EDGE_CASE_GRACEFUL = "edge_case_graceful"
+    GRACEFUL_ESCALATION = "graceful_escalation"
+    MULTI_TURN_SUCCESS = "multi_turn_success"
+
+
 class GuestProfile(BaseModel):
     """Guest profile model."""
     id: str
@@ -174,6 +188,7 @@ class GuestProfile(BaseModel):
     pms_booking_id: Optional[str] = None
     pms_guest_id: Optional[str] = None
     happiness_score: Optional[int] = None
+    account_tier: GuestAccountTier = GuestAccountTier.PILOT_TESTER
 
 
 class MagicLinkRequest(BaseModel):

@@ -12,7 +12,7 @@ from urllib.parse import urlencode
 from app.core.config import get_settings, resolve_frontend_url
 from app.knowledge.property_helpers import ensure_demo_property
 from app.integrations.pms.registry import get_pms_provider
-from app.models.schemas import GuestProfile
+from app.models.schemas import GuestProfile, GuestAccountTier
 from app.services.database import get_database
 from app.services.datetime_helpers import (
     is_within_stay_window,
@@ -116,7 +116,12 @@ async def request_magic_link(
     return result
 
 
-def _reservation_to_guest(reservation, existing_id: Optional[str] = None) -> GuestProfile:
+def _reservation_to_guest(
+    reservation,
+    existing_id: Optional[str] = None,
+    *,
+    account_tier: GuestAccountTier = GuestAccountTier.PILOT_TESTER,
+) -> GuestProfile:
     guest_id = existing_id or f"guest-{uuid.uuid4().hex[:8]}"
     return GuestProfile(
         id=guest_id,
@@ -131,6 +136,7 @@ def _reservation_to_guest(reservation, existing_id: Optional[str] = None) -> Gue
         property_id=reservation.property_id,
         pms_booking_id=reservation.booking_id,
         pms_guest_id=reservation.pms_guest_id,
+        account_tier=account_tier,
     )
 
 
@@ -170,6 +176,7 @@ async def sign_in_guest_by_email(
     guest = _reservation_to_guest(
         reservation,
         existing_id=existing.id if existing else None,
+        account_tier=GuestAccountTier.DEV_INTERNAL,
     )
     try:
         guest = db.upsert_guest(guest)

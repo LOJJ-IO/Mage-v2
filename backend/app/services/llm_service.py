@@ -1277,6 +1277,7 @@ class LLMService:
 
         models = self._copy_models_to_try()
         last_http_error: Optional[httpx.HTTPStatusError] = None
+        copy_started = time.perf_counter()
         for model in models:
             try:
                 async with httpx.AsyncClient(timeout=settings.llm_request_timeout_large) as client:
@@ -1301,6 +1302,11 @@ class LLMService:
                         continue
                     raw = (data["choices"][0].get("message", {}).get("content") or "").strip()
                     if raw:
+                        if self._active_telemetry is not None:
+                            self._active_telemetry.copy_latency_ms = int(
+                                (time.perf_counter() - copy_started) * 1000
+                            )
+                            self._active_telemetry.copy_model = resolved_model
                         return self._sanitize_guest_text(raw)
             except httpx.HTTPStatusError as e:
                 last_http_error = e

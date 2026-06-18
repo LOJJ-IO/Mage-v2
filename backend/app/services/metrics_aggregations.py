@@ -24,9 +24,14 @@ def filter_events_by_range(
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
     property_id: Optional[str] = None,
+    exclude_guest_ids: Optional[set[str]] = None,
 ) -> List[dict]:
     out: List[dict] = []
+    excluded = exclude_guest_ids or set()
     for ev in events:
+        gid = ev.get("guest_id")
+        if gid and str(gid) in excluded:
+            continue
         if property_id and ev.get("property_id") and ev.get("property_id") != property_id:
             continue
         ts = _parse_ts(ev.get("created_at"))
@@ -148,21 +153,44 @@ def aggregate_marketing(
         round((escalations / total_routed) * 100, 1) if total_routed else 0.0
     )
 
+    request_type_set = {
+        str(e.get("request_type"))
+        for e in routing
+        if e.get("request_type")
+    }
+    ability_set: set[str] = set()
+    for e in routing:
+        for ab in e.get("abilities") or []:
+            ability_set.add(str(ab))
+        if e.get("ability_executed"):
+            ability_set.add(str(e.get("ability_executed")))
+
     return {
+        # Legacy fields kept for API compat; NOT FOR CLIENT REPORTING (simulation artifacts)
         "calls_avoided": calls_avoided,
         "labor_saved_usd": labor_saved,
         "time_saved_minutes": time_saved_minutes,
+        # Headline metric A — client-reportable pilot data
+        "resolved_without_escalation_pct": handled_without_staff_pct,
+        "resolved_without_escalation_count": calls_avoided,
+        "handled_without_staff_pct": handled_without_staff_pct,
+        # Headline metric B — request type / ability coverage
+        "request_type_coverage_count": len(request_type_set),
+        "request_types_seen": sorted(request_type_set),
+        "ability_coverage_count": len(ability_set),
+        "abilities_seen": sorted(ability_set),
+        # Internal-only proxies
         "guest_satisfaction_pct": satisfaction_pct,
         "happy_guests": happy_count,
         "total_guests_scored": guest_total,
         "avg_response_ms": avg_latency_ms,
         "p95_response_ms": p95_latency_ms,
-        "handled_without_staff_pct": handled_without_staff_pct,
         "escalation_rate_pct": escalation_rate,
         "total_messages": total_messages,
         "dau": dau,
         "wau": wau,
         "wow_growth_pct": wow_growth,
+        "pilot_data": True,
     }
 
 
@@ -371,3 +399,64 @@ def recent_wins(events: List[dict], limit: int = 10) -> List[Dict[str, Any]]:
         if len(wins) >= limit:
             break
     return wins
+
+
+def build_chart_splits(events: List[dict]) -> Dict[str, List[Dict[str, Any]]]:
+    routing = _routing_events(events)
+    escalations = sum(1 for e in routing if _is_escalation(e))
+    non_esc = max(0, len(routing) - escalations)
+    handled_vs_escalated = [
+        {"name": "Without escalation", "value": non_esc},
+        {"name": "Escalated", "value": escalations},
+    ]
+
+    guest_scores: Dict[str, int] = {}
+    for ev in events:
+        gid = ev.get("guest_id")
+        score = ev.get("happiness_score")
+        if gid and score is not None:
+            guest_scores[str(gid)] = int(score)
+    happy = sum(1 for s in guest_scores.values() if s >= 70)
+    unhappy = max(0, len(guest_scores) - happy)
+    satisfaction_split = [
+        {"name": "Above threshold", "value": happy},
+        {"name": "Below threshold", "value": unhappy},
+    ]
+
+    ability_usage: Counter[str] = Counter()
+    for ev in routing:
+        executed = ev.get("ability_executed")
+        if executed:
+            ability_usage[str(executed)] += 1
+        elif ev.get("abilities"):
+            ability_usage[str(ev["abilities"][0])] += 1
+    ability_mix = [
+        {"name": k, "value": v} for k, v in ability_usage.most_common(8)
+    ]
+
+    request_types: Counter[str] = Counter()
+    for ev in routing:
+        rt = ev.get("request_type")
+        if rt:
+            request_types[str(rt)] += 1
+    request_type_mix = [
+        {"name": k, "value": v} for k, v in request_types.most_common(8)
+    ]
+
+    return {
+        "handled_vs_escalated": handled_vs_escalated,
+        "satisfaction_split": satisfaction_split,
+        "ability_mix": ability_mix,
+        "request_type_mix": request_type_mix,
+    }
+
+
+def build_phrase_cloud(events: List[dict], limit: int = 24) -> List[Dict[str, Any]]:
+    routing = _routing_events(events)
+    phrases: Counter[str] = Counter()
+    for ev in routing:
+        meta = ev.get("metadata") or {}
+        preview = (meta.get("user_message_preview") or "").strip().lower()
+        if len(preview) >= 8:
+            phrases[preview[:80]] += 1
+    return [{"text": text, "count": count} for text, count in phrases.most_common(limit)]

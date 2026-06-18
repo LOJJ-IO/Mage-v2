@@ -15,6 +15,7 @@ import {
   type TrendDirection,
 } from '@/lib/dashboardTrend';
 import { cn } from '@/lib/utils';
+import { MetricTag, type MeasurementType } from './MetricTag';
 
 export function KpiCard({
   title,
@@ -29,6 +30,8 @@ export function KpiCard({
   sparklineColor = '#05944F',
   higherIsBetter = true,
   percentVisual,
+  measurementType,
+  notForClientReporting,
 }: {
   title: string;
   value: number;
@@ -47,6 +50,8 @@ export function KpiCard({
     mode: PercentVisualMode;
     breakdown?: Array<{ name: string; value: number }>;
   };
+  measurementType?: MeasurementType;
+  notForClientReporting?: boolean;
 }) {
   const resolvedTrend =
     trend ??
@@ -59,7 +64,15 @@ export function KpiCard({
   return (
     <Card className="overflow-hidden transition-shadow hover:shadow-md">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-slate-500">{title}</CardTitle>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <CardTitle className="text-sm font-medium text-slate-500">{title}</CardTitle>
+          {measurementType ? (
+            <MetricTag
+              measurementType={measurementType}
+              notForClientReporting={notForClientReporting}
+            />
+          ) : null}
+        </div>
       </CardHeader>
       <CardContent className="pb-3">
         <div className="font-display text-3xl font-normal tracking-tight text-slate-900">

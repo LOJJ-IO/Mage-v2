@@ -3,6 +3,7 @@ from typing import Dict, Optional, List, Protocol
 from pydantic import ValidationError
 from app.models.schemas import (
     GuestProfile,
+    GuestAccountTier,
     Ticket,
     TicketStatus,
     ConversationContext,
@@ -312,6 +313,33 @@ class DatabaseProtocol(Protocol):
         """List metrics events newest first."""
         ...
 
+    def list_dev_internal_guest_ids(self) -> List[str]:
+        """Guest IDs with account_tier=dev_internal (excluded from dashboard metrics)."""
+        ...
+
+    def list_transcript_flags(
+        self,
+        *,
+        category: Optional[str] = None,
+    ) -> List[dict]:
+        """List demo transcript bookmarks."""
+        ...
+
+    def upsert_transcript_flag(
+        self,
+        *,
+        guest_id: str,
+        session_id: str,
+        category: str,
+        note: Optional[str] = None,
+    ) -> dict:
+        """Bookmark a conversation session for demo walk-through."""
+        ...
+
+    def delete_transcript_flag(self, guest_id: str, session_id: str) -> bool:
+        """Remove a transcript bookmark."""
+        ...
+
     # --- Staff members ---
 
     def create_staff_request(
@@ -494,6 +522,7 @@ class MockDatabase(PropertyStoreMixin):
                 phone="+1 555-0123",
                 membership_tier="Platinum",
                 property_id=pid,
+                account_tier=GuestAccountTier.DEV_INTERNAL,
             ),
             "guest-002": GuestProfile(
                 id="guest-002",
@@ -506,6 +535,7 @@ class MockDatabase(PropertyStoreMixin):
                 phone="+1 555-0456",
                 membership_tier="Gold",
                 property_id=pid,
+                account_tier=GuestAccountTier.DEV_INTERNAL,
             )
         }
         
@@ -520,6 +550,7 @@ class MockDatabase(PropertyStoreMixin):
         self.conversations: Dict[str, List[Dict[str, str]]] = {}
         self.metrics_db_enabled: bool = False
         self.metrics_events: List[dict] = []
+        self.transcript_flags: Dict[str, dict] = {}
         self._init_property_stores()
     
     # Guest operations
@@ -890,6 +921,50 @@ class MockDatabase(PropertyStoreMixin):
                 break
         return out
 
+    def list_dev_internal_guest_ids(self) -> List[str]:
+        return [
+            gid
+            for gid, guest in self.guests.items()
+            if guest.account_tier == GuestAccountTier.DEV_INTERNAL
+        ]
+
+    def list_transcript_flags(self, *, category: Optional[str] = None) -> List[dict]:
+        rows = list(self.transcript_flags.values())
+        if category:
+            rows = [r for r in rows if r.get("category") == category]
+        rows.sort(key=lambda r: r.get("updated_at", ""), reverse=True)
+        return rows
+
+    def upsert_transcript_flag(
+        self,
+        *,
+        guest_id: str,
+        session_id: str,
+        category: str,
+        note: Optional[str] = None,
+    ) -> dict:
+        key = f"{guest_id}:{session_id}"
+        now = datetime.utcnow().isoformat()
+        existing = self.transcript_flags.get(key)
+        row = {
+            "id": existing.get("id") if existing else str(uuid.uuid4()),
+            "guest_id": guest_id,
+            "session_id": session_id,
+            "category": category,
+            "note": note or "",
+            "created_at": existing.get("created_at", now) if existing else now,
+            "updated_at": now,
+        }
+        self.transcript_flags[key] = row
+        return row
+
+    def delete_transcript_flag(self, guest_id: str, session_id: str) -> bool:
+        key = f"{guest_id}:{session_id}"
+        if key in self.transcript_flags:
+            del self.transcript_flags[key]
+            return True
+        return False
+
     # --- Staff members (mock) ---
 
     def _next_staff_code(self) -> str:
@@ -1021,7 +1096,7 @@ class SupabaseDatabase(PropertyStoreSupabase):
     def create_guest(self, guest: GuestProfile) -> GuestProfile:
         """Create a new guest."""
         try:
-            guest_dict = guest.model_dump()
+            guest_dict = guest.model_dump(mode="json")
             response = self.client.table("guests").insert(guest_dict).execute()
             if response.data and len(response.data) > 0:
                 return GuestProfile(**response.data[0])
@@ -1639,6 +1714,86 @@ class SupabaseDatabase(PropertyStoreSupabase):
         except Exception as e:
             logger.error("Error listing metrics events: %s", e)
             return []
+
+    def list_dev_internal_guest_ids(self) -> List[str]:
+        try:
+            response = (
+                self.client.table("guests")
+                .select("id")
+                .eq("account_tier", GuestAccountTier.DEV_INTERNAL.value)
+                .execute()
+            )
+            return [str(row["id"]) for row in (response.data or [])]
+        except Exception as e:
+            logger.warning("list_dev_internal_guest_ids failed: %s", e)
+            return []
+
+    def list_transcript_flags(self, *, category: Optional[str] = None) -> List[dict]:
+        try:
+            query = (
+                self.client.table("metrics_transcript_flags")
+                .select("*")
+                .order("updated_at", desc=True)
+            )
+            if category:
+                query = query.eq("category", category)
+            response = query.execute()
+            return response.data or []
+        except Exception as e:
+            logger.warning("list_transcript_flags failed (run prebeta migration?): %s", e)
+            return []
+
+    def upsert_transcript_flag(
+        self,
+        *,
+        guest_id: str,
+        session_id: str,
+        category: str,
+        note: Optional[str] = None,
+    ) -> dict:
+        now = datetime.utcnow().isoformat()
+        row = {
+            "guest_id": guest_id,
+            "session_id": session_id,
+            "category": category,
+            "note": note or "",
+            "updated_at": now,
+        }
+        try:
+            existing = (
+                self.client.table("metrics_transcript_flags")
+                .select("id, created_at")
+                .eq("guest_id", guest_id)
+                .eq("session_id", session_id)
+                .limit(1)
+                .execute()
+            )
+            if existing.data:
+                row["id"] = existing.data[0]["id"]
+                row["created_at"] = existing.data[0].get("created_at", now)
+            else:
+                row["created_at"] = now
+            response = (
+                self.client.table("metrics_transcript_flags")
+                .upsert(row, on_conflict="guest_id,session_id")
+                .execute()
+            )
+            if response.data:
+                return response.data[0]
+            return row
+        except Exception as e:
+            logger.error("upsert_transcript_flag failed: %s", e)
+            raise
+
+    def delete_transcript_flag(self, guest_id: str, session_id: str) -> bool:
+        try:
+            self.client.table("metrics_transcript_flags").delete().eq(
+                "guest_id", guest_id
+            ).eq("session_id", session_id).execute()
+            return True
+        except Exception as e:
+            logger.error("delete_transcript_flag failed: %s", e)
+            return False
 
 
 def _resolve_database_type(settings) -> str:
