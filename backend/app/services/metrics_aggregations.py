@@ -5,16 +5,6 @@ import statistics
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
-import re
-
-_PHRASE_STOPWORDS = frozenset({
-    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "can", "i", "me", "my", "we", "our", "you",
-    "your", "it", "its", "this", "that", "these", "those", "to", "of",
-    "in", "for", "on", "with", "at", "by", "from", "as", "and", "or", "but",
-    "not", "no", "yes", "please", "thanks", "thank", "hi", "hello", "hey",
-})
 
 
 def _parse_ts(value: Any) -> Optional[datetime]:
@@ -381,87 +371,3 @@ def recent_wins(events: List[dict], limit: int = 10) -> List[Dict[str, Any]]:
         if len(wins) >= limit:
             break
     return wins
-
-
-def _normalize_phrase(text: str) -> str:
-    cleaned = re.sub(r"[^\w\s'?-]", " ", (text or "").lower())
-    return " ".join(cleaned.split()).strip()
-
-
-def _extract_ngrams(words: List[str], n: int) -> List[str]:
-    if len(words) < n:
-        return []
-    return [" ".join(words[i : i + n]) for i in range(len(words) - n + 1)]
-
-
-def aggregate_phrases(events: List[dict], limit: int = 36) -> List[Dict[str, Any]]:
-    """Most repeated guest questions/phrases for word cloud."""
-    counts: Counter[str] = Counter()
-
-    for ev in events:
-        meta = ev.get("metadata") or {}
-        if ev.get("event_type") == "faq_feedback":
-            raw = meta.get("trigger_content") or ""
-        elif ev.get("event_type") == "routing":
-            raw = meta.get("user_message_preview") or ""
-        else:
-            continue
-
-        phrase = _normalize_phrase(str(raw))
-        if len(phrase) < 6:
-            continue
-
-        words = [w for w in phrase.split() if w not in _PHRASE_STOPWORDS and len(w) > 1]
-        if not words:
-            continue
-
-        counts[phrase] += 1
-        for n in (2, 3):
-            for gram in _extract_ngrams(words, n):
-                if len(gram) >= 8:
-                    counts[gram] += 1
-
-    return [{"text": text, "count": count} for text, count in counts.most_common(limit)]
-
-
-def marketing_chart_splits(events: List[dict], happiness_threshold: int) -> Dict[str, Any]:
-    routing = _routing_events(events)
-    total = len(routing)
-    escalations = sum(1 for e in routing if _is_escalation(e))
-    handled = max(0, total - escalations)
-
-    guest_scores: Dict[str, int] = {}
-    for ev in events:
-        gid = ev.get("guest_id")
-        score = ev.get("happiness_score")
-        if gid and score is not None:
-            guest_scores[str(gid)] = int(score)
-    for ev in events:
-        if ev.get("event_type") != "sentiment":
-            continue
-        gid = ev.get("guest_id")
-        score = ev.get("happiness_score")
-        if gid and score is not None:
-            guest_scores[str(gid)] = int(score)
-
-    happy = sum(1 for s in guest_scores.values() if s >= happiness_threshold)
-    unhappy = max(0, len(guest_scores) - happy)
-
-    ability_counts: Counter[str] = Counter()
-    for ev in routing:
-        ab = ev.get("ability_executed") or ((ev.get("abilities") or ["?"])[0])
-        ability_counts[str(ab)] += 1
-
-    return {
-        "handled_vs_escalated": [
-            {"name": "Handled", "value": handled},
-            {"name": "Escalated", "value": escalations},
-        ],
-        "satisfaction_split": [
-            {"name": "Happy", "value": happy},
-            {"name": "Needs attention", "value": unhappy},
-        ],
-        "ability_mix": [
-            {"name": k, "value": v} for k, v in ability_counts.most_common(8)
-        ],
-    }

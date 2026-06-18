@@ -25,6 +25,7 @@ import {
   TaskSortKey,
 } from './staffTaskQuery';
 import { ActionType, StaffActionStatus } from '@/types';
+import type { StaffRole } from '@/lib/staffPermissions';
 import { useStaffInboxThreads, useUpdateStaffAction } from '@/hooks/useStaffApi';
 import { countDirectGuestChatPending } from './staffNotifications';
 import {
@@ -38,6 +39,9 @@ interface StaffWorkspaceProps {
   staffKey: string;
   isLoading: boolean;
   pendingCount: number;
+  staffRole: StaffRole;
+  allowedNav: StaffNavId[];
+  allowedActionTypes: ActionType[];
   onSelect: (id: string) => void;
   onLogout: () => void;
 }
@@ -67,6 +71,9 @@ export function StaffWorkspace({
   staffKey,
   isLoading,
   pendingCount,
+  staffRole: _staffRole,
+  allowedNav,
+  allowedActionTypes,
   onSelect,
   onLogout,
 }: StaffWorkspaceProps) {
@@ -79,7 +86,8 @@ export function StaffWorkspace({
     [searchParams]
   );
 
-  const [activeNav, setActiveNav] = useState<StaffNavId>('tasks');
+  const defaultNav: StaffNavId = allowedNav.includes('tasks') ? 'tasks' : (allowedNav[0] ?? 'tasks');
+  const [activeNav, setActiveNav] = useState<StaffNavId>(defaultNav);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [filters, setFilters] = useState<TaskFilters>(queryState.filters);
   const [sortKey, setSortKey] = useState<TaskSortKey>(queryState.sortKey);
@@ -91,8 +99,8 @@ export function StaffWorkspace({
 
   useEffect(() => {
     const nav = parseStaffNavId(searchParams.get('nav'));
-    if (nav) setActiveNav(nav);
-  }, [searchParams]);
+    if (nav && allowedNav.includes(nav)) setActiveNav(nav);
+  }, [searchParams, allowedNav]);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -148,9 +156,14 @@ export function StaffWorkspace({
     persistTaskView(DEFAULT_TASK_FILTERS, DEFAULT_TASK_SORT);
   };
 
+  const roleFilteredActions = useMemo(
+    () => actions.filter((a) => allowedActionTypes.includes(a.actionType)),
+    [actions, allowedActionTypes]
+  );
+
   const navScopedActions = useMemo(
-    () => filterByNav(actions, activeNav),
-    [actions, activeNav]
+    () => filterByNav(roleFilteredActions, activeNav),
+    [roleFilteredActions, activeNav]
   );
 
   const availableFloors = useMemo(() => getAvailableFloors(navScopedActions), [navScopedActions]);
@@ -166,7 +179,7 @@ export function StaffWorkspace({
   );
   const columns = useMemo(() => groupByStatus(sortedActions), [sortedActions]);
 
-  const guestUnreadCount = useMemo(() => countDirectGuestChatPending(actions), [actions]);
+  const guestUnreadCount = useMemo(() => countDirectGuestChatPending(roleFilteredActions), [roleFilteredActions]);
   const { data: inboxThreads = [] } = useStaffInboxThreads(staffKey);
   const guestMessageCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -187,6 +200,7 @@ export function StaffWorkspace({
         activeNav={activeNav}
         pendingCount={pendingCount}
         guestUnreadCount={guestUnreadCount}
+        allowedNav={allowedNav}
         onNavChange={setActiveNav}
         onLogout={onLogout}
         mobileOpen={mobileNavOpen}
@@ -211,7 +225,7 @@ export function StaffWorkspace({
         <div className="flex min-h-0 flex-1 flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
         {(activeNav === 'tasks' || activeNav === 'assigned') && (
           <StaffKanbanBoard
-            allActions={actions}
+            allActions={roleFilteredActions}
             todo={columns.todo}
             ongoing={columns.ongoing}
             done={columns.done}
@@ -237,8 +251,19 @@ export function StaffWorkspace({
           </div>
         )}
         {activeNav === 'schedule' && <StaffScheduleView staffKey={staffKey} />}
-        {activeNav === 'review' && <StaffReviewDashboard actions={actions} staffKey={staffKey} />}
-        {activeNav === 'help-desk' && <StaffHelpDesk staffKey={staffKey} />}
+        {activeNav === 'review' && <StaffReviewDashboard actions={roleFilteredActions} staffKey={staffKey} />}
+        {activeNav === 'help-desk' && (
+          <StaffHelpDesk
+            staffKey={staffKey}
+            taskActionId={searchParams.get('task') ?? undefined}
+            onBackToTask={() => {
+              const params = new URLSearchParams(searchParams.toString());
+              params.delete('task');
+              router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+              setActiveNav('tasks');
+            }}
+          />
+        )}
         {activeNav === 'knowledge' && (
           <div className="flex min-h-0 flex-1 overflow-hidden">
             <StaffKnowledgeOnboarding staffKey={staffKey} embedded />
@@ -262,6 +287,7 @@ export function StaffWorkspace({
       <StaffMobileBottomNav
         activeNav={activeNav}
         guestUnreadCount={guestUnreadCount}
+        allowedNav={allowedNav}
         onNavChange={setActiveNav}
         onOpenMenu={() => setMobileNavOpen(true)}
       />

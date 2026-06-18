@@ -1,14 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardApi } from '@/lib/dashboardApi';
 import { DashboardShell } from './DashboardShell';
 import { KpiCard } from './KpiCard';
 import { BlurFade } from './BlurFade';
 import { VolumeAreaChart } from './charts/VolumeAreaChart';
-import { SimplePieChart } from './charts/SimplePieChart';
-import { PhraseWordCloud } from './charts/PhraseWordCloud';
 import { DateRangeSelect } from './DateRangeSelect';
 import { TrackingBanner } from './TrackingBanner';
 import {
@@ -20,11 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-
-function lastSparkline(values: number[], length = 14): number[] {
-  const slice = values.slice(-length);
-  return slice.length ? slice : [0, 0];
-}
+import { useState } from 'react';
 
 export function MarketingOverview() {
   const [days, setDays] = useState(30);
@@ -41,32 +34,8 @@ export function MarketingOverview() {
     refetchInterval: 60_000,
   });
 
-  const latencyQuery = useQuery({
-    queryKey: ['dashboard-timeseries-latency', days],
-    queryFn: () => dashboardApi.getTimeseries('latency', days),
-    refetchInterval: 60_000,
-  });
-
   const s = summaryQuery.data?.summary;
   const wins = summaryQuery.data?.recent_wins ?? [];
-  const splits = summaryQuery.data?.chart_splits;
-  const phrases = summaryQuery.data?.phrase_cloud ?? [];
-
-  const sparklines = useMemo(() => {
-    const series = seriesQuery.data?.series ?? [];
-    const avoided = series.map((d) => Math.max(0, d.messages - d.escalations));
-    const handledPct = series.map((d) =>
-      d.messages > 0 ? ((d.messages - d.escalations) / d.messages) * 100 : 0
-    );
-    const latency = (latencyQuery.data?.series ?? []).map((d) => d.value / 1000);
-    const activity = series.map((d) => d.messages);
-    return {
-      avoided: lastSparkline(avoided),
-      handledPct: lastSparkline(handledPct),
-      latency: lastSparkline(latency),
-      activity: lastSparkline(activity),
-    };
-  }, [seriesQuery.data, latencyQuery.data]);
 
   return (
     <DashboardShell
@@ -84,8 +53,6 @@ export function MarketingOverview() {
             subtitle={`~${Math.round((s?.time_saved_minutes ?? 0) / 60)} labor hours saved`}
             trend="up"
             trendLabel={`$${(s?.labor_saved_usd ?? 0).toLocaleString()} saved`}
-            sparklineData={sparklines.avoided}
-            sparklineColor="#05944F"
           />
         </BlurFade>
         <BlurFade delay={80}>
@@ -96,8 +63,6 @@ export function MarketingOverview() {
             subtitle={`${s?.happy_guests ?? 0} happy guests scored`}
             trend="up"
             trendLabel="Positive sentiment"
-            sparklineData={sparklines.activity}
-            sparklineColor="#276EF1"
           />
         </BlurFade>
         <BlurFade delay={160}>
@@ -109,8 +74,6 @@ export function MarketingOverview() {
             subtitle={`p95 ${((s?.p95_response_ms ?? 0) / 1000).toFixed(2)}s`}
             trend="up"
             trendLabel="Instant answers"
-            sparklineData={sparklines.latency}
-            sparklineColor="#8B5CF6"
           />
         </BlurFade>
         <BlurFade delay={240}>
@@ -121,8 +84,6 @@ export function MarketingOverview() {
             subtitle={`${s?.escalation_rate_pct ?? 0}% escalation rate`}
             trend="up"
             trendLabel={`${s?.total_messages ?? 0} total messages`}
-            sparklineData={sparklines.handledPct}
-            sparklineColor="#14B8A6"
           />
         </BlurFade>
       </div>
@@ -135,58 +96,22 @@ export function MarketingOverview() {
         </div>
         <BlurFade delay={400}>
           <div className="grid gap-4">
-            <KpiCard
-              title="Daily active guests"
-              value={s?.dau ?? 0}
-              subtitle={`${s?.wau ?? 0} weekly active`}
-              sparklineData={sparklines.activity}
-              sparklineColor="#05944F"
-            />
+            <KpiCard title="Daily active guests" value={s?.dau ?? 0} subtitle={`${s?.wau ?? 0} weekly active`} />
             <KpiCard
               title="Week-over-week growth"
               value={s?.wow_growth_pct ?? 0}
               suffix="%"
               trend={(s?.wow_growth_pct ?? 0) >= 0 ? 'up' : 'down'}
               trendLabel="Message volume momentum"
-              sparklineData={sparklines.activity}
-              sparklineColor="#F59E0B"
             />
           </div>
         </BlurFade>
       </div>
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-3">
-        <BlurFade delay={440}>
-          <SimplePieChart
-            title="Handled vs escalated"
-            description="Share of conversations resolved without staff"
-            data={splits?.handled_vs_escalated ?? []}
-          />
-        </BlurFade>
-        <BlurFade delay={480}>
-          <SimplePieChart
-            title="Guest sentiment"
-            description="Happy vs needs-attention scores"
-            data={splits?.satisfaction_split ?? []}
-          />
-        </BlurFade>
-        <BlurFade delay={520}>
-          <SimplePieChart
-            title="Ability mix"
-            description="Which routing paths guests trigger most"
-            data={splits?.ability_mix ?? []}
-          />
-        </BlurFade>
-      </div>
-
-      <BlurFade delay={560} className="mt-6">
-        <PhraseWordCloud phrases={phrases} />
-      </BlurFade>
-
-      <BlurFade delay={600} className="mt-6">
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+      <BlurFade delay={480} className="mt-6">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-6 py-4">
-            <h3 className="font-heading text-lg font-semibold">Recent wins</h3>
+            <h3 className="text-lg font-semibold">Recent wins</h3>
             <p className="text-sm text-slate-500">Guest-friendly outcomes — no staff required</p>
           </div>
           <Table>
@@ -215,7 +140,7 @@ export function MarketingOverview() {
                     <TableCell>
                       {row.response_ms != null ? `${(row.response_ms / 1000).toFixed(2)}s` : '—'}
                     </TableCell>
-                    <TableCell className="font-display">
+                    <TableCell>
                       {row.happiness_score != null ? `${row.happiness_score}/100` : '—'}
                     </TableCell>
                   </TableRow>

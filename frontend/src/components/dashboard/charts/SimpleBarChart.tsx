@@ -22,7 +22,7 @@ export function SimpleBarChart({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="font-heading text-base">{title}</CardTitle>
+        <CardTitle>{title}</CardTitle>
         {description ? <CardDescription>{description}</CardDescription> : null}
       </CardHeader>
       <CardContent>

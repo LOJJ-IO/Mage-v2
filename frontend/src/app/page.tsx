@@ -1,17 +1,20 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { StateRenderer } from '@/components/StateRenderer';
 import { SignInScreen } from '@/components/SignInScreen';
 import { HydrationGate } from '@/components/HydrationGate';
 import { useMageStore } from '@/store/mageStore';
 import { useAgentAvailabilityWebSocket } from '@/hooks/useAgentAvailabilityWebSocket';
 import { apiClient } from '@/lib/api';
+import { ALLOW_DEV_LOGIN } from '@/lib/onboarding';
 import { GuestProfile } from '@/types';
 
 type HomeView = 'loading' | 'sign-in' | 'app';
 
 export default function Home() {
+  const router = useRouter();
   const { context, guestProfile, setGuestProfile } = useMageStore();
   const [view, setView] = useState<HomeView>('loading');
   const didInitRef = useRef(false);
@@ -38,7 +41,11 @@ export default function Home() {
       }
 
       if (!guestId && !useMageStore.getState().guestProfile) {
-        setView('sign-in');
+        if (ALLOW_DEV_LOGIN) {
+          setView('sign-in');
+        } else {
+          router.replace('/onboard');
+        }
         return;
       }
 

@@ -9,6 +9,8 @@ from urllib.parse import unquote
 
 from app.api.staff import verify_staff_key
 from app.core.config import get_settings
+from app.models.schemas import StaffRole
+from app.services.staff_permissions import StaffContext, require_role
 from app.knowledge.pipeline.booking_seed import augment_seeds_with_booking, suggest_booking_for_seed
 from app.knowledge.pipeline.crawl_scope import collect_seed_urls, property_id_from_url
 from app.knowledge.property_helpers import ensure_property_for_crawl
@@ -51,7 +53,7 @@ async def patch_fact(
     property_id: str,
     slot_key: str,
     body: PropertyFactPatch,
-    _: None = Depends(verify_staff_key),
+    _: StaffContext = Depends(require_role(StaffRole.MANAGER, StaffRole.FRONT_DESK)),
 ):
     slot_key = unquote(slot_key)
     slots = slot_by_key()
@@ -76,7 +78,10 @@ async def patch_fact(
 
 
 @router.post("/publish/{property_id}")
-async def publish(property_id: str, _: None = Depends(verify_staff_key)):
+async def publish(
+    property_id: str,
+    _: StaffContext = Depends(require_role(StaffRole.MANAGER, StaffRole.FRONT_DESK)),
+):
     try:
         snapshot = publish_snapshot(property_id, published_by="staff")
         return snapshot
@@ -85,7 +90,10 @@ async def publish(property_id: str, _: None = Depends(verify_staff_key)):
 
 
 @router.post("/seed/{property_id}")
-async def seed_demo(property_id: str, _: None = Depends(verify_staff_key)):
+async def seed_demo(
+    property_id: str,
+    _: StaffContext = Depends(require_role(StaffRole.MANAGER, StaffRole.FRONT_DESK)),
+):
     """Seed Grand Horizon-equivalent facts (dev/demo)."""
     seed_grand_horizon_facts(property_id)
     facts = get_database().list_property_facts(property_id)
@@ -119,7 +127,7 @@ async def booking_suggest(seed_url: str, _: None = Depends(verify_staff_key)):
 async def start_crawl(
     body: CrawlJobRequest,
     background_tasks: BackgroundTasks,
-    _: None = Depends(verify_staff_key),
+    _: StaffContext = Depends(require_role(StaffRole.MANAGER, StaffRole.FRONT_DESK)),
 ):
     db = get_database()
     seeds = collect_seed_urls(body.seed_url, body.seed_urls)
@@ -170,7 +178,7 @@ async def get_knowledge_gaps(property_id: str, _: None = Depends(verify_staff_ke
 async def save_knowledge_gap_answer(
     property_id: str,
     body: KnowledgeGapAnswerRequest,
-    _: None = Depends(verify_staff_key),
+    _: StaffContext = Depends(require_role(StaffRole.MANAGER, StaffRole.FRONT_DESK)),
 ):
     """Persist staff answer for a recurring guest question gap."""
     db = get_database()

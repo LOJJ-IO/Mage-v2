@@ -1,12 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   formatFactValue,
   type PropertyFact,
   type Slot,
 } from '@/components/knowledge';
 import '@/components/staff/helpDesk.css';
+import { apiClient, type TaskAssistMessage } from '@/lib/api';
+import type { StaffAction } from '@/types';
 import {
   buildCategoryCards,
   buildHelpDeskNav,
@@ -21,8 +23,261 @@ import { useMediaQuery } from '@/hooks/useResizableWidth';
 
 const DEFAULT_PROPERTY_ID = process.env.NEXT_PUBLIC_PROPERTY_ID || 'grand-horizon';
 
+function buildPrefill(action: StaffAction): string {
+  const type = action.actionType.toUpperCase();
+  const guest = action.guestName ?? 'Guest';
+  const room = action.roomNumber ? `· Room ${action.roomNumber} ` : '';
+  return `[${type}] ${guest} ${room}· ${action.status}\n"${action.sourceMessage}"\n\nNotes: `;
+}
+
+function TaskAssistMode({
+  staffKey,
+  actionId,
+  onBack,
+}: {
+  staffKey: string;
+  actionId: string;
+  onBack?: () => void;
+}) {
+  const [action, setAction] = useState<StaffAction | null>(null);
+  const [messages, setMessages] = useState<TaskAssistMessage[]>([]);
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const threadEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoadError(null);
+      const [actionRes, threadRes] = await Promise.all([
+        fetch(`/api/staff/actions/${encodeURIComponent(actionId)}`, {
+          headers: { 'X-Staff-Key': staffKey },
+        }),
+        apiClient.getTaskAssistThread(staffKey, actionId),
+      ]);
+      if (cancelled) return;
+      if (actionRes.ok) {
+        const raw = (await actionRes.json()) as Record<string, unknown>;
+        setAction({
+          id: String(raw.id),
+          guestId: String(raw.guest_id),
+          actionType: String(raw.action_type) as StaffAction['actionType'],
+          summary: String(raw.summary),
+          sourceMessage: String(raw.source_message),
+          status: String(raw.status) as StaffAction['status'],
+          createdAt: String(raw.created_at),
+          guestName: raw.guest_name ? String(raw.guest_name) : undefined,
+          roomNumber: raw.room_number ? String(raw.room_number) : undefined,
+          escalationType: String(raw.escalation_type ?? 'normal') as StaffAction['escalationType'],
+          allowStaffJumpIn: Boolean(raw.allow_staff_jump_in ?? true),
+          guestConversationThreadId: raw.guest_conversation_thread_id
+            ? String(raw.guest_conversation_thread_id)
+            : undefined,
+        } satisfies StaffAction);
+
+        if (threadRes.success && threadRes.data && threadRes.data.messages.length > 0) {
+          setMessages(threadRes.data.messages);
+          setDraft('');
+        } else {
+          const prefill = buildPrefill({
+            id: String(raw.id),
+            guestId: String(raw.guest_id),
+            actionType: String(raw.action_type) as StaffAction['actionType'],
+            summary: String(raw.summary),
+            sourceMessage: String(raw.source_message),
+            status: String(raw.status) as StaffAction['status'],
+            createdAt: String(raw.created_at),
+            guestName: raw.guest_name ? String(raw.guest_name) : undefined,
+            roomNumber: raw.room_number ? String(raw.room_number) : undefined,
+            escalationType: String(raw.escalation_type ?? 'normal') as StaffAction['escalationType'],
+            allowStaffJumpIn: Boolean(raw.allow_staff_jump_in ?? true),
+          } satisfies StaffAction);
+          setDraft(prefill);
+        }
+      } else {
+        setLoadError('Could not load task details.');
+      }
+    }
+    void load();
+    return () => { cancelled = true; };
+  }, [staffKey, actionId]);
+
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSend = async () => {
+    const text = draft.trim();
+    if (!text || sending) return;
+    setSending(true);
+    const result = await apiClient.sendTaskAssistMessage(staffKey, actionId, text);
+    setSending(false);
+    if (result.success && result.data) {
+      setMessages(result.data.messages);
+      setDraft('');
+    }
+  };
+
+  return (
+    <div className="help-desk staff-ui" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <header className="help-desk-topbar" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              color: 'var(--neutral-500, #737373)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            ← Back
+          </button>
+        )}
+        <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>
+          <span aria-hidden style={{ marginRight: '0.25rem' }}>✦</span>Help desk — Task assist
+        </span>
+      </header>
+
+      {loadError ? (
+        <div style={{ padding: '2rem', color: '#ef4444' }}>{loadError}</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          {action && (
+            <div
+              style={{
+                padding: '0.75rem 1.25rem',
+                borderBottom: '1px solid var(--neutral-200, #e5e5e5)',
+                background: 'var(--neutral-50, #fafafa)',
+                fontSize: '0.8125rem',
+              }}
+            >
+              <span
+                style={{
+                  display: 'inline-block',
+                  background: '#dbeafe',
+                  color: '#1e40af',
+                  borderRadius: '9999px',
+                  padding: '0.125rem 0.625rem',
+                  fontWeight: 600,
+                  fontSize: '0.75rem',
+                  marginRight: '0.5rem',
+                }}
+              >
+                {action.actionType}
+              </span>
+              {action.guestName && <span style={{ fontWeight: 500 }}>{action.guestName}</span>}
+              {action.roomNumber && <span style={{ color: '#737373' }}> · Room {action.roomNumber}</span>}
+              <span
+                style={{
+                  marginLeft: '0.5rem',
+                  color: '#737373',
+                  fontSize: '0.75rem',
+                  textTransform: 'capitalize',
+                }}
+              >
+                {action.status}
+              </span>
+              <p
+                style={{
+                  marginTop: '0.375rem',
+                  color: '#525252',
+                  fontStyle: 'italic',
+                  borderLeft: '2px solid #e5e7eb',
+                  paddingLeft: '0.625rem',
+                }}
+              >
+                &ldquo;{action.sourceMessage}&rdquo;
+              </p>
+            </div>
+          )}
+
+          <div
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '1rem 1.25rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.75rem',
+            }}
+          >
+            {messages.length === 0 && !action && (
+              <p style={{ color: '#737373', fontSize: '0.875rem' }}>Loading…</p>
+            )}
+            {messages.map((msg, idx) => (
+              <div
+                key={idx}
+                style={{
+                  display: 'flex',
+                  justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                }}
+              >
+                <div
+                  style={{
+                    maxWidth: '78%',
+                    borderRadius: '0.75rem',
+                    padding: '0.625rem 0.875rem',
+                    fontSize: '0.875rem',
+                    lineHeight: 1.55,
+                    background: msg.role === 'user' ? '#1d4ed8' : '#f3f4f6',
+                    color: msg.role === 'user' ? '#fff' : '#171717',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {msg.role === 'assistant' && (
+                    <p style={{ fontSize: '0.7rem', fontWeight: 600, color: '#6b7280', marginBottom: '0.25rem' }}>
+                      ✦ Assistant
+                    </p>
+                  )}
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+            <div ref={threadEndRef} />
+          </div>
+
+          <div className="help-desk-assistant-footer" style={{ padding: '0.875rem 1.25rem' }}>
+            <div className="help-desk-assistant-input-wrap">
+              <textarea
+                className="help-desk-assistant-input"
+                rows={3}
+                placeholder="Describe the task or add notes…"
+                value={draft}
+                disabled={sending}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    void handleSend();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="help-desk-assistant-send"
+                disabled={!draft.trim() || sending}
+                onClick={() => void handleSend()}
+              >
+                {sending ? '…' : 'Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface StaffHelpDeskProps {
   staffKey: string;
+  taskActionId?: string;
+  onBackToTask?: () => void;
 }
 
 function staffFetch(path: string, staffKey: string, init?: RequestInit) {
@@ -42,7 +297,14 @@ function getSlotAnswer(fact: PropertyFact | undefined): string | null {
   return formatFactValue(fact.value);
 }
 
-export function StaffHelpDesk({ staffKey }: StaffHelpDeskProps) {
+export function StaffHelpDesk({ staffKey, taskActionId, onBackToTask }: StaffHelpDeskProps) {
+  if (taskActionId) {
+    return <TaskAssistMode staffKey={staffKey} actionId={taskActionId} onBack={onBackToTask} />;
+  }
+  return <StaffHelpDeskBrowse staffKey={staffKey} />;
+}
+
+function StaffHelpDeskBrowse({ staffKey }: { staffKey: string }) {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [facts, setFacts] = useState<Record<string, PropertyFact>>({});
   const [loading, setLoading] = useState(true);

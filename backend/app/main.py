@@ -9,7 +9,7 @@ from datetime import datetime
 from app.core.config import get_settings
 from app.models.schemas import HealthResponse
 from app.services.database import get_database
-from app.api import chat, tickets, guests, agents, transcription, staff, auth, staff_knowledge, webhooks, dashboard
+from app.api import chat, tickets, guests, agents, transcription, staff, auth, staff_knowledge, webhooks, dashboard, onboarding_staff, task_assist
 from app.services import transcription_service
 
 settings = get_settings()
@@ -91,6 +91,8 @@ app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(staff_knowledge.router, prefix=settings.api_prefix)
 app.include_router(webhooks.router, prefix=settings.api_prefix)
 app.include_router(dashboard.router, prefix=settings.api_prefix)
+app.include_router(onboarding_staff.router, prefix=settings.api_prefix)
+app.include_router(task_assist.router, prefix=settings.api_prefix)
 
 
 @app.get("/")

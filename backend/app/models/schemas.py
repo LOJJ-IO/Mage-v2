@@ -189,6 +189,29 @@ class GuestEmailSignInRequest(BaseModel):
     property_id: Optional[str] = None
 
 
+class GuestRegisterRequest(BaseModel):
+    """Self-serve guest registration — creates email verification."""
+    name: str = Field(..., min_length=1, max_length=200)
+    email: str = Field(..., min_length=3, max_length=320)
+    booking_id: str = Field(..., min_length=1, max_length=100)
+    room_number: Optional[str] = Field(None, max_length=20)
+    check_in: datetime
+    check_out: datetime
+    property_id: Optional[str] = None
+
+
+class GuestVerifyEmailRequest(BaseModel):
+    """Consume an email-verification token."""
+    token: str = Field(..., min_length=8)
+
+
+class GuestSignInByBookingRequest(BaseModel):
+    """Returning guest: name + booking_id → session cookie."""
+    name: str = Field(..., min_length=1, max_length=200)
+    booking_id: str = Field(..., min_length=1, max_length=100)
+    property_id: Optional[str] = None
+
+
 class PropertyFactPatch(BaseModel):
     """Staff edit of a single knowledge slot."""
     value: Optional[object] = None
@@ -275,3 +298,46 @@ class HealthResponse(BaseModel):
     database_type: str = "mock"
     database_ok: bool = True
     database_error: Optional[str] = None
+
+
+# --- Onboarding models ---
+
+class StaffRole(str, Enum):
+    MANAGER = "manager"
+    FRONT_DESK = "front_desk"
+    MAINTENANCE = "maintenance"
+    HOUSEKEEPING = "housekeeping"
+    ROOM_SERVICE = "room_service"
+
+
+class StaffMemberStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class StaffMember(BaseModel):
+    id: str
+    property_id: str
+    staff_code: str
+    display_name: str
+    email: Optional[str] = None
+    requested_role: StaffRole
+    approved_role: Optional[StaffRole] = None
+    status: StaffMemberStatus = StaffMemberStatus.PENDING
+    access_key_hash: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    approved_at: Optional[datetime] = None
+    approved_by: Optional[str] = None
+
+
+class EmailVerification(BaseModel):
+    id: str
+    email: str
+    property_id: str
+    booking_id: str
+    guest_data: dict = Field(default_factory=dict)
+    token_hash: str
+    expires_at: datetime
+    verified_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)

@@ -33,16 +33,41 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'Season Mix';
+  src: url('/fonts/season-mix/SeasonMix-TRIAL-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Season Mix';
+  src: url('/fonts/season-mix/SeasonMix-TRIAL-Regular.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Season Mix';
+  src: url('/fonts/season-mix/SeasonMix-TRIAL-Regular.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Season Mix';
+  src: url('/fonts/season-mix/SeasonMix-TRIAL-Regular.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@layer base {
-  html,
-  body {
-    @apply font-sans antialiased;
-  }
-}
 
 @layer utilities {
   .animate-in {

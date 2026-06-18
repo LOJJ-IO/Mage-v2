@@ -7,7 +7,7 @@ export default function WelcomeRedirectPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace(`/${window.location.search}`);
+    router.replace(`/onboard${window.location.search}`);
   }, [router]);
 
   return null;

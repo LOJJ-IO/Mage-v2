@@ -37,7 +37,7 @@ export function DashboardShell({
         <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white p-6 lg:block">
           <div className="mb-10">
             <p className="text-xs font-semibold uppercase tracking-widest text-emerald-700">Mage</p>
-            <h2 className="font-heading mt-1 text-xl font-semibold text-slate-900">Analytics</h2>
+            <h2 className="mt-1 text-xl font-semibold text-slate-900">Analytics</h2>
           </div>
           <nav className="space-y-1">
             {NAV.map((item) => {
@@ -78,7 +78,7 @@ export function DashboardShell({
           <header className="border-b border-slate-200 bg-white/80 px-6 py-5 backdrop-blur">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h1 className="font-heading text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
                 {subtitle ? <p className="mt-1 text-sm text-slate-500">{subtitle}</p> : null}
               </div>
               {headerRight}

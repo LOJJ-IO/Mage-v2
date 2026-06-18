@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <DashboardKeyGate>
-      <div className="font-booton">{children}</div>
+      <div className="font-sans">{children}</div>
     </DashboardKeyGate>
   );
 }
