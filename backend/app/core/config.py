@@ -1,7 +1,15 @@
 import os
-from pydantic_settings import BaseSettings
-from pydantic import field_validator
 from functools import lru_cache
+
+from dotenv import load_dotenv
+from pydantic import field_validator
+from pydantic_settings import BaseSettings
+
+# Load .env into os.environ early so every os.getenv() call below picks it up.
+# override=True lets .env win over stale shell env vars (e.g. a leftover DEBUG=true).
+# On Vercel the file won't exist and load_dotenv silently no-ops, so this is safe.
+_env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".env")
+load_dotenv(_env_path, override=True)
 
 
 def _strip_url_scheme(host: str) -> str:
@@ -17,11 +25,13 @@ def resolve_frontend_url(
     """
     Public site URL for magic links.
 
-    Priority: FRONTEND_URL env → request Host/X-Forwarded-Host (what the guest typed)
-    → VERCEL_PROJECT_PRODUCTION_URL (stable prod alias) → VERCEL_URL (deployment id URL).
+    Production (DEBUG=false): FRONTEND_URL env → request Host → Vercel URLs → localhost.
+    Development (DEBUG=true):  skips FRONTEND_URL so links always point at localhost:3000,
+    not the production domain.
     """
+    debug_mode = os.getenv("DEBUG", "true").lower() not in ("0", "false", "no", "off")
     explicit = (os.getenv("FRONTEND_URL") or "").strip()
-    if explicit:
+    if explicit and not debug_mode:
         return explicit.rstrip("/")
 
     for host in (forwarded_host, request_host):
