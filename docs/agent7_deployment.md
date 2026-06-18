@@ -15,7 +15,7 @@ Open your Supabase project → SQL Editor and run each file in this exact order:
 5. `docs/supabase_metrics_migration.sql`
 6. `docs/supabase_dashboard_prebeta_migration.sql` (guest tiers + transcript flags — before demo period)
 
-Copy the **Project URL** and **service_role** key from Supabase → Project Settings → API — you'll need them below.
+Copy the **Project URL** and **service_role** key from Supabase → Project Settings → API — you'll need them below
 
 ---
 
