@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     
     # App settings
     app_name: str = "Mage API"
-    debug: bool = True
+    debug: bool = os.getenv("DEBUG", "true").lower() not in ("0", "false", "no", "off")
     
     # API settings
     api_prefix: str = "/api"
@@ -196,7 +196,7 @@ class Settings(BaseSettings):
     frontend_url: str = resolve_frontend_url()
     email_provider: str = os.getenv("EMAIL_PROVIDER", "")
     resend_api_key: str = os.getenv("RESEND_API_KEY", "")
-    resend_from_email: str = os.getenv("RESEND_FROM_EMAIL", "noreply@lojj.com")
+    resend_from_email: str = os.getenv("RESEND_FROM_EMAIL", "noreply@lojj.io")
     allow_dev_guest_login: bool = os.getenv(
         "ALLOW_DEV_GUEST_LOGIN", os.getenv("DEBUG", "true")
     ).lower() in ("1", "true", "yes")

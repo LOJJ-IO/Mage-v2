@@ -20,11 +20,9 @@ async def send_email(to: str, subject: str, body: str) -> bool:
     """Send a plain-text email. Never raises — logs on failure."""
     settings = get_settings()
 
-    if settings.debug:
-        logger.info("[EMAIL] to=%s subject=%r\n%s", to, subject, body)
-        return True
-
     if settings.resend_api_key:
+        if settings.debug:
+            logger.info("[EMAIL] to=%s subject=%r\n%s", to, subject, body)
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.post(
@@ -50,6 +48,13 @@ async def send_email(to: str, subject: str, body: str) -> bool:
         except Exception as exc:
             logger.error("[EMAIL] Resend request failed to %s: %s", to, exc)
             return False
+
+    if settings.debug:
+        logger.info(
+            "[EMAIL] No RESEND_API_KEY — logging only. to=%s subject=%r\n%s",
+            to, subject, body,
+        )
+        return True
 
     logger.warning(
         "[EMAIL] No provider configured (RESEND_API_KEY unset). Email NOT sent to %s subject=%r",
