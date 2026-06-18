@@ -4,16 +4,27 @@ module.exports = {
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/hooks/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
     extend: {
       fontFamily: {
-        clash: ['Clash Display', 'system-ui', 'sans-serif'],
-        heading: ['Season Mix', 'Clash Display', 'Georgia', 'serif'],
-        sans: ['Clash Display', 'system-ui', 'sans-serif'],
+        booton: ['Booton', 'Booton-TRIAL', 'system-ui', 'sans-serif'],
+        heading: ['Season Mix', 'Georgia', 'serif'],
+        display: ['Season Mix', 'Georgia', 'serif'],
+        sans: ['Booton', 'Booton-TRIAL', 'system-ui', 'sans-serif'],
       },
       colors: {
+        sidebar: {
+          DEFAULT: 'hsl(var(--sidebar-background))',
+          foreground: 'hsl(var(--sidebar-foreground))',
+          primary: 'hsl(var(--sidebar-primary))',
+          'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
+          accent: 'hsl(var(--sidebar-accent))',
+          'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
+          border: 'hsl(var(--sidebar-border))',
+          ring: 'hsl(var(--sidebar-ring))',
+        },
         // Uber-inspired palette
         'mage': {
           'black': '#000000',

@@ -2,9 +2,18 @@
 
 ## Clash Display
 
-Loaded via Fontshare in `src/styles/globals.css` (no files in this folder).
+Self-hosted trial cuts in `booton/` (from [Displaay Booton](https://displaay.net/typeface/booton)):
 
-## Season Mix (headings)
+- `Booton-TRIAL-Regular.otf` (400)
+- `Booton-TRIAL-Medium.otf` (500)
+- `Booton-TRIAL-SemiBold.otf` (600)
+- `Booton-TRIAL-Bold.otf` (700)
+
+`@font-face` rules live in `src/styles/globals.css`. Full family zip can stay in `booton-font-family/` as archive.
+
+`@font-face` rules live in `src/styles/globals.css`. Until files are added, the stack falls back to `system-ui`.
+
+## Season Mix (headings & display numbers)
 
 Files live in `season-mix/`. Currently using the trial Regular cut:
 
