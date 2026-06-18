@@ -1,4 +1,5 @@
-@import url('https://api.fontshare.com/v2/css?f[]=clash-display@200,300,400,500,600,700&display=swap');
+/* Booton (body/UI) — loaded from Fontshare CDN; optional self-hosted files in public/fonts/booton/ override */
+@import url('https://api.fontshare.com/v2/css?f[]=booton@400,500,600,700&display=swap');
 
 @font-face {
   font-family: 'Season Mix';
@@ -35,6 +36,13 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    @apply font-sans antialiased;
+  }
+}
 
 @layer utilities {
   .animate-in {
@@ -73,13 +81,15 @@
   --chart-3: #8b5cf6;
   --chart-4: #f59e0b;
   --chart-5: #e11900;
-  font-family: 'Clash Display', system-ui, sans-serif;
+  font-family: 'Booton', system-ui, sans-serif;
 }
 
 .dashboard-theme h1,
 .dashboard-theme h2,
-.dashboard-theme h3 {
-  font-family: 'Season Mix', 'Clash Display', Georgia, serif;
+.dashboard-theme h3,
+.dashboard-theme .font-heading,
+.dashboard-theme .font-display {
+  font-family: 'Season Mix', Georgia, serif;
 }
 
 :root {
@@ -114,12 +124,12 @@ html,
 body {
   max-width: 100vw;
   overflow-x: hidden;
-  font-family: 'Clash Display', system-ui, sans-serif;
+  font-family: 'Booton', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Headings: Season Mix; body/UI: Clash Display (via body + .font-body) */
+/* Headings: Season Mix; body/UI: Booton */
 h1,
 h2,
 h3,
@@ -127,12 +137,17 @@ h4,
 h5,
 h6,
 .font-heading {
-  font-family: 'Season Mix', 'Clash Display', Georgia, serif;
+  font-family: 'Season Mix', Georgia, serif;
+  font-weight: 600;
+}
+
+.font-display {
+  font-family: 'Season Mix', Georgia, serif;
   font-weight: 600;
 }
 
 .staff-ui {
-  font-family: 'Clash Display', system-ui, sans-serif;
+  font-family: 'Booton', system-ui, sans-serif;
 }
 
 .staff-ui h1,
@@ -141,8 +156,9 @@ h6,
 .staff-ui h4,
 .staff-ui h5,
 .staff-ui h6,
-.staff-ui .font-heading {
-  font-family: 'Season Mix', 'Clash Display', Georgia, serif;
+.staff-ui .font-heading,
+.staff-ui .font-display {
+  font-family: 'Season Mix', Georgia, serif;
 }
 
 body {
