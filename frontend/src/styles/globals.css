@@ -1,42 +1,5 @@
-@font-face {
-  font-family: 'Booton';
-  src:
-    url('/fonts/booton/Booton-Regular.woff2') format('woff2'),
-    url('/fonts/booton/Booton-Regular.otf') format('opentype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Booton';
-  src:
-    url('/fonts/booton/Booton-Medium.woff2') format('woff2'),
-    url('/fonts/booton/Booton-Medium.otf') format('opentype');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Booton';
-  src:
-    url('/fonts/booton/Booton-Bold.woff2') format('woff2'),
-    url('/fonts/booton/Booton-Bold.otf') format('opentype');
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Booton';
-  src:
-    url('/fonts/booton/Booton-Bold.woff2') format('woff2'),
-    url('/fonts/booton/Booton-Bold.otf') format('opentype');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
+/* Booton (body/UI) — loaded from Fontshare CDN; optional self-hosted files in public/fonts/booton/ override */
+@import url('https://api.fontshare.com/v2/css?f[]=booton@400,500,600,700&display=swap');
 
 @font-face {
   font-family: 'Season Mix';
@@ -73,6 +36,13 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    @apply font-sans antialiased;
+  }
+}
 
 @layer utilities {
   .animate-in {

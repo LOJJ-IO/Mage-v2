@@ -2,11 +2,15 @@
 
 ## Booton (body / UI)
 
-Place licensed webfont files in `booton/` (from [Displaay Booton](https://displaay.net/typeface/booton)):
+Booton is loaded from [Fontshare](https://www.fontshare.com/fonts/booton) via CDN in `globals.css` and `src/app/layout.tsx`.
+
+To self-host instead, place licensed webfont files in `booton/` (from [Displaay Booton](https://displaay.net/typeface/booton) or Fontshare download):
 
 - `Booton-Regular.woff2` or `Booton-Regular.otf`
 - `Booton-Medium.woff2` or `Booton-Medium.otf` (optional)
 - `Booton-Bold.woff2` or `Booton-Bold.otf` (optional)
+
+Then add matching `@font-face` rules in `globals.css` after the Fontshare `@import`.
 
 `@font-face` rules live in `src/styles/globals.css`. Until files are added, the stack falls back to `system-ui`.
 
