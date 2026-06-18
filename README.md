@@ -118,7 +118,7 @@ uvicorn app.main:app --reload --port 8000
 
 **Chat & Processing**
 
-* `POST /api/chat/message` - Standard synchronous message processing.
+* `POST /api/chat/message` - Standard synchronous message procesing.
 * `POST /api/chat/stream` - SSE endpoint for streaming token responses.
 * `POST /api/transcribe` - Accepts audio blobs and returns transcribed text.
 
