@@ -1,7 +1,8 @@
 # Email Templates — Reference for Agent 2 & Agent 3
 
-All emails are plain text, sent via `send_email(to, subject, body)` in
-`backend/app/services/email_service.py`.
+Emails are sent via `send_email(to, subject, body, html=...)` in
+`backend/app/services/email_service.py`. Magic-link emails include a branded HTML
+body (see `backend/app/emails/magic_link.py`) plus a plain-text fallback.
 
 ---
 
@@ -56,7 +57,12 @@ This link expires soon — bookmark it to sign back in during your stay.
 
 **Variables:** `property_name`, `verify_url` (token URL to `/auth/verify?t=...`)
 
-> This template is already implemented in `auth_service.send_magic_link_email()`.
+**HTML:** LOJJ-branded card template (`render_magic_link_html`) with sage wrapper,
+dark-green header + logo, CTA button, and plain-link fallback. Override via env:
+`EMAIL_LOGO_URL`, `EMAIL_BRAND_COLOR`, `EMAIL_WRAPPER_COLOR`, `EMAIL_BRAND_URL`,
+`EMAIL_BRAND_NAME`, `EMAIL_FOOTER_TEXT`.
+
+> Implemented in `auth_service.send_magic_link_email()` → `app/emails/magic_link.py`.
 
 ---
 
@@ -149,11 +155,13 @@ If you think this is an error, please contact your manager directly.
 
 ```python
 from app.services.email_service import send_email
+from app.emails.magic_link import build_magic_link_plain_text, render_magic_link_html
 
 await send_email(
-    to=staff_member.email,
-    subject=f"You're approved — your Mage access key is ready",
-    body=body_string,
+    to=guest_email,
+    subject=f"Your link to chat with {property_name}",
+    body=build_magic_link_plain_text(property_name=property_name, verify_url=verify_url),
+    html=render_magic_link_html(property_name=property_name, verify_url=verify_url),
 )
 ```
 

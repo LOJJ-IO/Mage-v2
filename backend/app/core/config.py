@@ -207,6 +207,18 @@ class Settings(BaseSettings):
     email_provider: str = os.getenv("EMAIL_PROVIDER", "")
     resend_api_key: str = os.getenv("RESEND_API_KEY", "")
     resend_from_email: str = os.getenv("RESEND_FROM_EMAIL", "noreply@lojj.io")
+    email_logo_url: str = os.getenv(
+        "EMAIL_LOGO_URL",
+        "https://res.cloudinary.com/dyhflagbc/image/upload/f_auto,q_auto/"
+        "Gemini_Generated_Image_v5nparv5nparv5np_Background_Removed_y7q0up",
+    )
+    email_brand_color: str = os.getenv("EMAIL_BRAND_COLOR", "#223d14")
+    email_wrapper_color: str = os.getenv("EMAIL_WRAPPER_COLOR", "#8a9c80")
+    email_brand_url: str = os.getenv("EMAIL_BRAND_URL", "https://lojj.io")
+    email_brand_name: str = os.getenv("EMAIL_BRAND_NAME", "LOJJ.io")
+    email_footer_text: str = os.getenv(
+        "EMAIL_FOOTER_TEXT", "© 2026 LOJJ.IO — Edmonton, AB, Canada"
+    )
     allow_dev_guest_login: bool = os.getenv(
         "ALLOW_DEV_GUEST_LOGIN", os.getenv("DEBUG", "true")
     ).lower() in ("1", "true", "yes")

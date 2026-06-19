@@ -21,6 +21,7 @@ from app.services.datetime_helpers import (
     utc_naive,
 )
 from app.services.email_service import send_email
+from app.emails.magic_link import build_magic_link_plain_text, render_magic_link_html
 from app.services.guest_session import create_session_token
 
 logger = logging.getLogger(__name__)
@@ -67,12 +68,9 @@ async def send_magic_link_email(
     property_name: str,
 ) -> None:
     subject = f"Your link to chat with {property_name}"
-    body = (
-        f"Use this link to access the guest assistant for {property_name}:\n\n"
-        f"{verify_url}\n\n"
-        "This link expires soon — bookmark it to sign back in during your stay."
-    )
-    await send_email(email, subject, body)
+    body = build_magic_link_plain_text(property_name=property_name, verify_url=verify_url)
+    html_body = render_magic_link_html(property_name=property_name, verify_url=verify_url)
+    await send_email(email, subject, body, html=html_body)
 
 
 async def request_magic_link(
