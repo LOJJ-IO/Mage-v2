@@ -208,7 +208,7 @@ class GuestRegisterRequest(BaseModel):
     """Self-serve guest registration — creates email verification."""
     name: str = Field(..., min_length=1, max_length=200)
     email: str = Field(..., min_length=3, max_length=320)
-    booking_id: str = Field(..., min_length=1, max_length=100)
+    booking_id: Optional[str] = Field(None, max_length=100)
     room_number: Optional[str] = Field(None, max_length=20)
     check_in: datetime
     check_out: datetime

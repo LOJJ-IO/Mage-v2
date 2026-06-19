@@ -254,6 +254,21 @@ async def revoke_sessions_for_booking(property_id: str, booking_id: str) -> int:
 _VERIFY_TOKEN_TTL_HOURS = 24
 
 
+def _generate_booking_id(*, property_id: str, db) -> str:
+    """Create a unique booking ID for self-serve registration."""
+    year = datetime.utcnow().year
+    for _ in range(10):
+        candidate = f"BK-{year}-{secrets.token_hex(4).upper()}"
+        if not db.get_guest_by_booking(candidate, property_id=property_id):
+            return candidate
+    return f"BK-{year}-{uuid.uuid4().hex[:8].upper()}"
+
+
+def _generate_room_number() -> str:
+    """Assign a random hotel-style room number when the guest omits one."""
+    return str(secrets.randbelow(900) + 100)
+
+
 def _build_email_verify_url(
     token: str,
     *,
@@ -272,7 +287,7 @@ def _build_email_verify_url(
 async def register_guest(
     name: str,
     email: str,
-    booking_id: str,
+    booking_id: Optional[str],
     check_in: datetime,
     check_out: datetime,
     *,
@@ -296,14 +311,12 @@ async def register_guest(
 
     name = name.strip()
     email = email.strip().lower()
-    booking_id = booking_id.strip()
+    booking_id = (booking_id or "").strip()
 
     if not name:
         raise ValueError("Name is required")
     if not email:
         raise ValueError("Email is required")
-    if not booking_id:
-        raise ValueError("Booking ID is required")
     if not check_in or not check_out:
         raise ValueError("Check-in and check-out dates are required")
     if check_out <= check_in:
@@ -314,6 +327,11 @@ async def register_guest(
     if not prop:
         raise ValueError(f"Unknown property: {pid}")
 
+    if not booking_id:
+        booking_id = _generate_booking_id(property_id=pid, db=db)
+
+    room_number = (room_number or "").strip() or _generate_room_number()
+
     # Upsert the guest row — preserve existing guest_id if booking already known.
     existing = db.get_guest_by_booking(booking_id, property_id=pid)
     guest_id = existing.id if existing else f"guest-{uuid.uuid4().hex[:8]}"
@@ -321,7 +339,7 @@ async def register_guest(
     guest = GuestProfile(
         id=guest_id,
         name=name,
-        room_number=room_number or "",
+        room_number=room_number,
         check_in=utc_naive(check_in),
         check_out=utc_naive(check_out),
         booking_id=booking_id,

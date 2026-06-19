@@ -448,7 +448,7 @@ class ApiClient {
   async registerGuest(data: {
     name: string;
     email: string;
-    bookingId: string;
+    bookingId?: string;
     roomNumber?: string;
     checkIn: string;
     checkOut: string;
@@ -463,7 +463,7 @@ class ApiClient {
       body: JSON.stringify({
         name: data.name.trim(),
         email: data.email.trim(),
-        booking_id: data.bookingId.trim(),
+        booking_id: data.bookingId?.trim() || null,
         room_number: data.roomNumber ?? null,
         check_in: data.checkIn,
         check_out: data.checkOut,

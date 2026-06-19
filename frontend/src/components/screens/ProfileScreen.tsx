@@ -23,6 +23,7 @@ export function ProfileScreen() {
   // Modal states
   const [showCheckoutConfirm, setShowCheckoutConfirm] = useState(false);
   const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
+  const [bookingIdCopied, setBookingIdCopied] = useState(false);
 
   const { handlers: swipeHandlers } = useSwipeGesture({
     onSwipeRight: () => transition('BACK'),
@@ -115,6 +116,18 @@ export function ProfileScreen() {
   const nameParts = (guestProfile?.name || 'Guest').trim().split(/\s+/);
   const firstName = nameParts[0] || 'Guest';
   const lastName = nameParts.slice(1).join(' ') || '';
+
+  const handleCopyBookingId = async () => {
+    const bookingId = guestProfile?.bookingId;
+    if (!bookingId) return;
+    try {
+      await navigator.clipboard.writeText(bookingId);
+      setBookingIdCopied(true);
+      window.setTimeout(() => setBookingIdCopied(false), 2000);
+    } catch {
+      // no-op
+    }
+  };
 
   return (
     <motion.div
@@ -290,9 +303,49 @@ export function ProfileScreen() {
               <p className="text-base font-normal text-black dark:text-mage-gray-300">
                 Booking ID
               </p>
-              <p className="font-mono text-xl font-normal text-black dark:text-white">
-                {guestProfile?.bookingId || '---'}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="font-mono text-xl font-normal text-black dark:text-white">
+                  {guestProfile?.bookingId || '---'}
+                </p>
+                {guestProfile?.bookingId && (
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyBookingId()}
+                    aria-label={bookingIdCopied ? 'Booking ID copied' : 'Copy booking ID'}
+                    title={bookingIdCopied ? 'Copied!' : 'Copy booking ID'}
+                    className="p-1.5 rounded-lg text-black dark:text-white hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                  >
+                    {bookingIdCopied ? (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+                        <path
+                          d="M20 6L9 17l-5-5"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    ) : (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+                        <rect
+                          x="9"
+                          y="9"
+                          width="13"
+                          height="13"
+                          rx="2"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        />
+                        <path
+                          d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        />
+                      </svg>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
           {guestProfile?.membershipTier && (

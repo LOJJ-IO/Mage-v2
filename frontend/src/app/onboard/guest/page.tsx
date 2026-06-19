@@ -93,7 +93,6 @@ function ErrorBanner({ message }: { message: string }) {
 function NewGuestForm({ onBack }: { onBack: () => void }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [bookingId, setBookingId] = useState('');
   const [roomNumber, setRoomNumber] = useState('');
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
@@ -105,7 +104,7 @@ function NewGuestForm({ onBack }: { onBack: () => void }) {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!name.trim() || !email.trim() || !bookingId.trim() || !checkIn || !checkOut) {
+    if (!name.trim() || !email.trim() || !checkIn || !checkOut) {
       setError('Please fill in all required fields.');
       return;
     }
@@ -118,7 +117,6 @@ function NewGuestForm({ onBack }: { onBack: () => void }) {
       const res = await apiClient.registerGuest({
         name,
         email,
-        bookingId,
         roomNumber: roomNumber || undefined,
         checkIn,
         checkOut,
@@ -199,21 +197,11 @@ function NewGuestForm({ onBack }: { onBack: () => void }) {
         autoComplete="email"
       />
       <Field
-        label="Booking / confirmation ID"
-        id="reg-booking"
-        value={bookingId}
-        onChange={setBookingId}
-        placeholder="e.g. BK12345"
-        required
-        disabled={submitting}
-        autoComplete="off"
-      />
-      <Field
         label="Room number (optional)"
         id="reg-room"
         value={roomNumber}
         onChange={setRoomNumber}
-        placeholder="e.g. 204"
+        placeholder="Leave blank to assign one"
         disabled={submitting}
       />
       <div className="grid grid-cols-2 gap-3">

@@ -141,7 +141,7 @@ async def guest_register(body: GuestRegisterRequest, request: Request):
         result = await auth_service.register_guest(
             name=body.name,
             email=body.email,
-            booking_id=body.booking_id,
+            booking_id=body.booking_id or None,
             check_in=body.check_in,
             check_out=body.check_out,
             room_number=body.room_number or "",
