@@ -430,40 +430,65 @@ async def verify_guest_email(
     return result
 
 
-async def sign_in_guest_by_name_and_booking(
-    name: str,
-    booking_id: str,
+async def sign_in_returning_guest(
+    *,
+    email: Optional[str] = None,
+    booking_id: Optional[str] = None,
     property_id: Optional[str] = None,
 ) -> tuple[GuestProfile, str, int]:
     """
-    Returning-guest sign-in: name + booking_id → session cookie.
+    Returning-guest sign-in: email and/or booking_id → session cookie.
 
-    Name matching is case-insensitive with whitespace trimming.
-    Returns (guest, session_cookie_value, session_version).
-    Preserves existing guest_id so conversation history is intact.
+    At least one identifier is required. When both are provided they must match
+    the same guest record. Returns (guest, session_cookie_value, session_version).
     """
     settings = get_settings()
     pid = (property_id or settings.property_id).strip()
 
-    name = name.strip()
-    booking_id = booking_id.strip()
+    email_norm = email.strip().lower() if email else ""
+    booking_id_norm = booking_id.strip() if booking_id else ""
 
-    if not name:
-        raise ValueError("Name is required")
-    if not booking_id:
-        raise ValueError("Booking ID is required")
+    if not email_norm and not booking_id_norm:
+        raise ValueError("Email or booking ID is required")
 
     db = get_database()
     ensure_demo_property(db, pid)
 
-    guest = db.get_guest_by_name_and_booking(name, booking_id, property_id=pid)
-    if not guest:
-        raise ValueError("No stay found matching that name and booking ID.")
+    guest_by_email = db.get_guest_by_email(email_norm, property_id=pid) if email_norm else None
+    guest_by_booking = (
+        db.get_guest_by_booking(booking_id_norm, property_id=pid) if booking_id_norm else None
+    )
+
+    if email_norm and booking_id_norm:
+        if not guest_by_email and not guest_by_booking:
+            raise ValueError("No stay found for that email and booking ID.")
+        if guest_by_email and guest_by_booking and guest_by_email.id != guest_by_booking.id:
+            raise ValueError("Email and booking ID do not match the same stay.")
+        guest = guest_by_email or guest_by_booking
+    elif email_norm:
+        guest = guest_by_email
+        if not guest:
+            raise ValueError("No stay found for that email.")
+    else:
+        guest = guest_by_booking
+        if not guest:
+            raise ValueError("No stay found for that booking ID.")
+
+    now = datetime.utcnow()
+    grace = timedelta(hours=settings.stay_grace_hours)
+    if stay_has_not_started(now, guest.check_in, grace=grace):
+        raise ValueError("Your stay has not started yet")
+    if stay_has_ended(now, guest.check_out, grace=grace):
+        raise ValueError("Your stay has ended")
 
     try:
         session_version = db.register_guest_session(guest.id, pid)
     except Exception as exc:
-        logger.exception("Session registration failed for booking %s", booking_id)
+        logger.exception(
+            "Session registration failed for guest %s (booking %s)",
+            guest.id,
+            guest.booking_id,
+        )
         raise ValueError(
             "Database not ready for guest sign-in. Run the Supabase migrations "
             "and try again."
@@ -471,3 +496,15 @@ async def sign_in_guest_by_name_and_booking(
 
     cookie_value = create_session_token(guest.id, pid, session_version)
     return guest, cookie_value, session_version
+
+
+async def sign_in_guest_by_name_and_booking(
+    name: str,
+    booking_id: str,
+    property_id: Optional[str] = None,
+) -> tuple[GuestProfile, str, int]:
+    """Legacy wrapper — prefer sign_in_returning_guest."""
+    return await sign_in_returning_guest(
+        booking_id=booking_id,
+        property_id=property_id,
+    )

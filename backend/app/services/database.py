@@ -429,6 +429,18 @@ class DatabaseProtocol(Protocol):
 
     # --- Guest extension ---
 
+    def get_guest_by_booking(
+        self, booking_id: str, property_id: Optional[str] = None
+    ) -> Optional[GuestProfile]:
+        """Get guest by booking_id + property_id."""
+        ...
+
+    def get_guest_by_email(
+        self, email: str, property_id: Optional[str] = None
+    ) -> Optional[GuestProfile]:
+        """Get guest by case-insensitive email + property_id."""
+        ...
+
     def get_guest_by_name_and_booking(
         self, name: str, booking_id: str, property_id: Optional[str] = None
     ) -> Optional[GuestProfile]:

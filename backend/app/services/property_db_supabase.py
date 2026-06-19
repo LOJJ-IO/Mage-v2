@@ -52,6 +52,25 @@ class PropertyStoreSupabase:
             logger.error("Error getting guest by booking: %s", e)
             return None
 
+    def get_guest_by_email(
+        self, email: str, property_id: Optional[str] = None
+    ) -> Optional[GuestProfile]:
+        try:
+            email_lower = email.strip().lower()
+            if not email_lower:
+                return None
+            query = self.client.table("guests").select("*").ilike("email", email_lower)
+            if property_id:
+                query = query.eq("property_id", property_id)
+            response = query.execute()
+            for row in response.data or []:
+                if (row.get("email") or "").strip().lower() == email_lower:
+                    return GuestProfile(**row)
+            return None
+        except Exception as e:
+            logger.error("Error getting guest by email: %s", e)
+            return None
+
     def upsert_guest(self, guest: GuestProfile) -> GuestProfile:
         try:
             data = guest.model_dump(mode="json")

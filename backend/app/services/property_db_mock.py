@@ -93,6 +93,21 @@ class PropertyStoreMixin:
             return guest
         return None
 
+    def get_guest_by_email(
+        self, email: str, property_id: Optional[str] = None
+    ) -> Optional[GuestProfile]:
+        email_lower = email.strip().lower()
+        if not email_lower:
+            return None
+        for guest in self.guests.values():
+            guest_email = (getattr(guest, "email", None) or "").strip().lower()
+            if guest_email != email_lower:
+                continue
+            if property_id and getattr(guest, "property_id", None) not in (None, property_id):
+                continue
+            return guest
+        return None
+
     def upsert_guest(self, guest: GuestProfile) -> GuestProfile:
         self.guests[guest.id] = guest
         return guest

@@ -109,6 +109,19 @@ export function getAgentAvailabilityWsUrl(): string {
   return 'ws://127.0.0.1:8000/api/agents/ws';
 }
 
+/** Split a single returning-guest field into email vs booking ID. */
+export function parseReturningGuestIdentifier(input: string): {
+  email?: string;
+  bookingId?: string;
+} {
+  const trimmed = input.trim();
+  if (!trimmed) return {};
+  if (trimmed.includes('@')) {
+    return { email: trimmed };
+  }
+  return { bookingId: trimmed };
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -507,23 +520,32 @@ class ApiClient {
     };
   }
 
-  async signInGuestByBooking(
-    name: string,
-    bookingId: string,
-    propertyId?: string
-  ): Promise<ApiResponse<GuestProfile>> {
+  async signInReturningGuest(data: {
+    email?: string;
+    bookingId?: string;
+    propertyId?: string;
+  }): Promise<ApiResponse<GuestProfile>> {
     const res = await this.request<Record<string, unknown>>('/api/auth/guest/sign-in', {
       method: 'POST',
       body: JSON.stringify({
-        name: name.trim(),
-        booking_id: bookingId.trim(),
-        property_id: propertyId ?? null,
+        email: data.email?.trim() || null,
+        booking_id: data.bookingId?.trim() || null,
+        property_id: data.propertyId ?? null,
       }),
     });
     if (!res.success || !res.data) {
       return { success: false, error: res.error };
     }
     return { success: true, data: mapGuestProfile(res.data) };
+  }
+
+  /** @deprecated Use signInReturningGuest */
+  async signInGuestByBooking(
+    _name: string,
+    bookingId: string,
+    propertyId?: string
+  ): Promise<ApiResponse<GuestProfile>> {
+    return this.signInReturningGuest({ bookingId, propertyId });
   }
 
   // Agent availability endpoints

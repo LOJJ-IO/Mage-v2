@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List
@@ -221,10 +221,32 @@ class GuestVerifyEmailRequest(BaseModel):
 
 
 class GuestSignInByBookingRequest(BaseModel):
-    """Returning guest: name + booking_id → session cookie."""
-    name: str = Field(..., min_length=1, max_length=200)
-    booking_id: str = Field(..., min_length=1, max_length=100)
+    """Returning guest: email and/or booking_id → session cookie (name no longer required)."""
+    email: Optional[str] = Field(None, max_length=320)
+    booking_id: Optional[str] = Field(None, max_length=100)
     property_id: Optional[str] = None
+    name: Optional[str] = Field(None, max_length=200)  # legacy; ignored
+
+    @field_validator("email", "booking_id", mode="before")
+    @classmethod
+    def strip_optional(cls, v: object) -> object:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            stripped = v.strip()
+            return stripped or None
+        return v
+
+    def resolved_email(self) -> Optional[str]:
+        if not self.email:
+            return None
+        return self.email.strip().lower()
+
+    def resolved_booking_id(self) -> Optional[str]:
+        return self.booking_id
+
+    def has_identifier(self) -> bool:
+        return bool(self.resolved_email() or self.resolved_booking_id())
 
 
 class PropertyFactPatch(BaseModel):

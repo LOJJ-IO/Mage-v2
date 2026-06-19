@@ -194,14 +194,16 @@ async def guest_verify_email(
 @router.post("/guest/sign-in", response_model=GuestProfile)
 async def guest_sign_in(body: GuestSignInByBookingRequest, response: Response):
     """
-    Returning-guest sign-in: name + booking_id → mage_session cookie + GuestProfile.
+    Returning-guest sign-in: email and/or booking_id → mage_session cookie + GuestProfile.
 
     Preserves the same guest_id so conversation history is intact.
     """
+    if not body.has_identifier():
+        raise HTTPException(status_code=400, detail="Email or booking ID is required")
     try:
-        guest, cookie_value, _version = await auth_service.sign_in_guest_by_name_and_booking(
-            name=body.name,
-            booking_id=body.booking_id,
+        guest, cookie_value, _version = await auth_service.sign_in_returning_guest(
+            email=body.resolved_email(),
+            booking_id=body.resolved_booking_id(),
             property_id=body.property_id,
         )
     except ValueError as exc:

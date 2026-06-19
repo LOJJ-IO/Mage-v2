@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { FormEvent, useEffect, useState } from 'react';
 import { HydrationGate } from '@/components/HydrationGate';
-import { apiClient } from '@/lib/api';
+import { apiClient, parseReturningGuestIdentifier } from '@/lib/api';
 import { GuestProfile } from '@/types';
 
 type SignInMode = 'choose' | 'guest';
@@ -16,7 +16,7 @@ interface SignInScreenProps {
 export function SignInScreen({ onSignedIn }: SignInScreenProps) {
   const router = useRouter();
   const [mode, setMode] = useState<SignInMode>('choose');
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,12 +28,12 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
   const handleGuestSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
-    const trimmed = email.trim();
-    if (!trimmed) return;
+    const parsed = parseReturningGuestIdentifier(identifier);
+    if (!parsed.email && !parsed.bookingId) return;
 
     setSubmitting(true);
     try {
-      const res = await apiClient.signInGuestByEmail(trimmed);
+      const res = await apiClient.signInReturningGuest(parsed);
       if (!res.success || !res.data) {
         setError(res.error || 'Sign-in failed.');
         return;
@@ -86,17 +86,17 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
           ) : (
             <form onSubmit={handleGuestSubmit} className="space-y-3">
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Email"
-                autoComplete="email"
+                type="text"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="Email or booking ID"
+                autoComplete="username"
                 disabled={submitting}
                 className="w-full px-4 py-3.5 rounded-uber-full border border-mage-gray-300 dark:border-mage-gray-600 bg-white dark:bg-mage-gray-900 text-mage-black dark:text-white focus:outline-none focus:ring-2 focus:ring-mage-gray-400 disabled:opacity-60"
               />
               <button
                 type="submit"
-                disabled={submitting || !email.trim()}
+                disabled={submitting || !identifier.trim()}
                 className="block w-full py-3.5 text-center rounded-uber-full border-2 border-mage-black dark:border-white text-mage-black dark:text-white font-medium disabled:opacity-60"
               >
                 {submitting ? 'Signing in…' : 'Continue'}

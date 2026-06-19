@@ -4,7 +4,7 @@ import { FormEvent, Suspense, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HydrationGate } from '@/components/HydrationGate';
-import { apiClient } from '@/lib/api';
+import { apiClient, parseReturningGuestIdentifier } from '@/lib/api';
 import { useMageStore } from '@/store/mageStore';
 
 // ---------------------------------------------------------------------------
@@ -241,23 +241,23 @@ function NewGuestForm({ onBack }: { onBack: () => void }) {
 function ReturningGuestForm({ onBack }: { onBack: () => void }) {
   const router = useRouter();
   const { setGuestProfile, context } = useMageStore();
-  const [name, setName] = useState('');
-  const [bookingId, setBookingId] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!name.trim() || !bookingId.trim()) {
-      setError('Please enter your name and booking ID.');
+    const parsed = parseReturningGuestIdentifier(identifier);
+    if (!parsed.email && !parsed.bookingId) {
+      setError('Please enter your email or booking ID.');
       return;
     }
     setSubmitting(true);
     try {
-      const res = await apiClient.signInGuestByBooking(name, bookingId);
+      const res = await apiClient.signInReturningGuest(parsed);
       if (!res.success || !res.data) {
-        setError(res.error ?? 'Sign-in failed. Check your name and booking ID.');
+        setError(res.error ?? 'Sign-in failed. Check your email or booking ID.');
         return;
       }
       setGuestProfile(res.data);
@@ -281,24 +281,14 @@ function ReturningGuestForm({ onBack }: { onBack: () => void }) {
     >
       {error && <ErrorBanner message={error} />}
       <Field
-        label="Full name"
-        id="ret-name"
-        value={name}
-        onChange={setName}
-        placeholder="Jane Doe"
+        label="Email or booking ID"
+        id="ret-identifier"
+        value={identifier}
+        onChange={setIdentifier}
+        placeholder="jane@example.com or BK-2026-AB12CD34"
         required
         disabled={submitting}
-        autoComplete="name"
-      />
-      <Field
-        label="Booking / confirmation ID"
-        id="ret-booking"
-        value={bookingId}
-        onChange={setBookingId}
-        placeholder="e.g. BK12345"
-        required
-        disabled={submitting}
-        autoComplete="off"
+        autoComplete="username"
       />
       <button type="submit" disabled={submitting} className={`${primaryBtn} mt-1`}>
         {submitting ? 'Signing in…' : 'Sign in'}
