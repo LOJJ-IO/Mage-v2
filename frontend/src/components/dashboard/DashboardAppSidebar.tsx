@@ -64,8 +64,8 @@ export function DashboardAppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="mt-auto border-t border-sidebar-border">
-        <SidebarTrigger className="mx-auto h-8 w-8" />
+      <SidebarFooter className="mt-auto items-start border-t border-sidebar-border">
+        <SidebarTrigger className="h-8 w-8 shrink-0" />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
