@@ -277,7 +277,7 @@ export function ProfileScreen() {
             <div className="flex flex-wrap items-baseline gap-12">
               <div>
                 <p className="text-base font-normal text-black dark:text-mage-gray-300">
-                  Check out:
+                  Check out
                 </p>
                 <p className="text-xl font-normal text-black dark:text-white">
                   {guestProfile?.checkOut
@@ -292,7 +292,7 @@ export function ProfileScreen() {
               </div>
               <div className="ml-auto">
                 <p className="text-base font-normal text-black dark:text-mage-gray-300">
-                  Room:
+                  Room
                 </p>
                 <p className="text-xl font-normal text-black dark:text-white">
                   {guestProfile?.roomNumber || '---'}
