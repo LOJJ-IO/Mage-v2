@@ -2,8 +2,11 @@
 
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { AppNavLink } from '@/components/AppNavLink';
 import { IconMageLogo } from '@/components/staff/StaffIcons';
+import { useNavigationReady } from '@/hooks/useNavigationReady';
 import { apiClient, PendingStaffMember } from '@/lib/api';
+import { getNavigationCopy } from '@/lib/navigationLoaderCopy';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -237,6 +240,8 @@ export default function OnboardAdminPage() {
   const [phase, setPhase] = useState<AdminPhase>({ name: 'gate' });
   const [managerKeyInput, setManagerKeyInput] = useState('');
   const [gateError, setGateError] = useState<string | undefined>();
+
+  useNavigationReady(phase.name !== 'loading', '/onboard/admin');
 
   // Modal state
   const [approveTarget, setApproveTarget] = useState<PendingMember | null>(null);
@@ -487,12 +492,13 @@ export default function OnboardAdminPage() {
             )}
           </AnimatePresence>
 
-          <a
+          <AppNavLink
             href="/staff"
+            copy={getNavigationCopy('/staff')}
             className="mt-8 block text-center text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white underline"
           >
             Back to staff workspace
-          </a>
+          </AppNavLink>
         </div>
       </div>
     </>

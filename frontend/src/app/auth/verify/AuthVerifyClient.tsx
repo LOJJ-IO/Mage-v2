@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { AppNavLink } from '@/components/AppNavLink';
+import { getNavigationCopy } from '@/lib/navigationLoaderCopy';
 
 export default function AuthVerifyClient() {
   const searchParams = useSearchParams();
@@ -31,9 +33,9 @@ export default function AuthVerifyClient() {
             Sign-in failed
           </h1>
           <p className="text-mage-gray-500 text-sm mb-6">{error}</p>
-          <a href="/" className="text-sm underline text-mage-gray-600">
+          <AppNavLink href="/" copy={getNavigationCopy('/')} className="text-sm underline text-mage-gray-600">
             Back
-          </a>
+          </AppNavLink>
         </div>
       </main>
     );

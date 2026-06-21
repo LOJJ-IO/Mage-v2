@@ -113,8 +113,9 @@ export function ConnectionScreen() {
           onClick={handleChat}
           className="
             w-full py-3.5 rounded-uber-full
-            bg-mage-blue text-white font-semibold disabled:opacity-50
-            hover:opacity-90 active:scale-[0.98] transition-all
+            bg-mage-gray-200 dark:bg-mage-gray-600 text-mage-black dark:text-white
+            font-semibold disabled:opacity-50
+            hover:bg-mage-gray-300 dark:hover:bg-mage-gray-500 active:scale-[0.98] transition-all
           "
         >
           Chat with front desk

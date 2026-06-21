@@ -1,21 +1,24 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { StaffStateRenderer } from '@/components/staff/StaffStateRenderer';
+import { useAppNavigation } from '@/components/providers/NavigationLoaderProvider';
+import { useNavigationReady } from '@/hooks/useNavigationReady';
 import { hasStoredStaffKey } from '@/lib/onboarding';
 
 export default function StaffPage() {
-  const router = useRouter();
+  const { replace } = useAppNavigation();
   const [ready, setReady] = useState(false);
+
+  useNavigationReady(ready, '/staff');
 
   useEffect(() => {
     if (hasStoredStaffKey()) {
       setReady(true);
     } else {
-      router.replace('/onboard/staff');
+      replace('/onboard/staff');
     }
-  }, [router]);
+  }, [replace]);
 
   if (!ready) return null;
 

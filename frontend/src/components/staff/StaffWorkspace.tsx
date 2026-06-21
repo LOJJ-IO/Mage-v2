@@ -38,7 +38,6 @@ interface StaffWorkspaceProps {
   actions: StaffAction[];
   staffKey: string;
   isLoading: boolean;
-  pendingCount: number;
   staffRole: StaffRole;
   allowedNav: StaffNavId[];
   allowedActionTypes: ActionType[];
@@ -70,7 +69,6 @@ export function StaffWorkspace({
   actions,
   staffKey,
   isLoading,
-  pendingCount,
   staffRole: _staffRole,
   allowedNav,
   allowedActionTypes,
@@ -198,7 +196,6 @@ export function StaffWorkspace({
     <StaffPageShell>
       <StaffSidebar
         activeNav={activeNav}
-        pendingCount={pendingCount}
         guestUnreadCount={guestUnreadCount}
         allowedNav={allowedNav}
         onNavChange={setActiveNav}

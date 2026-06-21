@@ -135,7 +135,7 @@ export function ProfileScreen() {
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
       transition={{ type: 'tween', duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
-      className="min-h-screen bg-mage-gray-50 dark:bg-mage-gray-900 flex flex-col relative"
+      className="h-full bg-mage-gray-50 dark:bg-mage-gray-900 flex flex-col relative overflow-hidden"
       {...swipeHandlers}
     >
       {/* Check Out Warning Modal */}
@@ -232,7 +232,7 @@ export function ProfileScreen() {
         )}
       </AnimatePresence>
 
-      <header className="sticky top-0 z-40 bg-white dark:bg-mage-gray-900 border-b border-mage-gray-200 dark:border-mage-gray-700 safe-area-top">
+      <header className="sticky top-0 z-40 flex-shrink-0 bg-white dark:bg-mage-gray-900 border-b border-mage-gray-200 dark:border-mage-gray-700 safe-area-top">
         <div className="px-4 py-3 flex items-center gap-4">
           <button
             onClick={handleBack}
@@ -254,7 +254,7 @@ export function ProfileScreen() {
         </div>
       </header>
 
-      <main className="flex-1 p-4 space-y-4">
+      <main className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
         {/* Guest overview card */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
@@ -263,8 +263,8 @@ export function ProfileScreen() {
           className="relative w-full overflow-visible shadow-none border-0 bg-[#D9D9D9] dark:bg-mage-gray-700 rounded-tr-[28px] rounded-bl-[28px] rounded-tl-[48px]"
           style={{ borderBottomRightRadius: '41px' }}
         >
-          <div className="flex flex-col gap-6 pr-[calc(183px+1rem)] min-h-[140px] px-6 pt-5 pb-[52px]">
-            <div>
+          <div className={`flex flex-col gap-6 min-h-[140px] px-6 pt-5 ${guestProfile?.membershipTier ? 'pb-[52px]' : 'pb-5'}`}>
+            <div className={guestProfile?.membershipTier ? 'pr-[183px]' : undefined}>
               <h2 className="text-[3rem] sm:text-[3.25rem] leading-tight font-bold text-black dark:text-white">
                 {firstName}
               </h2>
@@ -274,7 +274,7 @@ export function ProfileScreen() {
                 </h2>
               )}
             </div>
-            <div className="flex flex-wrap items-baseline gap-12">
+            <div className={`flex flex-wrap items-baseline gap-12${guestProfile?.membershipTier ? ' pr-[183px]' : ''}`}>
               <div>
                 <p className="text-base font-normal text-black dark:text-mage-gray-300">
                   Check out
@@ -290,7 +290,7 @@ export function ProfileScreen() {
                   </p>
                 )}
               </div>
-              <div className="ml-auto">
+              <div>
                 <p className="text-base font-normal text-black dark:text-mage-gray-300">
                   Room
                 </p>
@@ -299,21 +299,21 @@ export function ProfileScreen() {
                 </p>
               </div>
             </div>
-            <div>
+            <div className={guestProfile?.membershipTier ? 'pr-[183px]' : undefined}>
               <p className="text-base font-normal text-black dark:text-mage-gray-300">
                 Booking ID
               </p>
-              <div className="flex items-center gap-2">
-                <p className="font-mono text-xl font-normal text-black dark:text-white">
+              <div className="inline-flex items-center gap-1.5 max-w-full">
+                <span className="font-mono text-lg font-normal text-black dark:text-white break-words leading-snug">
                   {guestProfile?.bookingId || '---'}
-                </p>
+                </span>
                 {guestProfile?.bookingId && (
                   <button
                     type="button"
                     onClick={() => void handleCopyBookingId()}
                     aria-label={bookingIdCopied ? 'Booking ID copied' : 'Copy booking ID'}
                     title={bookingIdCopied ? 'Copied!' : 'Copy booking ID'}
-                    className="p-1.5 rounded-lg text-black dark:text-white hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                    className="shrink-0 p-1 rounded-lg text-black dark:text-white hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
                   >
                     {bookingIdCopied ? (
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -372,10 +372,10 @@ export function ProfileScreen() {
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.15 }}
-            className="bg-mage-blue/10 dark:bg-mage-blue/20 rounded-uber-xl p-4 border border-mage-blue/20 dark:border-mage-blue/30"
+            className="bg-white dark:bg-mage-gray-800 rounded-uber-xl p-4 border border-mage-blue"
           >
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 bg-mage-blue rounded-xl flex items-center justify-center text-white">
+              <div className="w-10 h-10 bg-mage-gray-100 dark:bg-mage-gray-700 rounded-xl flex items-center justify-center text-mage-black dark:text-white">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                   <path
                     d="M17.5 10a7.5 7.5 0 11-15 0 7.5 7.5 0 0115 0z"
@@ -397,7 +397,7 @@ export function ProfileScreen() {
                 <p className="text-sm text-mage-gray-600 dark:text-mage-gray-400 mt-1">
                   {activeTicket.issue || 'Your request is being processed'}
                 </p>
-                <p className="text-xs text-mage-blue mt-2">
+                <p className="text-xs text-mage-gray-500 dark:text-mage-gray-400 mt-2">
                   Status: {activeTicket.status}
                 </p>
               </div>

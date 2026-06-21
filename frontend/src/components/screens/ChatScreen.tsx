@@ -12,43 +12,6 @@ import { RecordingToast } from '@/components/Toast';
 import { ConversationContext } from '@/types';
 import { mergeConversationMessages } from '@/lib/mergeMessages';
 
-/** Skeleton that matches ChatScreen layout; shown briefly before chat content. */
-function ChatScreenSkeleton() {
-  return (
-    <div className="h-screen overflow-hidden flex flex-col bg-white dark:bg-mage-gray-900">
-      <header className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-md z-40 bg-white dark:bg-mage-gray-900 border-b border-mage-gray-200 dark:border-mage-gray-700 safe-area-top">
-        <div className="px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-mage-gray-200 dark:bg-mage-gray-700 rounded-xl animate-pulse" />
-            <div className="h-5 w-24 bg-mage-gray-200 dark:bg-mage-gray-700 rounded-lg animate-pulse" />
-          </div>
-          <div className="w-10 h-10 bg-mage-gray-200 dark:bg-mage-gray-700 rounded-full animate-pulse" />
-        </div>
-      </header>
-      <main className="flex-1 min-h-0 overflow-hidden px-4 pt-20 pb-28">
-        <div className="space-y-4 py-4">
-          <div className="flex justify-start">
-            <div className="h-16 w-3/4 max-w-[85%] bg-mage-gray-100 dark:bg-mage-gray-800 rounded-uber-xl rounded-bl-sm animate-pulse" />
-          </div>
-          <div className="flex justify-end">
-            <div className="h-12 w-1/2 max-w-[85%] bg-mage-gray-200 dark:bg-mage-gray-700 rounded-uber-xl rounded-br-sm animate-pulse" />
-          </div>
-          <div className="flex justify-start">
-            <div className="h-20 w-2/3 max-w-[85%] bg-mage-gray-100 dark:bg-mage-gray-800 rounded-uber-xl rounded-bl-sm animate-pulse" />
-          </div>
-        </div>
-      </main>
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-30 px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] bg-white dark:bg-mage-gray-900 border-t border-mage-gray-200 dark:border-mage-gray-700 shadow-[0_-8px_32px_rgba(0,0,0,0.06)] dark:shadow-[0_-8px_32px_rgba(0,0,0,0.35)]">
-        <div className="flex items-center gap-2">
-          <div className="w-12 h-12 rounded-full bg-mage-gray-200 dark:bg-mage-gray-700 animate-pulse" />
-          <div className="flex-1 h-12 rounded-uber-xl bg-mage-gray-100 dark:bg-mage-gray-800 animate-pulse" />
-          <div className="w-12 h-12 rounded-full bg-mage-gray-200 dark:bg-mage-gray-700 animate-pulse" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function ChatScreen() {
   const {
     currentState,
@@ -67,13 +30,6 @@ export function ChatScreen() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isAiTyping, setIsAiTyping] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
-  const [showSkeleton, setShowSkeleton] = useState(true);
-
-  // Brief skeleton before chat content
-  useEffect(() => {
-    const t = setTimeout(() => setShowSkeleton(false), 550);
-    return () => clearTimeout(t);
-  }, []);
 
   const sendMessageMutation = useSendMessage();
   const faqFeedbackMutation = useFaqFeedback();
@@ -345,10 +301,6 @@ export function ChatScreen() {
     !streamingMessage &&
     lastMessage?.role === 'assistant' &&
     lastMessage?.requireContactConfirmation;
-
-  if (showSkeleton) {
-    return <ChatScreenSkeleton />;
-  }
 
   return (
     <div

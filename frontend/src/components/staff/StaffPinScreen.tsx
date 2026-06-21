@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { AppNavLink } from '@/components/AppNavLink';
+import { getNavigationCopy } from '@/lib/navigationLoaderCopy';
 import { IconMageLogo } from './StaffIcons';
 
 interface StaffPinScreenProps {
@@ -53,12 +55,13 @@ export function StaffPinScreen({ onSubmit, error }: StaffPinScreenProps) {
             Continue
           </button>
         </form>
-        <a
+        <AppNavLink
           href="/"
+          copy={getNavigationCopy('/')}
           className="mt-6 block text-center text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white underline"
         >
           Back
-        </a>
+        </AppNavLink>
       </motion.div>
     </div>
   );

@@ -1,14 +1,14 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useAppNavigation } from '@/components/providers/NavigationLoaderProvider';
 
 export default function StaffOnboardingPage() {
-  const router = useRouter();
+  const { replace } = useAppNavigation();
 
   useEffect(() => {
-    router.replace('/staff?nav=knowledge');
-  }, [router]);
+    replace('/staff?nav=knowledge');
+  }, [replace]);
 
   return null;
 }

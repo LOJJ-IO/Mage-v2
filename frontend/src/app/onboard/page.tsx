@@ -1,11 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import { AppNavLink } from '@/components/AppNavLink';
 import { HydrationGate } from '@/components/HydrationGate';
+import { useAppNavigation } from '@/components/providers/NavigationLoaderProvider';
+import { useNavigationReady } from '@/hooks/useNavigationReady';
 import { checkGuestSession, hasStoredStaffKey } from '@/lib/onboarding';
 import { clearStoredStaffKey, clearStoredStaffRole } from '@/lib/stateMachineStaff';
+import { getNavigationCopy } from '@/lib/navigationLoaderCopy';
 
 const primaryBtn =
   'block w-full py-3.5 text-center rounded-uber-full border-2 border-mage-black ' +
@@ -29,6 +32,7 @@ function AlreadySignedInModal({
   if (!kind) return null;
   const label = kind === 'staff' ? 'staff portal' : 'guest app';
   const destination = kind === 'staff' ? '/staff' : '/';
+
   return (
     <motion.div
       key="modal-overlay"
@@ -72,13 +76,14 @@ function AlreadySignedInModal({
         </div>
 
         <div className="space-y-2 pt-1">
-          <a
+          <AppNavLink
             href={destination}
+            copy={getNavigationCopy(destination)}
             className={primaryBtn}
             onClick={onContinue}
           >
             Continue to {label}
-          </a>
+          </AppNavLink>
           <button
             type="button"
             onClick={onSignOut}
@@ -93,9 +98,11 @@ function AlreadySignedInModal({
 }
 
 function OnboardHub() {
-  const router = useRouter();
+  const { navigate } = useAppNavigation();
   const didCheckRef = useRef(false);
   const [alreadyIn, setAlreadyIn] = useState<AlreadyIn>(null);
+
+  useNavigationReady(true, '/onboard');
 
   useEffect(() => {
     if (didCheckRef.current) return;
@@ -130,7 +137,7 @@ function OnboardHub() {
       </AnimatePresence>
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-2xl font-semibold text-mage-black dark:text-white mb-2">lojj</h1>
+        <h1 className="text-2xl font-semibold text-mage-black dark:text-white mb-2">Lojj</h1>
         <p className="text-sm text-mage-gray-500 dark:text-mage-gray-400 mb-10">
           Welcome. How are you joining us today?
         </p>
@@ -141,7 +148,7 @@ function OnboardHub() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25 }}
-            onClick={() => router.push('/onboard/guest')}
+            onClick={() => navigate('/onboard/guest')}
             className={primaryBtn}
           >
             I&apos;m a guest
@@ -152,7 +159,7 @@ function OnboardHub() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.06, duration: 0.25 }}
-            onClick={() => router.push('/onboard/staff')}
+            onClick={() => navigate('/onboard/staff')}
             className={secondaryBtn}
           >
             I&apos;m a staff member
@@ -163,7 +170,7 @@ function OnboardHub() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.12, duration: 0.25 }}
-            onClick={() => router.push('/onboard/admin')}
+            onClick={() => navigate('/onboard/admin')}
             className={`${secondaryBtn} text-mage-gray-500 dark:text-mage-gray-400`}
           >
             Hotel manager

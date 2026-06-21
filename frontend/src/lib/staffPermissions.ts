@@ -23,9 +23,9 @@ const ALL_ACTION_TYPES: ReadonlySet<ActionType> = new Set<ActionType>([
 export const ROLE_NAV: Record<StaffRole, ReadonlySet<StaffNavId>> = {
   manager: new Set<StaffNavId>(['tasks', 'assigned', 'schedule', 'review', 'guest-chat', 'help-desk', 'knowledge']),
   front_desk: new Set<StaffNavId>(['tasks', 'assigned', 'schedule', 'review', 'guest-chat', 'help-desk', 'knowledge']),
-  maintenance: new Set<StaffNavId>(['tasks', 'assigned', 'schedule', 'help-desk']),
-  housekeeping: new Set<StaffNavId>(['tasks', 'assigned', 'schedule', 'help-desk']),
-  room_service: new Set<StaffNavId>(['tasks', 'assigned', 'schedule', 'help-desk']),
+  maintenance: new Set<StaffNavId>(['tasks', 'assigned', 'schedule']),
+  housekeeping: new Set<StaffNavId>(['tasks', 'assigned', 'schedule']),
+  room_service: new Set<StaffNavId>(['tasks', 'assigned', 'schedule']),
 };
 
 export const ROLE_ACTION_TYPES: Record<StaffRole, ReadonlySet<ActionType>> = {

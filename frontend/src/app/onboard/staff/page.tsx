@@ -1,10 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import { AppNavLink } from '@/components/AppNavLink';
 import { IconMageLogo } from '@/components/staff/StaffIcons';
+import { useAppNavigation } from '@/components/providers/NavigationLoaderProvider';
+import { useNavigationReady } from '@/hooks/useNavigationReady';
 import { apiClient } from '@/lib/api';
+import { getNavigationCopy } from '@/lib/navigationLoaderCopy';
 import { setStoredStaffKey } from '@/lib/stateMachineStaff';
 
 type Tab = 'request' | 'sign-in';
@@ -22,8 +25,10 @@ const ROLES = [
 ] as const;
 
 export default function OnboardStaffPage() {
-  const router = useRouter();
+  const { navigate } = useAppNavigation();
   const [tab, setTab] = useState<Tab>('sign-in');
+
+  useNavigationReady(true, '/onboard/staff');
 
   // --- Request access state ---
   const [requestState, setRequestState] = useState<RequestState>({ phase: 'form' });
@@ -64,7 +69,7 @@ export default function OnboardStaffPage() {
         return;
       }
       setStoredStaffKey(accessKey.trim());
-      router.push('/staff');
+      navigate('/staff');
     } finally {
       setSignInLoading(false);
     }
@@ -199,15 +204,10 @@ export default function OnboardStaffPage() {
                 </p>
                 <button
                   type="button"
-                  onClick={() => {
-                    setRequestState({ phase: 'form' });
-                    setDisplayName('');
-                    setRequestedRole('front_desk');
-                    setTab('sign-in');
-                  }}
+                  onClick={() => setTab('sign-in')}
                   className="text-sm text-neutral-500 underline hover:text-neutral-900 dark:hover:text-white"
                 >
-                  Back to sign in
+                  Sign in with access key
                 </button>
               </motion.div>
             ) : (
@@ -282,12 +282,13 @@ export default function OnboardStaffPage() {
           </AnimatePresence>
         </div>
 
-        <a
-          href="/"
+        <AppNavLink
+          href="/onboard"
+          copy={getNavigationCopy('/onboard')}
           className="mt-6 block text-center text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white underline"
         >
-          Back to guest app
-        </a>
+          Change role
+        </AppNavLink>
       </motion.div>
     </div>
   );

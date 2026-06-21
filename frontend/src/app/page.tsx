@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { StateRenderer } from '@/components/StateRenderer';
 import { SignInScreen } from '@/components/SignInScreen';
 import { HydrationGate } from '@/components/HydrationGate';
+import { useAppNavigation } from '@/components/providers/NavigationLoaderProvider';
+import { useNavigationReady } from '@/hooks/useNavigationReady';
 import { useMageStore } from '@/store/mageStore';
 import { useAgentAvailabilityWebSocket } from '@/hooks/useAgentAvailabilityWebSocket';
 import { apiClient } from '@/lib/api';
@@ -14,12 +15,13 @@ import { GuestProfile } from '@/types';
 type HomeView = 'loading' | 'sign-in' | 'app';
 
 export default function Home() {
-  const router = useRouter();
+  const { replace, beginLoading } = useAppNavigation();
   const { context, guestProfile, setGuestProfile } = useMageStore();
   const [view, setView] = useState<HomeView>('loading');
   const didInitRef = useRef(false);
 
   useAgentAvailabilityWebSocket();
+  useNavigationReady(view !== 'loading', '/');
 
   useEffect(() => {
     if (didInitRef.current) return;
@@ -44,7 +46,7 @@ export default function Home() {
         if (ALLOW_DEV_LOGIN) {
           setView('sign-in');
         } else {
-          router.replace('/onboard');
+          replace('/onboard');
         }
         return;
       }
@@ -55,17 +57,18 @@ export default function Home() {
 
       setView('app');
     })();
-  }, [guestProfile, context.hasSeenWelcome]);
+  }, [guestProfile, context.hasSeenWelcome, replace]);
 
   const handleSignedIn = useCallback(
     (profile: GuestProfile) => {
+      beginLoading('/');
       setGuestProfile(profile);
       if (context.hasSeenWelcome) {
         useMageStore.setState({ currentState: 'S-G-003' });
       }
       setView('app');
     },
-    [setGuestProfile, context.hasSeenWelcome]
+    [beginLoading, setGuestProfile, context.hasSeenWelcome]
   );
 
   if (view === 'loading') {

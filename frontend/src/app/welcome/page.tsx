@@ -1,14 +1,14 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useAppNavigation } from '@/components/providers/NavigationLoaderProvider';
 
 export default function WelcomeRedirectPage() {
-  const router = useRouter();
+  const { replace } = useAppNavigation();
 
   useEffect(() => {
-    router.replace(`/onboard${window.location.search}`);
-  }, [router]);
+    replace(`/onboard${window.location.search}`);
+  }, [replace]);
 
   return null;
 }

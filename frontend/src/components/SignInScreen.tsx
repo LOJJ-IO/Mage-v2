@@ -1,9 +1,9 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { FormEvent, useEffect, useState } from 'react';
 import { HydrationGate } from '@/components/HydrationGate';
+import { useAppNavigation } from '@/components/providers/NavigationLoaderProvider';
 import { apiClient, parseReturningGuestIdentifier } from '@/lib/api';
 import { GuestProfile } from '@/types';
 
@@ -14,7 +14,7 @@ interface SignInScreenProps {
 }
 
 export function SignInScreen({ onSignedIn }: SignInScreenProps) {
-  const router = useRouter();
+  const { navigate } = useAppNavigation();
   const [mode, setMode] = useState<SignInMode>('choose');
   const [identifier, setIdentifier] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -49,7 +49,7 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
     <HydrationGate>
       <main className="min-h-screen bg-white dark:bg-mage-gray-900 flex flex-col max-w-md mx-auto px-6 py-12 justify-center">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-2xl font-semibold text-mage-black dark:text-white mb-10">lojj</h1>
+          <h1 className="text-2xl font-semibold text-mage-black dark:text-white mb-10">Lojj</h1>
 
           {error && (
             <div className="mb-6 p-4 rounded-uber-xl border border-red-200 bg-red-50 text-red-800 text-sm dark:border-red-900 dark:bg-red-950 dark:text-red-200">
@@ -77,7 +77,7 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.08, duration: 0.28 }}
-                onClick={() => router.push('/staff')}
+                onClick={() => navigate('/staff')}
                 className="block w-full py-3.5 text-center rounded-uber-full border border-mage-gray-300 dark:border-mage-gray-600 text-mage-gray-700 dark:text-mage-gray-200 font-medium"
               >
                 Staff sign in

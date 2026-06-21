@@ -124,35 +124,43 @@ export function ImageUploadScreen() {
       className="fixed inset-0 z-50 flex flex-col items-center bg-white dark:bg-mage-gray-900 md:bg-mage-gray-800 md:dark:bg-mage-gray-100"
     >
       <div className="w-full max-w-md flex flex-col flex-1 min-h-full bg-white dark:bg-mage-gray-900">
-        <header className="px-4 py-3 border-b border-mage-gray-200 dark:border-mage-gray-700 flex items-center justify-between safe-area-top flex-shrink-0">
-        <button
-          onClick={handleCancel}
-          className="p-2 -ml-2 rounded-full hover:bg-mage-gray-100 dark:hover:bg-mage-gray-800 transition-colors text-mage-black dark:text-white"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </button>
-        <h1 className="text-lg font-semibold text-mage-black dark:text-white">Add Photos</h1>
-        <button
-          onClick={handleConfirm}
-          disabled={selectedImages.length === 0 && attachedImages.length === 0}
-          className={`
-            px-4 py-2 rounded-uber-full font-semibold text-sm transition-colors
-            ${
-              selectedImages.length > 0 || attachedImages.length > 0
-                ? 'bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black'
-                : 'bg-mage-gray-200 dark:bg-mage-gray-700 text-mage-gray-400 dark:text-mage-gray-500'
-            }
-          `}
-        >
-          Done ({totalImages})
-        </button>
+        <header className="grid grid-cols-3 items-center px-4 min-h-14 border-b border-mage-gray-200 dark:border-mage-gray-700 safe-area-top flex-shrink-0">
+        <div className="flex justify-start">
+          <button
+            onClick={handleCancel}
+            className="flex h-10 w-10 items-center justify-center -ml-2 rounded-full hover:bg-mage-gray-100 dark:hover:bg-mage-gray-800 transition-colors text-mage-black dark:text-white"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <h1 className="text-lg font-semibold text-mage-black dark:text-white text-center leading-none">
+          Add Photos
+        </h1>
+        <div className="flex justify-end">
+          <button
+            onClick={handleConfirm}
+            disabled={selectedImages.length === 0 && attachedImages.length === 0}
+            className={`
+              h-10 px-4 rounded-uber-full font-semibold text-sm transition-colors
+              flex items-center justify-center whitespace-nowrap
+              ${
+                selectedImages.length > 0 || attachedImages.length > 0
+                  ? 'bg-mage-black dark:bg-mage-gray-100 text-white dark:text-mage-black'
+                  : 'bg-mage-gray-200 dark:bg-mage-gray-700 text-mage-gray-400 dark:text-mage-gray-500'
+              }
+            `}
+          >
+            Done ({totalImages})
+          </button>
+        </div>
         </header>
 
         {/* Content */}
         <main className="flex-1 min-h-0 overflow-y-auto p-4">
         {/* Selected images grid */}
+        {totalImages > 0 && (
         <div className="grid grid-cols-3 gap-2 mb-4">
           <AnimatePresence mode="popLayout">
             {/* Existing attached images */}
@@ -237,25 +245,24 @@ export function ImageUploadScreen() {
             ))}
 
             {/* Add more button */}
+            {!atCap && (
             <motion.button
               layout
               transition={{
                 layout: { type: 'spring', stiffness: 260, damping: 28 },
               }}
               onClick={openFilePicker}
-              className={`aspect-square rounded-uber-lg border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-colors duration-200 ${
-                atCap
-                  ? 'border-mage-gray-200 dark:border-mage-gray-600 bg-mage-gray-50 dark:bg-mage-gray-800 cursor-not-allowed opacity-60'
-                  : 'border-mage-gray-300 dark:border-mage-gray-600 hover:border-mage-gray-400 dark:hover:border-mage-gray-500 hover:bg-mage-gray-50 dark:hover:bg-mage-gray-800'
-              }`}
+              className="aspect-square rounded-uber-lg border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-colors duration-200 border-mage-gray-300 dark:border-mage-gray-600 hover:border-mage-gray-400 dark:hover:border-mage-gray-500 hover:bg-mage-gray-50 dark:hover:bg-mage-gray-800"
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <path d="M12 5v14M5 12h14" />
               </svg>
               <span className="text-xs text-mage-gray-500 dark:text-mage-gray-400">Add</span>
             </motion.button>
+            )}
           </AnimatePresence>
           </div>
+        )}
 
           {/* Empty state */}
         {totalImages === 0 && (

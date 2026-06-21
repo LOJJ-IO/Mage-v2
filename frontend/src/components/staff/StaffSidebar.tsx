@@ -4,11 +4,9 @@ import { useMageStore } from '@/store/mageStore';
 import { ResizablePanel } from './ResizablePanel';
 import { useMediaQuery } from '@/hooks/useResizableWidth';
 import {
-  IconBell,
   IconBook,
   IconCalendar,
   IconChevronDown,
-  IconLayoutGrid,
   IconList,
   IconMageLogo,
   IconHeadset,
@@ -22,7 +20,6 @@ import { STAFF_NAV_ITEMS, StaffNavId } from './staffNav';
 
 interface StaffSidebarProps {
   activeNav: StaffNavId;
-  pendingCount: number;
   guestUnreadCount?: number;
   allowedNav?: StaffNavId[];
   onNavChange: (id: StaffNavId) => void;
@@ -55,7 +52,6 @@ function NavIcon({ icon, className }: { icon: string; className?: string }) {
 
 export function StaffSidebar({
   activeNav,
-  pendingCount,
   guestUnreadCount = 0,
   allowedNav,
   onNavChange,
@@ -99,33 +95,6 @@ export function StaffSidebar({
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">
-        <button
-          type="button"
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900"
-        >
-          <IconStar className="w-4 h-4 text-violet-500" />
-          <span>Mage Assistant</span>
-        </button>
-        <button
-          type="button"
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900"
-        >
-          <IconBell className="w-4 h-4" />
-          <span className="flex-1 text-left">Notifications</span>
-          {pendingCount > 0 && (
-            <span className="min-w-[20px] rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[11px] font-semibold text-white">
-              {pendingCount > 99 ? '99+' : pendingCount}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900"
-        >
-          <IconLayoutGrid className="w-4 h-4" />
-          <span>Dashboard</span>
-        </button>
-
         {visibleNavItems.map((item) => {
           const isActive = activeNav === item.id;
           const className = `flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${

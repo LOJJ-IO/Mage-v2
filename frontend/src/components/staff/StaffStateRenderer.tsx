@@ -56,8 +56,6 @@ export function StaffStateRenderer() {
   const { data: selectedAction } = useStaffAction(staffKey, selectedId);
   const updateMutation = useUpdateStaffAction();
 
-  const pendingCount = actions.filter((a) => a.status === 'pending').length;
-
   const handlePinSubmit = useCallback(async (key: string) => {
     setPinError(undefined);
     const ok = await verifyStaffKey(key);
@@ -125,7 +123,6 @@ export function StaffStateRenderer() {
         actions={actions}
         staffKey={staffKey!}
         isLoading={isLoading}
-        pendingCount={pendingCount}
         staffRole={effectiveRole}
         allowedNav={allowedNav}
         allowedActionTypes={allowedActionTypes}

@@ -1,7 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { QueryProvider } from '@/components/providers/QueryProvider';
-import { ToastContainer } from '@/components/Toast';
-import { ThemeClass } from '@/components/ThemeClass';
+import { AppProviders } from '@/components/providers/AppProviders';
 import '@/styles/globals.css';
 
 export const metadata: Metadata = {
@@ -31,11 +29,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="font-sans antialiased">
-        <QueryProvider>
-          <ThemeClass />
-          <ToastContainer />
-          {children}
-        </QueryProvider>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

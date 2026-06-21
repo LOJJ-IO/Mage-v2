@@ -1,9 +1,10 @@
 'use client';
 
 import { FormEvent, Suspense, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HydrationGate } from '@/components/HydrationGate';
+import { useAppNavigation } from '@/components/providers/NavigationLoaderProvider';
+import { useNavigationReady } from '@/hooks/useNavigationReady';
 import { apiClient, parseReturningGuestIdentifier } from '@/lib/api';
 import { useMageStore } from '@/store/mageStore';
 
@@ -239,7 +240,7 @@ function NewGuestForm({ onBack }: { onBack: () => void }) {
 // ---------------------------------------------------------------------------
 
 function ReturningGuestForm({ onBack }: { onBack: () => void }) {
-  const router = useRouter();
+  const { navigate } = useAppNavigation();
   const { setGuestProfile, context } = useMageStore();
   const [identifier, setIdentifier] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -265,7 +266,7 @@ function ReturningGuestForm({ onBack }: { onBack: () => void }) {
       if (context.hasSeenWelcome) {
         useMageStore.setState({ currentState: 'S-G-003' });
       }
-      router.push('/');
+      navigate('/');
     } finally {
       setSubmitting(false);
     }
@@ -347,10 +348,12 @@ function TabSelector({
 function GuestOnboardInner() {
   const [view, setView] = useState<ViewState>('tabs');
 
+  useNavigationReady(true, '/onboard/guest');
+
   return (
     <main className="min-h-screen bg-white dark:bg-mage-gray-900 flex flex-col max-w-md mx-auto px-6 py-12 justify-center">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-2xl font-semibold text-mage-black dark:text-white mb-2">lojj</h1>
+        <h1 className="text-2xl font-semibold text-mage-black dark:text-white mb-2">Lojj</h1>
         <p className="text-sm text-mage-gray-500 dark:text-mage-gray-400 mb-10">
           Guest access
         </p>

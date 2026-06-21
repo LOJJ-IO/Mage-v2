@@ -22,9 +22,9 @@ ROLE_NAV: dict[StaffRole, FrozenSet[str]] = {
     StaffRole.FRONT_DESK: frozenset({
         "tasks", "assigned", "schedule", "review", "guest-chat", "help-desk", "knowledge"
     }),
-    StaffRole.MAINTENANCE: frozenset({"tasks", "assigned", "schedule", "help-desk"}),
-    StaffRole.HOUSEKEEPING: frozenset({"tasks", "assigned", "schedule", "help-desk"}),
-    StaffRole.ROOM_SERVICE: frozenset({"tasks", "assigned", "schedule", "help-desk"}),
+    StaffRole.MAINTENANCE: frozenset({"tasks", "assigned", "schedule"}),
+    StaffRole.HOUSEKEEPING: frozenset({"tasks", "assigned", "schedule"}),
+    StaffRole.ROOM_SERVICE: frozenset({"tasks", "assigned", "schedule"}),
 }
 
 ROLE_ACTION_TYPES: dict[StaffRole, FrozenSet[ActionType]] = {
