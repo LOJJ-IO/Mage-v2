@@ -123,6 +123,39 @@ def record_sentiment_snapshot(
         logger.warning("Failed to record sentiment metrics: %s", exc)
 
 
+def record_staff_team_reassignment_event(
+    *,
+    guest_id: str,
+    property_id: Optional[str],
+    action_id: str,
+    from_team: str,
+    to_team: str,
+    staff_role: str,
+    staff_id: str,
+) -> None:
+    """Persist when front desk or manager manually picks a team for a task."""
+    if not _active():
+        return
+    try:
+        get_database().record_metrics_event(
+            {
+                "event_type": "staff_team_reassignment",
+                "guest_id": guest_id,
+                "property_id": property_id,
+                "success": True,
+                "metadata": {
+                    "action_id": action_id,
+                    "from_team": from_team,
+                    "to_team": to_team,
+                    "staff_role": staff_role,
+                    "staff_id": staff_id,
+                },
+            }
+        )
+    except Exception as exc:
+        logger.warning("Failed to record staff team reassignment metrics: %s", exc)
+
+
 def get_tracking_config() -> Dict[str, Any]:
     settings = get_settings()
     db_enabled = False

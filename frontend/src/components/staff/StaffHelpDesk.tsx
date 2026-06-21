@@ -298,13 +298,43 @@ function getSlotAnswer(fact: PropertyFact | undefined): string | null {
 }
 
 export function StaffHelpDesk({ staffKey, taskActionId, onBackToTask }: StaffHelpDeskProps) {
-  if (taskActionId) {
-    return <TaskAssistMode staffKey={staffKey} actionId={taskActionId} onBack={onBackToTask} />;
-  }
-  return <StaffHelpDeskBrowse staffKey={staffKey} />;
+  return (
+    <StaffHelpDeskBrowse
+      staffKey={staffKey}
+      taskActionId={taskActionId}
+      onClearTask={onBackToTask}
+    />
+  );
 }
 
-function StaffHelpDeskBrowse({ staffKey }: { staffKey: string }) {
+function mapStaffActionRow(raw: Record<string, unknown>): StaffAction {
+  return {
+    id: String(raw.id),
+    guestId: String(raw.guest_id),
+    actionType: String(raw.action_type) as StaffAction['actionType'],
+    summary: String(raw.summary),
+    sourceMessage: String(raw.source_message),
+    status: String(raw.status) as StaffAction['status'],
+    createdAt: String(raw.created_at),
+    guestName: raw.guest_name != null ? String(raw.guest_name) : undefined,
+    roomNumber: raw.room_number != null ? String(raw.room_number) : undefined,
+    escalationType: String(raw.escalation_type ?? 'normal') as StaffAction['escalationType'],
+    allowStaffJumpIn: Boolean(raw.allow_staff_jump_in ?? true),
+    guestConversationThreadId: raw.guest_conversation_thread_id
+      ? String(raw.guest_conversation_thread_id)
+      : undefined,
+  };
+}
+
+function StaffHelpDeskBrowse({
+  staffKey,
+  taskActionId,
+  onClearTask,
+}: {
+  staffKey: string;
+  taskActionId?: string;
+  onClearTask?: () => void;
+}) {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [facts, setFacts] = useState<Record<string, PropertyFact>>({});
   const [loading, setLoading] = useState(true);
@@ -313,8 +343,34 @@ function StaffHelpDeskBrowse({ staffKey }: { staffKey: string }) {
   const [expandedSubsections, setExpandedSubsections] = useState<Set<string>>(new Set());
   const [assistantOpen, setAssistantOpen] = useState(true);
   const [assistantDraft, setAssistantDraft] = useState('');
+  const [taskAction, setTaskAction] = useState<StaffAction | null>(null);
 
   const isWide = useMediaQuery('(min-width: 1101px)');
+
+  useEffect(() => {
+    if (!taskActionId) {
+      setTaskAction(null);
+      return;
+    }
+    let cancelled = false;
+    void fetch(`/api/staff/actions/${encodeURIComponent(taskActionId)}`, {
+      headers: { 'X-Staff-Key': staffKey },
+    })
+      .then(async (res) => {
+        if (!res.ok || cancelled) return;
+        const raw = (await res.json()) as Record<string, unknown>;
+        const action = mapStaffActionRow(raw);
+        setTaskAction(action);
+        setAssistantDraft(buildPrefill(action));
+        setAssistantOpen(true);
+      })
+      .catch(() => {
+        if (!cancelled) setTaskAction(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [taskActionId, staffKey]);
 
   const loadData = useCallback(async () => {
     if (!staffKey.trim()) return;
@@ -692,9 +748,25 @@ function StaffHelpDeskBrowse({ staffKey }: { staffKey: string }) {
           <div className="help-desk-assistant-sparkle" aria-hidden>
             ✦
           </div>
-          <p>
-            Good morning — I&apos;m here to help. Ask me anything about {propertyName}.
-          </p>
+          {taskAction ? (
+            <>
+              <p className="font-medium">Task context loaded</p>
+              <p className="mt-2 text-sm opacity-90">{taskAction.summary}</p>
+              {onClearTask && (
+                <button
+                  type="button"
+                  className="mt-3 text-sm underline opacity-80 hover:opacity-100"
+                  onClick={onClearTask}
+                >
+                  Clear task context
+                </button>
+              )}
+            </>
+          ) : (
+            <p>
+              Good morning — I&apos;m here to help. Ask me anything about {propertyName}.
+            </p>
+          )}
         </div>
         <div className="help-desk-assistant-footer">
           <div className="help-desk-assistant-input-wrap">

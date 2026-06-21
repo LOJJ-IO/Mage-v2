@@ -212,15 +212,6 @@ export function StaffKanbanBoard({
           >
             Reset
           </button>
-          <button
-            type="button"
-            className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900"
-          >
-            Automate
-            <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-600">
-              Pro
-            </span>
-          </button>
           <span className="ml-auto hidden text-xs text-neutral-500 sm:inline">
             {totalVisible} visible / {allActions.length} total
           </span>

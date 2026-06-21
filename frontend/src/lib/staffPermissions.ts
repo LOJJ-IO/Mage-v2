@@ -44,6 +44,24 @@ export const TASK_HELP_ROLES: ReadonlySet<StaffRole> = new Set<StaffRole>([
 /** Roles that may browse the Help Desk sidebar. */
 export const BROWSE_HELP_ROLES: ReadonlySet<StaffRole> = new Set<StaffRole>(['manager', 'front_desk']);
 
+/** Roles that may manually reassign a task to another team. */
+export const REASSIGN_TEAM_ROLES: ReadonlySet<StaffRole> = new Set<StaffRole>([
+  'manager',
+  'front_desk',
+]);
+
+/** Valid reassignment targets (HANDOFF is resolved at log time). */
+export const REASSIGNABLE_ACTION_TYPES: ActionType[] = [
+  'MAINTENANCE',
+  'HOUSEKEEPING',
+  'ROOM_SERVICE',
+  'CONTACT_FRONT_DESK',
+];
+
+export function canReassignTaskTeam(role: StaffRole): boolean {
+  return REASSIGN_TEAM_ROLES.has(role);
+}
+
 export function getAllowedNav(role: StaffRole): StaffNavId[] {
   return Array.from(ROLE_NAV[role]) as StaffNavId[];
 }

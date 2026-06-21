@@ -35,3 +35,21 @@ export function parseStaffNavId(value: string | null | undefined): StaffNavId | 
 export function staffNavLabel(nav: StaffNavId): string {
   return STAFF_NAV_ITEMS.find((item) => item.id === nav)?.label ?? nav;
 }
+
+/** Build a /staff URL with nav (and optional help-desk task) while preserving filter params. */
+export function buildStaffHref(
+  pathname: string,
+  existing: URLSearchParams,
+  nav: StaffNavId,
+  options?: { taskId?: string | null }
+): string {
+  const params = new URLSearchParams(existing.toString());
+  params.set('nav', nav);
+  if (nav === 'help-desk' && options?.taskId) {
+    params.set('task', options.taskId);
+  } else {
+    params.delete('task');
+  }
+  const qs = params.toString();
+  return qs ? `${pathname}?${qs}` : pathname;
+}

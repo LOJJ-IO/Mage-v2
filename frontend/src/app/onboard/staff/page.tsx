@@ -8,7 +8,7 @@ import { useAppNavigation } from '@/components/providers/NavigationLoaderProvide
 import { useNavigationReady } from '@/hooks/useNavigationReady';
 import { apiClient } from '@/lib/api';
 import { getNavigationCopy } from '@/lib/navigationLoaderCopy';
-import { setStoredStaffKey } from '@/lib/stateMachineStaff';
+import { setStoredStaffKey, setStoredStaffRole } from '@/lib/stateMachineStaff';
 
 type Tab = 'request' | 'sign-in';
 
@@ -69,6 +69,7 @@ export default function OnboardStaffPage() {
         return;
       }
       setStoredStaffKey(accessKey.trim());
+      setStoredStaffRole(res.data.approvedRole);
       navigate('/staff');
     } finally {
       setSignInLoading(false);

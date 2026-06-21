@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List
@@ -92,7 +92,14 @@ class UpdateTicketRequest(BaseModel):
 
 class UpdateStaffActionRequest(BaseModel):
     """Request model for updating a staff action."""
-    status: StaffActionStatus
+    status: Optional[StaffActionStatus] = None
+    action_type: Optional[ActionType] = None
+
+    @model_validator(mode="after")
+    def require_at_least_one_field(self) -> "UpdateStaffActionRequest":
+        if self.status is None and self.action_type is None:
+            raise ValueError("At least one of status or action_type must be provided")
+        return self
 
 
 class StaffMessageRequest(BaseModel):

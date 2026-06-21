@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { StaffStateId } from '@/types';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { ActionType, StaffStateId } from '@/types';
 import {
   clearStoredStaffKey,
   clearStoredStaffRole,
@@ -13,8 +13,9 @@ import {
   setStoredStaffRole,
   staffTransition,
 } from '@/lib/stateMachineStaff';
-import { getAllowedActionTypes, getAllowedNav, type StaffRole } from '@/lib/staffPermissions';
+import { getAllowedActionTypes, getAllowedNav, canReassignTaskTeam, type StaffRole } from '@/lib/staffPermissions';
 import { useStaffActions, useStaffAction, useUpdateStaffAction } from '@/hooks/useStaffApi';
+import { buildStaffHref } from '@/components/staff/staffNav';
 import { StaffPinScreen } from './StaffPinScreen';
 import { StaffWorkspace } from './StaffWorkspace';
 import { StaffDetailPanel } from './StaffDetailPanel';
@@ -36,6 +37,8 @@ async function fetchStaffRole(key: string): Promise<StaffRole | null> {
 
 export function StaffStateRenderer() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [state, setState] = useState<StaffStateId>('S-S-001');
   const [staffKey, setStaffKey] = useState<string | null>(null);
   const [staffRole, setStaffRole] = useState<StaffRole | null>(null);
@@ -44,12 +47,19 @@ export function StaffStateRenderer() {
 
   useEffect(() => {
     const stored = getStoredStaffKey();
-    if (stored) {
-      setStaffKey(stored);
-      const storedRole = getStoredStaffRole() as StaffRole | null;
-      if (storedRole) setStaffRole(storedRole);
-      setState(getStaffEntryState(true));
-    }
+    if (!stored) return;
+
+    setStaffKey(stored);
+    setState(getStaffEntryState(true));
+
+    const cachedRole = getStoredStaffRole() as StaffRole | null;
+    if (cachedRole) setStaffRole(cachedRole);
+
+    void fetchStaffRole(stored).then((role) => {
+      if (!role) return;
+      setStoredStaffRole(role);
+      setStaffRole(role);
+    });
   }, []);
 
   const { data: actions = [], isLoading } = useStaffActions(staffKey);
@@ -79,8 +89,8 @@ export function StaffStateRenderer() {
     setStaffKey(null);
     setStaffRole(null);
     setSelectedId(null);
-    setState('S-S-001');
-  }, []);
+    router.replace('/onboard/staff');
+  }, [router]);
 
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id);
@@ -94,10 +104,16 @@ export function StaffStateRenderer() {
 
   const handleGetHelp = useCallback(() => {
     if (!selectedId) return;
-    router.push(`/staff?nav=help-desk&task=${encodeURIComponent(selectedId)}`);
+    const href = buildStaffHref(
+      pathname,
+      new URLSearchParams(searchParams.toString()),
+      'help-desk',
+      { taskId: selectedId }
+    );
+    router.push(href);
     setSelectedId(null);
     setState(staffTransition('S-S-003', 'BACK') ?? 'S-S-002');
-  }, [selectedId, router]);
+  }, [selectedId, router, pathname, searchParams]);
 
   const handleUpdateStatus = useCallback(
     async (status: 'acknowledged' | 'resolved') => {
@@ -109,11 +125,28 @@ export function StaffStateRenderer() {
     [staffKey, selectedId, updateMutation]
   );
 
+  const handleReassignTeam = useCallback(
+    async (actionType: ActionType) => {
+      if (!staffKey || !selectedId || !selectedAction) return;
+      if (actionType === selectedAction.actionType) return;
+      await updateMutation.mutateAsync({ actionId: selectedId, actionType, staffKey });
+    },
+    [staffKey, selectedId, selectedAction, updateMutation]
+  );
+
   if (state === 'S-S-001') {
     return <StaffPinScreen onSubmit={handlePinSubmit} error={pinError} />;
   }
 
-  const effectiveRole: StaffRole = staffRole ?? 'manager';
+  if (!staffRole) {
+    return (
+      <div className="staff-ui flex h-screen items-center justify-center bg-neutral-100 dark:bg-neutral-950">
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">Loading workspace…</p>
+      </div>
+    );
+  }
+
+  const effectiveRole: StaffRole = staffRole;
   const allowedNav = getAllowedNav(effectiveRole);
   const allowedActionTypes = getAllowedActionTypes(effectiveRole);
 
@@ -134,8 +167,10 @@ export function StaffStateRenderer() {
           action={selectedAction}
           staffKey={staffKey}
           isUpdating={updateMutation.isPending}
+          canReassignTeam={canReassignTaskTeam(effectiveRole)}
           onClose={handleCloseDetail}
           onUpdateStatus={handleUpdateStatus}
+          onReassignTeam={(actionType) => void handleReassignTeam(actionType)}
           onGetHelp={handleGetHelp}
         />
       )}

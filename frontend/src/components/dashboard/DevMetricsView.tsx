@@ -28,6 +28,7 @@ export function DevMetricsView() {
   const abilityUsage = (m?.ability_usage as Record<string, number>) || {};
   const requestTypes = (m?.request_types as Record<string, number>) || {};
   const escalationReasons = (m?.escalation_reasons as Record<string, number>) || {};
+  const teamReassignments = (m?.team_reassignments_by_target as Record<string, number>) || {};
   const latency = (m?.latency_avg_ms as Record<string, number>) || {};
 
   return (
@@ -48,6 +49,7 @@ export function DevMetricsView() {
         <DevMetricCard title="Re-ask rate (proxy)" value={`${(m?.repetition_rate_pct as number) ?? 0}%`} measurementType="proxy" />
         <DevMetricCard title="FAQ rejection rate" value={`${(m?.faq_rejection_rate_pct as number) ?? 0}%`} measurementType="real" />
         <DevMetricCard title="Misclassification proxy" value={`${(m?.misclassification_proxy_pct as number) ?? 0}%`} measurementType="proxy" notForClientReporting />
+        <DevMetricCard title="Manual team picks" value={String((m?.manual_team_reassignments_count as number) ?? 0)} measurementType="real" />
       </div>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-2">
@@ -71,6 +73,11 @@ export function DevMetricsView() {
         <BlurFade delay={240}>
           <SimpleBarChart title="Escalation reasons" data={toChartData(escalationReasons)} />
         </BlurFade>
+        {(m?.manual_team_reassignments_count as number) > 0 && (
+          <BlurFade delay={280}>
+            <SimpleBarChart title="Team picks by target" data={toChartData(teamReassignments)} />
+          </BlurFade>
+        )}
       </div>
 
       <BlurFade delay={320} className="mt-6">

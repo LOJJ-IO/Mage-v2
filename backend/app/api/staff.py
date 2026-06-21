@@ -27,12 +27,15 @@ from app.services.conversation_helpers import is_internal_conversation_message
 from app.services.database import get_database
 from app.services.message_codec import parse_stored_message
 from app.services.staff_permissions import (
+    REASSIGNABLE_ACTION_TYPES,
+    REASSIGN_TEAM_ROLES,
     ROLE_ACTION_TYPES,
     ROLE_NAV,
     StaffContext,
     get_current_staff,
     require_role,
 )
+from app.services.metrics_service import record_staff_team_reassignment_event
 
 router = APIRouter(prefix="/staff", tags=["staff"])
 
@@ -446,12 +449,47 @@ async def post_staff_action_message(
 async def update_staff_action(
     action_id: str,
     request: UpdateStaffActionRequest,
-    _: bool = Depends(verify_staff_key),
+    ctx: StaffContext = Depends(get_current_staff),
 ):
     db = get_database()
-    action = db.update_staff_action_status(action_id, request.status)
-    if not action:
+    existing = db.get_staff_action(action_id)
+    if not existing:
         raise HTTPException(status_code=404, detail="Action not found")
+
+    action = existing
+
+    if request.action_type is not None and request.action_type != existing.action_type:
+        if ctx.role not in REASSIGN_TEAM_ROLES:
+            raise HTTPException(
+                status_code=403,
+                detail="Only front desk or manager may reassign task team",
+            )
+        if request.action_type not in REASSIGNABLE_ACTION_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid team for reassignment",
+            )
+        previous_type = existing.action_type
+        updated = db.update_staff_action_type(action_id, request.action_type)
+        if not updated:
+            raise HTTPException(status_code=404, detail="Action not found")
+        action = updated
+        record_staff_team_reassignment_event(
+            guest_id=action.guest_id,
+            property_id=ctx.property_id,
+            action_id=action_id,
+            from_team=previous_type.value,
+            to_team=request.action_type.value,
+            staff_role=ctx.role.value,
+            staff_id=ctx.id,
+        )
+
+    if request.status is not None:
+        updated = db.update_staff_action_status(action_id, request.status)
+        if not updated:
+            raise HTTPException(status_code=404, detail="Action not found")
+        action = updated
+
     return action
 
 

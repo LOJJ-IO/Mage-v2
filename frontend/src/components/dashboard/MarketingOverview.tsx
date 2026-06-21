@@ -58,6 +58,11 @@ export function MarketingOverview() {
     return mix.map((item) => ({ name: item.name, value: item.value }));
   }, [splits]);
 
+  const teamReassignmentChart = useMemo(() => {
+    const mix = splits?.team_reassignment_mix ?? [];
+    return mix.map((item) => ({ name: item.name.replace(/_/g, ' '), value: item.value }));
+  }, [splits]);
+
   const sparklines = useMemo(() => {
     const series = seriesQuery.data?.series ?? [];
     const handledPct = series.map((d) =>
@@ -150,6 +155,15 @@ export function MarketingOverview() {
             data={abilityChart}
           />
         </BlurFade>
+        {(s?.manual_team_reassignments_count ?? 0) > 0 && (
+          <BlurFade delay={360}>
+            <SimpleBarChart
+              title="Manual team picks"
+              description="Front desk / manager reassigned tasks (REAL)"
+              data={teamReassignmentChart}
+            />
+          </BlurFade>
+        )}
       </div>
 
       <div className="mt-6">
@@ -194,6 +208,13 @@ export function MarketingOverview() {
             measurementType="real"
             sparklineData={sparklines.wow}
             sparklineColor="#F59E0B"
+          />
+          <KpiCard
+            title="Manual team picks (pilot data)"
+            value={s?.manual_team_reassignments_count ?? 0}
+            subtitle="Front desk / manager reassigned a task team"
+            measurementType="real"
+            higherIsBetter={false}
           />
         </div>
       </div>

@@ -262,6 +262,14 @@ class DatabaseProtocol(Protocol):
         """Update staff action status."""
         ...
 
+    def update_staff_action_type(
+        self,
+        action_id: str,
+        action_type: ActionType,
+    ) -> Optional[StaffAction]:
+        """Update staff action team routing (action_type)."""
+        ...
+
     def update_staff_action_summary(
         self,
         action_id: str,
@@ -839,6 +847,17 @@ class MockDatabase(PropertyStoreMixin):
         if not action:
             return None
         action.status = status
+        return action
+
+    def update_staff_action_type(
+        self,
+        action_id: str,
+        action_type: ActionType,
+    ) -> Optional[StaffAction]:
+        action = self.staff_actions.get(action_id)
+        if not action:
+            return None
+        action.action_type = action_type
         return action
 
     def update_staff_action_summary(
@@ -1549,6 +1568,25 @@ class SupabaseDatabase(PropertyStoreSupabase):
             return None
         except Exception as e:
             logger.error(f"Error updating staff action {action_id}: {e}")
+            return None
+
+    def update_staff_action_type(
+        self,
+        action_id: str,
+        action_type: ActionType,
+    ) -> Optional[StaffAction]:
+        try:
+            response = (
+                self.client.table("staff_actions")
+                .update({"action_type": action_type.value})
+                .eq("id", action_id)
+                .execute()
+            )
+            if response.data:
+                return _staff_action_from_row(response.data[0])
+            return None
+        except Exception as e:
+            logger.error(f"Error updating staff action type {action_id}: {e}")
             return None
 
     def update_staff_action_summary(

@@ -158,7 +158,7 @@ export function StaffKanbanCard({
   const handleDragEnd = () => {
     window.setTimeout(() => {
       didDragRef.current = false;
-    }, 0);
+    }, 100);
   };
 
   const handleClick = () => {

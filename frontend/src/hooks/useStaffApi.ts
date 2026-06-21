@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
-import { Message, StaffActionStatus, StaffGuestConversation } from '@/types';
+import { Message, StaffAction, StaffActionStatus, StaffGuestConversation } from '@/types';
 import { getStoredStaffKey } from '@/lib/stateMachineStaff';
 
 export const staffQueryKeys = {
@@ -110,13 +110,18 @@ export function useUpdateStaffAction() {
     mutationFn: async ({
       actionId,
       status,
+      actionType,
       staffKey,
     }: {
       actionId: string;
-      status: StaffActionStatus;
       staffKey: string;
+      status?: StaffActionStatus;
+      actionType?: StaffAction['actionType'];
     }) => {
-      const response = await apiClient.updateStaffAction(staffKey, actionId, status);
+      const response = await apiClient.updateStaffAction(staffKey, actionId, {
+        status,
+        actionType,
+      });
       if (!response.success) throw new Error(response.error || 'Update failed');
       return response.data!;
     },

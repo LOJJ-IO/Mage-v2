@@ -742,13 +742,16 @@ class ApiClient {
   async updateStaffAction(
     staffKey: string,
     actionId: string,
-    status: StaffActionStatus
+    patch: { status?: StaffActionStatus; actionType?: StaffAction['actionType'] }
   ): Promise<ApiResponse<StaffAction>> {
+    const body: Record<string, string> = {};
+    if (patch.status != null) body.status = patch.status;
+    if (patch.actionType != null) body.action_type = patch.actionType;
     const result = await this.request<Record<string, unknown>>(
       `/api/staff/actions/${actionId}`,
       {
         method: 'PATCH',
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(body),
       },
       staffKey
     );

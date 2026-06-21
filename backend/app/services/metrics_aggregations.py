@@ -61,6 +61,10 @@ def _faq_events(events: List[dict]) -> List[dict]:
     return [e for e in events if e.get("event_type") == "faq_feedback"]
 
 
+def _team_reassignment_events(events: List[dict]) -> List[dict]:
+    return [e for e in events if e.get("event_type") == "staff_team_reassignment"]
+
+
 def _is_escalation(ev: dict) -> bool:
     esc = (ev.get("escalation_type") or "").lower()
     if esc in ("escalated", "contact", "repetition"):
@@ -165,6 +169,9 @@ def aggregate_marketing(
         if e.get("ability_executed"):
             ability_set.add(str(e.get("ability_executed")))
 
+    reassignments = _team_reassignment_events(events)
+    manual_team_reassignments = len(reassignments)
+
     return {
         # Legacy fields kept for API compat; NOT FOR CLIENT REPORTING (simulation artifacts)
         "calls_avoided": calls_avoided,
@@ -190,6 +197,7 @@ def aggregate_marketing(
         "dau": dau,
         "wau": wau,
         "wow_growth_pct": wow_growth,
+        "manual_team_reassignments_count": manual_team_reassignments,
         "pilot_data": True,
     }
 
@@ -290,6 +298,18 @@ def aggregate_dev(events: List[dict]) -> Dict[str, Any]:
             multi_turn_guests[str(gid)] += 1
     multi_turn_count = sum(1 for c in multi_turn_guests.values() if c > 1)
 
+    reassignments = _team_reassignment_events(events)
+    team_reassignments_by_target: Counter[str] = Counter()
+    team_reassignments_by_source: Counter[str] = Counter()
+    for ev in reassignments:
+        meta = ev.get("metadata") or {}
+        to_team = meta.get("to_team")
+        from_team = meta.get("from_team")
+        if to_team:
+            team_reassignments_by_target[str(to_team)] += 1
+        if from_team:
+            team_reassignments_by_source[str(from_team)] += 1
+
     return {
         "confidence_buckets": confidence_buckets,
         "ability_usage": dict(ability_usage),
@@ -318,6 +338,9 @@ def aggregate_dev(events: List[dict]) -> Dict[str, Any]:
         "repetition_rate_pct": repetition_rate,
         "multi_turn_guests": multi_turn_count,
         "total_routing_events": len(routing),
+        "manual_team_reassignments_count": len(reassignments),
+        "team_reassignments_by_target": dict(team_reassignments_by_target),
+        "team_reassignments_by_source": dict(team_reassignments_by_source),
         "misclassification_proxy_pct": round(
             repetition_rate + faq_rejection_rate * 0.5, 1
         ),
@@ -443,11 +466,23 @@ def build_chart_splits(events: List[dict]) -> Dict[str, List[Dict[str, Any]]]:
         {"name": k, "value": v} for k, v in request_types.most_common(8)
     ]
 
+    reassignments = _team_reassignment_events(events)
+    reassignment_targets: Counter[str] = Counter()
+    for ev in reassignments:
+        meta = ev.get("metadata") or {}
+        to_team = meta.get("to_team")
+        if to_team:
+            reassignment_targets[str(to_team)] += 1
+    team_reassignment_mix = [
+        {"name": k, "value": v} for k, v in reassignment_targets.most_common(8)
+    ]
+
     return {
         "handled_vs_escalated": handled_vs_escalated,
         "satisfaction_split": satisfaction_split,
         "ability_mix": ability_mix,
         "request_type_mix": request_type_mix,
+        "team_reassignment_mix": team_reassignment_mix,
     }
 
 

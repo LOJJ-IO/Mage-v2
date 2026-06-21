@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { StaffAction } from '@/types';
+import { ActionType, StaffAction } from '@/types';
 import {
   actionTypeBadgeClass,
   actionTypeLabel,
   escalationBadgeClass,
   escalationLabel,
 } from './actionBadges';
+import { REASSIGNABLE_ACTION_TYPES } from '@/lib/staffPermissions';
 import {
   useStaffActionConversation,
   useSendStaffMessage,
@@ -21,8 +22,10 @@ interface StaffDetailPanelProps {
   action: StaffAction;
   staffKey: string;
   isUpdating: boolean;
+  canReassignTeam?: boolean;
   onClose: () => void;
   onUpdateStatus: (status: 'acknowledged' | 'resolved') => void;
+  onReassignTeam?: (actionType: ActionType) => void;
   onGetHelp?: () => void;
 }
 
@@ -41,8 +44,10 @@ export function StaffDetailPanel({
   action,
   staffKey,
   isUpdating,
+  canReassignTeam = false,
   onClose,
   onUpdateStatus,
+  onReassignTeam,
   onGetHelp,
 }: StaffDetailPanelProps) {
   const created = new Date(action.createdAt).toLocaleString();
@@ -126,7 +131,37 @@ export function StaffDetailPanel({
                 {action.guestName ?? 'Unknown'} ({action.guestId})
               </DetailRow>
               <DetailRow label="Room">{action.roomNumber ?? '—'}</DetailRow>
-              <DetailRow label="Type">{actionTypeLabel(action.actionType)}</DetailRow>
+              <DetailRow label="Assigned team">
+                {canReassignTeam && onReassignTeam && action.status !== 'resolved' ? (
+                  <select
+                    value={
+                      REASSIGNABLE_ACTION_TYPES.includes(action.actionType)
+                        ? action.actionType
+                        : ''
+                    }
+                    disabled={isUpdating}
+                    onChange={(e) => {
+                      const next = e.target.value as ActionType;
+                      if (next) onReassignTeam(next);
+                    }}
+                    className="mt-0.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 dark:border-neutral-600 dark:bg-neutral-900 dark:text-white disabled:opacity-50"
+                    aria-label="Assigned team"
+                  >
+                    {!REASSIGNABLE_ACTION_TYPES.includes(action.actionType) && (
+                      <option value="" disabled>
+                        {actionTypeLabel(action.actionType)} — pick team
+                      </option>
+                    )}
+                    {REASSIGNABLE_ACTION_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {actionTypeLabel(type)}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  actionTypeLabel(action.actionType)
+                )}
+              </DetailRow>
               <DetailRow label="Status">
                 <span className="capitalize">{action.status}</span>
               </DetailRow>

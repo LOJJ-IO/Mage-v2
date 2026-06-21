@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { StaffAction } from '@/types';
 import { StaffSidebar } from './StaffSidebar';
 import { StaffKanbanBoard } from './StaffKanbanBoard';
 import { StaffKnowledgeOnboarding } from './StaffKnowledgeOnboarding';
-import { parseStaffNavId, staffNavLabel, StaffNavId } from './staffNav';
+import { buildStaffHref, parseStaffNavId, staffNavLabel, StaffNavId } from './staffNav';
 import { IconList } from './StaffIcons';
 import { StaffScheduleView } from './StaffScheduleView';
 import { StaffGuestInbox } from './StaffGuestInbox';
@@ -100,6 +100,37 @@ export function StaffWorkspace({
     if (nav && allowedNav.includes(nav)) setActiveNav(nav);
   }, [searchParams, allowedNav]);
 
+  const kanbanNav: StaffNavId = activeNav === 'assigned' ? 'assigned' : 'tasks';
+
+  const syncNav = useCallback(
+    (nav: StaffNavId, options?: { taskId?: string | null }) => {
+      setActiveNav(nav);
+      const href = buildStaffHref(
+        pathname,
+        new URLSearchParams(searchParams.toString()),
+        nav,
+        options?.taskId ? { taskId: options.taskId } : undefined
+      );
+      router.replace(href, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
+
+  const ensureKanbanNav = useCallback(() => {
+    const urlNav = parseStaffNavId(searchParams.get('nav'));
+    if (urlNav === 'help-desk' || searchParams.has('task')) {
+      syncNav(kanbanNav);
+    }
+  }, [kanbanNav, searchParams, syncNav]);
+
+  const handleSelectTask = useCallback(
+    (id: string) => {
+      ensureKanbanNav();
+      onSelect(id);
+    },
+    [ensureKanbanNav, onSelect]
+  );
+
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
     const hasQueryState = params.has('types') || params.has('floors') || params.has('sort');
@@ -126,6 +157,10 @@ export function StaffWorkspace({
     localStorage.setItem(TASK_VIEW_STORAGE_KEY, JSON.stringify(state));
 
     const current = new URLSearchParams(searchParams.toString());
+    if (activeNav === 'tasks' || activeNav === 'assigned') {
+      current.set('nav', activeNav);
+      current.delete('task');
+    }
     const next = buildTaskQueryState(current, nextFilters, nextSort);
     router.replace(`${pathname}?${next.toString()}`, { scroll: false });
   };
@@ -189,6 +224,7 @@ export function StaffWorkspace({
   const updateMutation = useUpdateStaffAction();
 
   const handleMoveAction = async (actionId: string, status: StaffActionStatus) => {
+    ensureKanbanNav();
     await updateMutation.mutateAsync({ actionId, status, staffKey });
   };
 
@@ -198,7 +234,7 @@ export function StaffWorkspace({
         activeNav={activeNav}
         guestUnreadCount={guestUnreadCount}
         allowedNav={allowedNav}
-        onNavChange={setActiveNav}
+        onNavChange={syncNav}
         onLogout={onLogout}
         mobileOpen={mobileNavOpen}
         onMobileClose={() => setMobileNavOpen(false)}
@@ -232,7 +268,7 @@ export function StaffWorkspace({
             isLoading={isLoading}
             title={activeNav === 'assigned' ? 'Assigned to me' : 'Tasks'}
             showCalendarShortcut={activeNav === 'tasks'}
-            onSelect={onSelect}
+            onSelect={handleSelectTask}
             onToggleServiceType={toggleServiceType}
             onToggleFloor={toggleFloor}
             onChangeSort={(nextSort) => persistTaskView(filters, nextSort)}
@@ -253,12 +289,7 @@ export function StaffWorkspace({
           <StaffHelpDesk
             staffKey={staffKey}
             taskActionId={searchParams.get('task') ?? undefined}
-            onBackToTask={() => {
-              const params = new URLSearchParams(searchParams.toString());
-              params.delete('task');
-              router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-              setActiveNav('tasks');
-            }}
+            onBackToTask={() => syncNav('tasks')}
           />
         )}
         {activeNav === 'knowledge' && (
@@ -285,7 +316,7 @@ export function StaffWorkspace({
         activeNav={activeNav}
         guestUnreadCount={guestUnreadCount}
         allowedNav={allowedNav}
-        onNavChange={setActiveNav}
+        onNavChange={syncNav}
         onOpenMenu={() => setMobileNavOpen(true)}
       />
     </StaffPageShell>

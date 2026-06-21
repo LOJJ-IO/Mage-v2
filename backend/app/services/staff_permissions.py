@@ -43,6 +43,19 @@ BROWSE_HELP_ROLES: FrozenSet[StaffRole] = frozenset({
     StaffRole.MANAGER, StaffRole.FRONT_DESK
 })
 
+# Roles that may manually reassign a task to another team
+REASSIGN_TEAM_ROLES: FrozenSet[StaffRole] = frozenset({
+    StaffRole.MANAGER, StaffRole.FRONT_DESK
+})
+
+# Valid reassignment targets (HANDOFF is resolved at log time)
+REASSIGNABLE_ACTION_TYPES: FrozenSet[ActionType] = frozenset({
+    ActionType.MAINTENANCE,
+    ActionType.HOUSEKEEPING,
+    ActionType.ROOM_SERVICE,
+    ActionType.CONTACT_FRONT_DESK,
+})
+
 
 # ---------------------------------------------------------------------------
 # StaffContext — resolved identity carried through a request

@@ -72,6 +72,11 @@ OVERVIEW_METRIC_LABELS: Dict[str, Dict[str, Any]] = {
         "client_reportable": False,
         "label": "Weekly active pilot testers",
     },
+    "manual_team_reassignments_count": {
+        "measurement_type": "real",
+        "client_reportable": True,
+        "label": "Manual team picks by front desk (pilot data)",
+    },
 }
 
 DEV_METRIC_LABELS: Dict[str, Dict[str, Any]] = {
@@ -107,6 +112,11 @@ DEV_METRIC_LABELS: Dict[str, Dict[str, Any]] = {
         "measurement_type": "real",
         "client_reportable": False,
         "label": "FAQ thumbs down rate",
+    },
+    "manual_team_reassignments_count": {
+        "measurement_type": "real",
+        "client_reportable": True,
+        "label": "Manual team picks by front desk (pilot data)",
     },
 }
 

@@ -87,6 +87,7 @@ export interface MarketingSummary {
     dau: number;
     wau: number;
     wow_growth_pct: number;
+    manual_team_reassignments_count?: number;
     pilot_data?: boolean;
   };
   recent_wins: Array<{
@@ -103,6 +104,7 @@ export interface MarketingSummary {
     satisfaction_split: ChartSplitItem[];
     ability_mix: ChartSplitItem[];
     request_type_mix: ChartSplitItem[];
+    team_reassignment_mix?: ChartSplitItem[];
   };
 }
 
