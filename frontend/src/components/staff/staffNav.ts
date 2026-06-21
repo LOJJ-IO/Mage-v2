@@ -10,7 +10,7 @@ export type StaffNavId =
 export interface StaffNavItem {
   id: StaffNavId;
   label: string;
-  icon: 'star' | 'user' | 'list' | 'calendar' | 'message' | 'book' | 'layers';
+  icon: 'star' | 'user' | 'clipboard' | 'calendar' | 'message' | 'book' | 'layers';
   href?: string;
   badge?: number;
 }
@@ -18,7 +18,7 @@ export interface StaffNavItem {
 export const STAFF_NAV_ITEMS: StaffNavItem[] = [
   { id: 'review', label: 'Review specialist', icon: 'star' },
   { id: 'assigned', label: 'Assigned to me', icon: 'user' },
-  { id: 'tasks', label: 'Tasks', icon: 'list' },
+  { id: 'tasks', label: 'Tasks', icon: 'clipboard' },
   { id: 'schedule', label: 'Schedule', icon: 'calendar' },
   { id: 'guest-chat', label: 'Chat with guests', icon: 'message' },
   { id: 'knowledge', label: 'Knowledge', icon: 'layers' },

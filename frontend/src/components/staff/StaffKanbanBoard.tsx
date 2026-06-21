@@ -7,7 +7,6 @@ import { IconCheckCircle, IconCheckSquare, IconCircle, IconFilter, IconSort, Ico
 import { StaffKanbanColumn, KanbanColumnId } from './StaffKanbanColumn';
 import { StaffKanbanMobileColumn } from './StaffKanbanMobileColumn';
 import { StaffNavIcon } from './StaffNavIcon';
-import { StaffNavShortcut } from './StaffNavShortcut';
 import { StaffModuleBody, StaffPageHeader } from './StaffPageHeader';
 import { TaskFilters, TaskSortKey } from './staffTaskQuery';
 import { useClickOutside } from './useClickOutside';
@@ -22,7 +21,6 @@ interface StaffKanbanBoardProps {
   availableFloors: string[];
   isLoading: boolean;
   title?: string;
-  showCalendarShortcut?: boolean;
   onSelect: (id: string) => void;
   onToggleServiceType: (type: ActionType) => void;
   onToggleFloor: (floor: string) => void;
@@ -43,7 +41,6 @@ export function StaffKanbanBoard({
   availableFloors,
   isLoading,
   title = 'Tasks',
-  showCalendarShortcut = true,
   onSelect,
   onToggleServiceType,
   onToggleFloor,
@@ -93,9 +90,6 @@ export function StaffKanbanBoard({
         icon={<StaffNavIcon nav={title === 'Assigned to me' ? 'assigned' : 'tasks'} />}
         title={title}
         actions={
-          showCalendarShortcut ? <StaffNavShortcut target="schedule" label="Calendar" /> : undefined
-        }
-        toolbar={
           <>
           <div className="relative" ref={filterRef}>
             <button
@@ -214,7 +208,7 @@ export function StaffKanbanBoard({
           >
             Reset
           </button>
-          <span className="ml-auto hidden text-xs text-neutral-500 sm:inline">
+          <span className="hidden text-xs text-neutral-500 sm:inline">
             {totalVisible} visible / {allActions.length} total
           </span>
           </>

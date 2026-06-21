@@ -20,6 +20,8 @@ import {
   type HelpDeskSelection,
 } from '@/components/staff/helpDeskNav';
 import { useMediaQuery } from '@/hooks/useResizableWidth';
+import { StaffModuleBody, StaffPageHeader } from './StaffPageHeader';
+import { StaffNavIcon } from './StaffNavIcon';
 
 const DEFAULT_PROPERTY_ID = process.env.NEXT_PUBLIC_PROPERTY_ID || 'grand-horizon';
 
@@ -120,33 +122,28 @@ function TaskAssistMode({
   };
 
   return (
-    <div className="help-desk staff-ui" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <header className="help-desk-topbar" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-        {onBack && (
-          <button
-            type="button"
-            onClick={onBack}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '0.875rem',
-              color: 'var(--neutral-500, #737373)',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            ← Back
-          </button>
-        )}
-        <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>
-          <span aria-hidden style={{ marginRight: '0.25rem' }}>✦</span>Help desk — Task assist
-        </span>
-      </header>
+    <div className="help-desk staff-ui flex h-full min-h-0 flex-col">
+      <StaffPageHeader
+        icon={<StaffNavIcon nav="help-desk" />}
+        title="Task assist"
+        actions={
+          onBack ? (
+            <button
+              type="button"
+              onClick={onBack}
+              className="rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            >
+              ← Back
+            </button>
+          ) : undefined
+        }
+      />
 
       {loadError ? (
         <div style={{ padding: '2rem', color: '#ef4444' }}>{loadError}</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <StaffModuleBody className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col">
           {action && (
             <div
               style={{
@@ -269,6 +266,7 @@ function TaskAssistMode({
             </div>
           </div>
         </div>
+        </StaffModuleBody>
       )}
     </div>
   );
@@ -787,35 +785,40 @@ function StaffHelpDeskBrowse({
   };
 
   return (
-    <div className="help-desk staff-ui">
-      <header className="help-desk-topbar">
-        <div className="help-desk-search-wrap">
-          <input
-            type="search"
-            className="help-desk-search"
-            placeholder="Search or ask AI"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search help desk"
-          />
-          <span className="help-desk-search-kbd" aria-hidden>
-            ⌘ K
-          </span>
-        </div>
-        <button
-          type="button"
-          className="help-desk-ask-ai"
-          onClick={() => isWide && setAssistantOpen(true)}
-        >
-          <span aria-hidden>✦</span> Ask AI
-        </button>
-      </header>
+    <div className="help-desk staff-ui flex h-full min-h-0 flex-col">
+      <StaffPageHeader
+        icon={<StaffNavIcon nav="help-desk" />}
+        title="Help desk"
+        actions={
+          <>
+            <div className="w-44 shrink-0">
+              <input
+                type="search"
+                className="w-full rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-[13px] text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-600 dark:focus:border-neutral-600"
+                placeholder="Search…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Search help desk"
+              />
+            </div>
+            <button
+              type="button"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
+              onClick={() => isWide && setAssistantOpen(true)}
+            >
+              <span aria-hidden>✦</span> Ask AI
+            </button>
+          </>
+        }
+      />
 
+      <StaffModuleBody className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="help-desk-body">
         {renderNav()}
         <main className="help-desk-main">{renderMain()}</main>
         {renderAssistant()}
       </div>
+      </StaffModuleBody>
     </div>
   );
 }

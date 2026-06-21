@@ -265,21 +265,16 @@ export function StaffReviewDashboard({ actions, staffKey }: StaffReviewDashboard
       <StaffPageHeader
         icon={<StaffNavIcon nav="review" />}
         title="Review specialist"
-        subtitle={
-          stats.total === 0
-            ? 'No guest conversations yet'
-            : `${stats.total} guest${stats.total === 1 ? '' : 's'} · ${stats.reviewReady} review ready`
-        }
-        toolbar={
+        actions={
           <>
             <input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Filter guests…"
-              className="w-full min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-[13px] text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-600 dark:focus:border-neutral-600 sm:min-w-[180px] sm:flex-none"
+              className="w-36 shrink-0 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-[13px] text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-600 dark:focus:border-neutral-600"
             />
-            <div className="flex w-full overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800 sm:ml-auto sm:w-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex shrink-0 overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {SEGMENTS.map((item, index) => (
                 <button
                   key={item.id}

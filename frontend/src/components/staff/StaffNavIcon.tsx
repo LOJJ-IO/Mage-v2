@@ -2,8 +2,8 @@ import { StaffNavId } from './staffNav';
 import {
   IconBook,
   IconCalendar,
+  IconClipboard,
   IconLayers,
-  IconList,
   IconMessage,
   IconStar,
   IconUser,
@@ -21,7 +21,7 @@ export function StaffNavIcon({ nav, className = 'w-5 h-5' }: StaffNavIconProps) 
     case 'assigned':
       return <IconUser className={className} />;
     case 'tasks':
-      return <IconList className={className} />;
+      return <IconClipboard className={className} />;
     case 'schedule':
       return <IconCalendar className={className} />;
     case 'guest-chat':

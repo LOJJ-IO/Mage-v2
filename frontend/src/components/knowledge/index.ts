@@ -10,7 +10,7 @@ export { ToggleThenChoiceField } from './ToggleThenChoiceField';
 export { MultipleChoiceField, isOtherOption } from './MultipleChoiceField';
 export { FieldCard } from './FieldCard';
 export { ProgressBar } from './ProgressBar';
-export { OnboardingCrawlPanel, CRAWL_EXAMPLE_CHIPS } from './OnboardingCrawlPanel';
+export { OnboardingCrawlPanel } from './OnboardingCrawlPanel';
 export type { UrlField } from './OnboardingCrawlPanel';
 export { OnboardingThemeToggle } from './OnboardingThemeToggle';
 export { StaffKnowledgeSection } from './StaffKnowledgeSection';

@@ -6,8 +6,7 @@ import { StaffAction } from '@/types';
 import { StaffSidebar } from './StaffSidebar';
 import { StaffKanbanBoard } from './StaffKanbanBoard';
 import { StaffKnowledgeOnboarding } from './StaffKnowledgeOnboarding';
-import { buildStaffHref, parseStaffNavId, staffNavLabel, StaffNavId } from './staffNav';
-import { IconList } from './StaffIcons';
+import { buildStaffHref, parseStaffNavId, StaffNavId } from './staffNav';
 import { StaffScheduleView } from './StaffScheduleView';
 import { StaffGuestInbox } from './StaffGuestInbox';
 import { StaffReviewDashboard } from './StaffReviewDashboard';
@@ -37,14 +36,40 @@ import type { KanbanColumnId } from './StaffKanbanColumn';
 import {
   StaffContentShell,
   StaffEmptyState,
-  StaffPageShell,
 } from './StaffLayoutPrimitives';
+import { StaffWorkspaceProvider, StaffWorkspaceShell } from './StaffWorkspaceShell';
+import { useSidebar } from '@/components/ui/sidebar';
+
+function StaffWorkspaceMobileNav({
+  activeNav,
+  guestUnreadCount,
+  allowedNav,
+  onNavChange,
+}: {
+  activeNav: StaffNavId;
+  guestUnreadCount: number;
+  allowedNav: StaffNavId[];
+  onNavChange: (nav: StaffNavId) => void;
+}) {
+  const { setOpenMobile } = useSidebar();
+  return (
+    <StaffMobileBottomNav
+      activeNav={activeNav}
+      guestUnreadCount={guestUnreadCount}
+      allowedNav={allowedNav}
+      onNavChange={onNavChange}
+      onOpenMenu={() => setOpenMobile(true)}
+    />
+  );
+}
 
 interface StaffWorkspaceProps {
   actions: StaffAction[];
   staffKey: string;
   isLoading: boolean;
   staffRole: StaffRole;
+  staffDisplayName?: string;
+  staffCode?: string;
   allowedNav: StaffNavId[];
   allowedActionTypes: ActionType[];
   onSelect: (id: string) => void;
@@ -76,6 +101,8 @@ export function StaffWorkspace({
   staffKey,
   isLoading,
   staffRole,
+  staffDisplayName,
+  staffCode,
   allowedNav,
   allowedActionTypes,
   onSelect,
@@ -92,7 +119,6 @@ export function StaffWorkspace({
 
   const defaultNav: StaffNavId = allowedNav.includes('tasks') ? 'tasks' : (allowedNav[0] ?? 'tasks');
   const [activeNav, setActiveNav] = useState<StaffNavId>(defaultNav);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [filters, setFilters] = useState<TaskFilters>(queryState.filters);
   const [sortKey, setSortKey] = useState<TaskSortKey>(queryState.sortKey);
   const [addTaskColumn, setAddTaskColumn] = useState<KanbanColumnId | null>(null);
@@ -258,32 +284,20 @@ export function StaffWorkspace({
   };
 
   return (
-    <StaffPageShell>
+    <StaffWorkspaceProvider>
       <StaffSidebar
         activeNav={activeNav}
         guestUnreadCount={guestUnreadCount}
         allowedNav={allowedNav}
+        staffDisplayName={staffDisplayName}
+        staffCode={staffCode}
+        staffRole={staffRole}
         onNavChange={syncNav}
         onLogout={onLogout}
-        mobileOpen={mobileNavOpen}
-        onMobileClose={() => setMobileNavOpen(false)}
       />
 
-      <StaffContentShell>
-        <div className="flex shrink-0 items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-950 lg:hidden">
-          <button
-            type="button"
-            onClick={() => setMobileNavOpen(true)}
-            className="rounded-lg border border-neutral-200 p-2 text-neutral-700 dark:border-neutral-700 dark:text-neutral-300"
-            aria-label="Open menu"
-          >
-            <IconList className="h-5 w-5" />
-          </button>
-          <span className="text-sm font-semibold text-neutral-900 dark:text-white">
-            {staffNavLabel(activeNav)}
-          </span>
-        </div>
-
+      <StaffWorkspaceShell>
+        <StaffContentShell>
         <div className="flex min-h-0 flex-1 flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
         {(activeNav === 'tasks' || activeNav === 'assigned') && (
           <StaffKanbanBoard
@@ -296,7 +310,6 @@ export function StaffWorkspace({
             availableFloors={availableFloors}
             isLoading={isLoading}
             title={activeNav === 'assigned' ? 'Assigned to me' : 'Tasks'}
-            showCalendarShortcut={activeNav === 'tasks'}
             onSelect={handleSelectTask}
             onToggleServiceType={toggleServiceType}
             onToggleFloor={toggleFloor}
@@ -316,14 +329,16 @@ export function StaffWorkspace({
         {activeNav === 'schedule' && <StaffScheduleView staffKey={staffKey} />}
         {activeNav === 'review' && <StaffReviewDashboard actions={roleFilteredActions} staffKey={staffKey} />}
         {activeNav === 'help-desk' && (
-          <StaffHelpDesk
-            staffKey={staffKey}
-            taskActionId={searchParams.get('task') ?? undefined}
-            onBackToTask={() => syncNav('tasks')}
-          />
+          <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
+            <StaffHelpDesk
+              staffKey={staffKey}
+              taskActionId={searchParams.get('task') ?? undefined}
+              onBackToTask={() => syncNav('tasks')}
+            />
+          </div>
         )}
         {activeNav === 'knowledge' && (
-          <div className="flex min-h-0 flex-1 overflow-hidden">
+          <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
             <StaffKnowledgeOnboarding staffKey={staffKey} embedded />
           </div>
         )}
@@ -340,15 +355,8 @@ export function StaffWorkspace({
             />
           )}
         </div>
-      </StaffContentShell>
-
-      <StaffMobileBottomNav
-        activeNav={activeNav}
-        guestUnreadCount={guestUnreadCount}
-        allowedNav={allowedNav}
-        onNavChange={syncNav}
-        onOpenMenu={() => setMobileNavOpen(true)}
-      />
+        </StaffContentShell>
+      </StaffWorkspaceShell>
 
       {addTaskColumn && (
         <StaffAddTaskDialog
@@ -362,6 +370,13 @@ export function StaffWorkspace({
           onSubmit={(values) => void handleCreateTask(values)}
         />
       )}
-    </StaffPageShell>
+
+      <StaffWorkspaceMobileNav
+        activeNav={activeNav}
+        guestUnreadCount={guestUnreadCount}
+        allowedNav={allowedNav}
+        onNavChange={syncNav}
+      />
+    </StaffWorkspaceProvider>
   );
 }

@@ -66,7 +66,7 @@ export function ProgressBar({
       <div className="prog-card">
         <div className="prog-card-label">
           <IconSparkles size={14} stroke={1.75} className="prog-icon prog-icon--extract" aria-hidden />
-          Extracted from crawl
+          Extracted from website(s)
         </div>
         {showExtractedStats ? (
           <>
@@ -83,7 +83,7 @@ export function ProgressBar({
             <div className="prog-big prog-big--idle" aria-hidden>
               —
             </div>
-            <div className="prog-detail">Start a crawl to auto-fill fields</div>
+            <div className="prog-detail">Add hotel website(s) below to auto-fill fields</div>
           </>
         )}
       </div>

@@ -375,12 +375,12 @@ export function StaffKnowledgeOnboarding({
         setLastCrawlFactsMerged(merged);
         setCrawlJustCompleted(true);
         setMessage(
-          `Crawl finished — ${pages} pages scanned, ${merged} facts extracted. Review gaps below, then publish.`
+          `Finished — ${pages} pages read, ${merged} fields filled. Review below, then tap Update info.`
         );
       } else if (job.status === 'failed') {
         stopPolling();
         setCrawling(false);
-        setMessage(job.error_message || 'Crawl failed.');
+        setMessage(job.error_message || 'Could not load website(s) info.');
       }
     }, 2000);
   };
@@ -452,9 +452,9 @@ export function StaffKnowledgeOnboarding({
       { method: 'POST' }
     );
     if (res.ok) {
-      setMessage('Published snapshot — guest chat will use this property knowledge.');
+      setMessage('Info updated — guest chat will use this property knowledge.');
     } else {
-      setMessage('Publish failed — add or crawl facts first.');
+      setMessage('Update failed — add hotel info or use demo info first.');
     }
   };
 
@@ -466,14 +466,14 @@ export function StaffKnowledgeOnboarding({
     );
     if (res.ok) {
       await loadFacts(staffKey, propertyId);
-      setMessage('Seeded Grand Horizon demo facts (dev shortcut only).');
+      setMessage('Loaded Grand Horizon demo info.');
     }
   };
 
   const startCrawl = async () => {
     const seedUrls = collectSeedUrlsFromFields(crawlUrlFields);
     if (!seedUrls.length) {
-      setMessage('Enter at least one hotel URL to crawl.');
+      setMessage('Enter at least one hotel website(s).');
       return;
     }
     const primarySeed = seedUrls[0];
@@ -485,8 +485,8 @@ export function StaffKnowledgeOnboarding({
     setCrawlJustCompleted(false);
     setMessage(
       seedUrls.length > 1
-        ? `Crawl started — ${seedUrls.length} sources, discovering pages…`
-        : 'Crawl started — discovering pages…'
+        ? `Loading website(s) info — ${seedUrls.length} sources…`
+        : 'Loading website(s) info…'
     );
 
     setTimeout(() => {
@@ -504,7 +504,7 @@ export function StaffKnowledgeOnboarding({
     if (!res.ok) {
       setCrawling(false);
       const err = await res.json().catch(() => ({}));
-      setMessage(String((err as { detail?: string }).detail || 'Could not start crawl.'));
+      setMessage(String((err as { detail?: string }).detail || 'Could not load website(s) info.'));
       return;
     }
 
@@ -513,7 +513,7 @@ export function StaffKnowledgeOnboarding({
     setCrawlJob(job);
     if (job.booking_augment?.added) {
       setMessage(
-        `Crawl started — added Booking.com listing automatically (${job.booking_augment.added}).`
+        `Added Booking.com listing automatically (${job.booking_augment.added}).`
       );
     }
     pollCrawlJob(job.id, job.property_id || pid);
@@ -577,21 +577,6 @@ export function StaffKnowledgeOnboarding({
     }
   };
 
-  const applyExampleUrl = (url: string) => {
-    setCrawlUrlFields((prev) => {
-      const next = [...prev];
-      while (next.length < 2) next.push(newUrlField());
-      const emptyIdx = next.findIndex((f) => !f.value.trim());
-      const idx = emptyIdx >= 0 ? emptyIdx : 0;
-      next[idx] = { ...next[idx], value: url };
-      if (idx === 0 && !propertyIdLocked) {
-        setPropertyId(propertyIdFromUrl(url));
-        void refreshBookingHint(url);
-      }
-      return next;
-    });
-  };
-
   const handleAutoPropertyId = () => {
     setPropertyIdLocked(false);
     const first = collectSeedUrlsFromFields(crawlUrlFields)[0];
@@ -602,8 +587,12 @@ export function StaffKnowledgeOnboarding({
     return Object.values(BRANCH_CHILDREN).some((children) => children.includes(slotKey));
   };
 
+  const contentWidthClass = embedded
+    ? 'w-full px-4 sm:px-6'
+    : 'mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-10';
+
   const rootClassName = embedded
-    ? `staff-ui knowledge-onboarding flex h-full min-h-0 flex-col overflow-hidden bg-neutral-100 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100${
+    ? `staff-ui knowledge-onboarding flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-neutral-100 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100${
         crawling || crawlJustCompleted ? ' has-crawl-float' : ''
       }`
     : `staff-ui knowledge-onboarding min-h-screen bg-neutral-100 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100${
@@ -619,18 +608,18 @@ export function StaffKnowledgeOnboarding({
         </a>
       )}
       <button type="button" className="btn-ghost" onClick={seed}>
-        Seed demo facts
+        Use demo info
       </button>
       <button type="button" className="btn-primary" onClick={publish}>
         <IconUpload size={15} stroke={2} aria-hidden />
-        Publish snapshot
+        Update info
       </button>
     </>
   );
 
   const onboardingScroll = (
     <>
-      <div className={`onboarding-top mx-auto w-full max-w-[1600px] px-4 ${embedded ? 'pt-4' : 'pt-6'} sm:px-6 lg:px-10`}>
+      <div className={`onboarding-top ${contentWidthClass} ${embedded ? 'pt-4' : 'pt-6'}`}>
         {!embedded ? (
           <div className="page-hdr">
             <div>
@@ -668,7 +657,6 @@ export function StaffKnowledgeOnboarding({
           }}
           onAutoPropertyId={handleAutoPropertyId}
           onStartCrawl={startCrawl}
-          onExampleChip={applyExampleUrl}
         />
 
         {message && (
@@ -678,7 +666,7 @@ export function StaffKnowledgeOnboarding({
         )}
       </div>
 
-      <div className="onboarding-main mx-auto w-full max-w-[1600px] px-4 pb-8 sm:px-6 lg:px-10">
+      <div className={`onboarding-main ${contentWidthClass} pb-8`}>
         <div className="grid gap-8 xl:grid-cols-[220px_minmax(0,1fr)]">
           <nav className="hidden xl:block" aria-label="Knowledge domains">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
@@ -785,10 +773,10 @@ export function StaffKnowledgeOnboarding({
           <StaffPageHeader
             icon={<StaffNavIcon nav="knowledge" />}
             title="Knowledge"
-            subtitle={`Property: ${propertyId}`}
             actions={knowledgeActions}
+            actionsAlign="end"
           />
-          <StaffModuleBody className="overflow-y-auto">{onboardingScroll}</StaffModuleBody>
+          <StaffModuleBody className="w-full min-w-0 overflow-y-auto">{onboardingScroll}</StaffModuleBody>
         </>
       ) : (
         onboardingScroll

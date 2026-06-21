@@ -12,7 +12,6 @@ import { useMediaQuery } from '@/hooks/useResizableWidth';
 import { StaffCard } from './StaffLayoutPrimitives';
 import { StaffModuleBody, StaffPageHeader } from './StaffPageHeader';
 import { StaffNavIcon } from './StaffNavIcon';
-import { StaffNavShortcut } from './StaffNavShortcut';
 import { ResizableSplit } from './ResizablePanel';
 import { staffChatBubbleClasses, staffChatMetaClasses } from './staffChatBubble';
 import { IconHeadset } from './StaffIcons';
@@ -266,8 +265,6 @@ export function StaffGuestInbox({ staffKey }: StaffGuestInboxProps) {
       <StaffPageHeader
         icon={<StaffNavIcon nav="guest-chat" />}
         title="Chat with guests"
-        subtitle={`${threads.length} conversation${threads.length === 1 ? '' : 's'}`}
-        actions={<StaffNavShortcut target="tasks" label="Tasks" />}
       />
       <StaffModuleBody className="flex min-h-0 flex-1 flex-col p-4 md:p-5">
       {isDesktop ? (

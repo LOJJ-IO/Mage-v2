@@ -210,6 +210,25 @@ h6,
 
 .staff-ui {
   font-family: 'Booton', 'Booton-TRIAL', system-ui, sans-serif;
+  --sidebar-background: 0 0% 100%;
+  --sidebar-foreground: 0 0% 20%;
+  --sidebar-primary: 0 0% 9%;
+  --sidebar-primary-foreground: 0 0% 98%;
+  --sidebar-accent: 0 0% 96%;
+  --sidebar-accent-foreground: 0 0% 9%;
+  --sidebar-border: 0 0% 90%;
+  --sidebar-ring: 0 0% 63%;
+}
+
+.dark .staff-ui {
+  --sidebar-background: 0 0% 4%;
+  --sidebar-foreground: 0 0% 90%;
+  --sidebar-primary: 0 0% 98%;
+  --sidebar-primary-foreground: 0 0% 9%;
+  --sidebar-accent: 0 0% 12%;
+  --sidebar-accent-foreground: 0 0% 98%;
+  --sidebar-border: 0 0% 15%;
+  --sidebar-ring: 0 0% 40%;
 }
 
 .staff-ui h1,
@@ -221,6 +240,30 @@ h6,
 .staff-ui .font-heading,
 .staff-ui .font-display {
   font-family: 'Season Mix', Georgia, serif;
+}
+
+/* Align sidebar header row with staff page top bars */
+.staff-ui.group\/sidebar-wrapper {
+  height: 100%;
+  max-height: 100vh;
+  min-height: 0;
+}
+
+.staff-ui .peer.hidden.md\:block > .fixed {
+  height: 100%;
+  max-height: 100%;
+}
+
+.staff-ui [data-sidebar='header'] {
+  height: 3.5rem;
+  min-height: 3.5rem;
+  max-height: 3.5rem;
+}
+
+.staff-ui .staff-chrome-header {
+  height: 3.5rem;
+  min-height: 3.5rem;
+  max-height: 3.5rem;
 }
 
 body {

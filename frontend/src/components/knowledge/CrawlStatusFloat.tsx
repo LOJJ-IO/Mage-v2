@@ -32,13 +32,13 @@ export function CrawlStatusFloat({
       <div className="crawl-status-float-body">
         {done ? (
           <span>
-            ✓ Crawl complete —{' '}
-            <AnimatedNumber value={factsMerged} duration={1100} /> facts extracted. Scroll up to
+            ✓ Done —{' '}
+            <AnimatedNumber value={factsMerged} duration={1100} /> fields filled. Scroll up to
             review auto-filled fields when you&apos;re ready.
           </span>
         ) : (
           <span>
-            Crawling…{' '}
+            Loading…{' '}
             <AnimatedNumber value={pagesDiscovered} duration={700} /> pages found ·{' '}
             <AnimatedNumber value={factsMerged} duration={700} /> slots filled
             {pagesWithFacts > 0 && (

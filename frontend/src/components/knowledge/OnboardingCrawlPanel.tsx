@@ -6,21 +6,6 @@ import type { BookingSuggest } from './onboardingTypes';
 
 export type UrlField = { id: string; value: string };
 
-export const CRAWL_EXAMPLE_CHIPS = [
-  {
-    label: 'marriott.com/hotels/your-hotel',
-    url: 'https://www.marriott.com/hotels/your-hotel',
-  },
-  {
-    label: 'booking.com/hotel/your-property',
-    url: 'https://www.booking.com/hotel/your-property',
-  },
-  {
-    label: 'tripadvisor.com/Hotel_Review-...',
-    url: 'https://www.tripadvisor.com/Hotel_Review-',
-  },
-] as const;
-
 type CrawlJobSummary = {
   status: string;
   pages_discovered?: number;
@@ -41,7 +26,6 @@ interface OnboardingCrawlPanelProps {
   onPropertyIdChange: (value: string) => void;
   onAutoPropertyId: () => void;
   onStartCrawl: () => void;
-  onExampleChip: (url: string) => void;
 }
 
 function crawlStatusLabel(
@@ -79,7 +63,6 @@ export function OnboardingCrawlPanel({
   onPropertyIdChange,
   onAutoPropertyId,
   onStartCrawl,
-  onExampleChip,
 }: OnboardingCrawlPanelProps) {
   const status = crawlStatusLabel(crawling, crawlJob);
   const showTip = !status.running && status.text === 'Not started';
@@ -91,27 +74,13 @@ export function OnboardingCrawlPanel({
   return (
     <div className="crawl-panel">
       <div className="crawl-panel-hdr">
-        <div className="crawl-panel-title">Crawl hotel sources</div>
+        <div className="crawl-panel-title">Use hotel website(s)</div>
         <p className="crawl-panel-hint">
-          We extract facts from your hotel website and listing pages automatically
+          We pull details from your hotel website(s) and listing pages automatically
         </p>
       </div>
 
       <div className="crawl-panel-body">
-        <div className="crawl-examples">
-          <span className="crawl-ex-label">Try:</span>
-          {CRAWL_EXAMPLE_CHIPS.map((chip) => (
-            <button
-              key={chip.label}
-              type="button"
-              className="crawl-ex-chip"
-              onClick={() => onExampleChip(chip.url)}
-            >
-              {chip.label}
-            </button>
-          ))}
-        </div>
-
         {primaryField && (
           <div className="crawl-url-row">
             <IconWorld size={16} stroke={1.5} className="crawl-url-icon" aria-hidden />
@@ -123,7 +92,7 @@ export function OnboardingCrawlPanel({
               placeholder="https://www.example-hotel.com"
               className="crawl-url-inp"
             />
-            <span className="crawl-url-tag crawl-url-tag--primary">Hotel website</span>
+            <span className="crawl-url-tag crawl-url-tag--primary">Hotel website(s)</span>
           </div>
         )}
 
@@ -203,7 +172,7 @@ export function OnboardingCrawlPanel({
             disabled={crawling}
           >
             <IconPlayerPlay size={14} stroke={2} fill="currentColor" aria-hidden />
-            {crawling ? 'Crawling…' : 'Start crawl'}
+            {crawling ? 'Loading…' : 'Use website(s)'}
           </button>
         </div>
       </div>

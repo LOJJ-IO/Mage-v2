@@ -7,6 +7,9 @@ export function actionTypeLabel(type: ActionType): string {
   if (type === 'HANDOFF') {
     return 'Front Desk';
   }
+  if (type === 'CONTACT_FRONT_DESK') {
+    return 'Front desk';
+  }
   return type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 

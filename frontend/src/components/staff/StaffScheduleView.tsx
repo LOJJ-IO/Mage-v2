@@ -23,7 +23,6 @@ import {
 } from '@/lib/staffCalendar';
 import { StaffModuleBody, StaffPageHeader } from './StaffPageHeader';
 import { StaffNavIcon } from './StaffNavIcon';
-import { StaffNavShortcut } from './StaffNavShortcut';
 
 interface CalendarSource {
   id: string;
@@ -58,21 +57,6 @@ function shiftAnchor(view: CalendarViewMode, anchor: Date, direction: -1 | 1): D
   else if (view === 'work-week' || view === 'week') next.setDate(next.getDate() + direction * 7);
   else next.setMonth(next.getMonth() + direction);
   return next;
-}
-
-function getRangeLabel(view: CalendarViewMode, anchor: Date): string {
-  if (view === 'month') return formatMonthYear(anchor);
-  const { start, end } = getViewRange(view, anchor);
-  const endInclusive = addDays(end, -1);
-  if (view === 'day') {
-    return anchor.toLocaleDateString(undefined, {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  }
-  return `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${endInclusive.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
 
 function MiniMonth({
@@ -452,7 +436,6 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
     setSources((prev) => prev.filter((row) => row.id !== id));
   };
 
-  const rangeLabel = getRangeLabel(view, anchorDate);
   const isLargeDesktop = useMediaQuery('(min-width: 1280px)');
   const isScheduleSidebar = useMediaQuery('(min-width: 1024px)');
   const isMobile = !isScheduleSidebar;
@@ -463,9 +446,7 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
       <StaffPageHeader
         icon={<StaffNavIcon nav="schedule" />}
         title="Schedule"
-        subtitle={rangeLabel}
-        actions={<StaffNavShortcut target="tasks" label="Tasks" />}
-        toolbar={
+        actions={
           <>
           <button
             type="button"
@@ -475,7 +456,7 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
           >
             New event
           </button>
-          <div className="inline-flex max-w-full overflow-x-auto rounded-lg border border-neutral-200 bg-white p-0.5 dark:border-neutral-700 dark:bg-neutral-950 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="inline-flex shrink-0 overflow-x-auto rounded-lg border border-neutral-200 bg-white p-0.5 dark:border-neutral-700 dark:bg-neutral-950 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {VIEW_OPTIONS.map((option) => (
               <button
                 key={option.id}
@@ -491,7 +472,7 @@ export function StaffScheduleView({ staffKey }: { staffKey: string }) {
               </button>
             ))}
           </div>
-          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
               onClick={() => {

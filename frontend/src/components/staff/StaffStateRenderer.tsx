@@ -26,13 +26,19 @@ async function verifyStaffKey(key: string): Promise<boolean> {
   return res.success;
 }
 
-async function fetchStaffRole(key: string): Promise<StaffRole | null> {
+async function fetchStaffSession(key: string): Promise<{
+  role: StaffRole;
+  displayName: string;
+  staffCode: string;
+} | null> {
   const { apiClient } = await import('@/lib/api');
   const res = await apiClient.getStaffSession(key);
-  if (res.success && res.data) {
-    return res.data.role as StaffRole;
-  }
-  return null;
+  if (!res.success || !res.data) return null;
+  return {
+    role: res.data.role as StaffRole,
+    displayName: res.data.display_name,
+    staffCode: res.data.staff_code,
+  };
 }
 
 export function StaffStateRenderer() {
@@ -42,6 +48,8 @@ export function StaffStateRenderer() {
   const [state, setState] = useState<StaffStateId>('S-S-001');
   const [staffKey, setStaffKey] = useState<string | null>(null);
   const [staffRole, setStaffRole] = useState<StaffRole | null>(null);
+  const [staffDisplayName, setStaffDisplayName] = useState('Staff');
+  const [staffCode, setStaffCode] = useState('staff');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pinError, setPinError] = useState<string | undefined>();
 
@@ -55,10 +63,12 @@ export function StaffStateRenderer() {
     const cachedRole = getStoredStaffRole() as StaffRole | null;
     if (cachedRole) setStaffRole(cachedRole);
 
-    void fetchStaffRole(stored).then((role) => {
-      if (!role) return;
-      setStoredStaffRole(role);
-      setStaffRole(role);
+    void fetchStaffSession(stored).then((session) => {
+      if (!session) return;
+      setStoredStaffRole(session.role);
+      setStaffRole(session.role);
+      setStaffDisplayName(session.displayName);
+      setStaffCode(session.staffCode);
     });
   }, []);
 
@@ -75,10 +85,12 @@ export function StaffStateRenderer() {
     }
     setStoredStaffKey(key);
     setStaffKey(key);
-    const role = await fetchStaffRole(key);
-    if (role) {
-      setStoredStaffRole(role);
-      setStaffRole(role);
+    const session = await fetchStaffSession(key);
+    if (session) {
+      setStoredStaffRole(session.role);
+      setStaffRole(session.role);
+      setStaffDisplayName(session.displayName);
+      setStaffCode(session.staffCode);
     }
     setState(staffTransition('S-S-001', 'SUBMIT_PIN') ?? 'S-S-002');
   }, []);
@@ -157,6 +169,8 @@ export function StaffStateRenderer() {
         staffKey={staffKey!}
         isLoading={isLoading}
         staffRole={effectiveRole}
+        staffDisplayName={staffDisplayName}
+        staffCode={staffCode}
         allowedNav={allowedNav}
         allowedActionTypes={allowedActionTypes}
         onSelect={handleSelect}
