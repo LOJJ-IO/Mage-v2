@@ -11,6 +11,7 @@ export const staffQueryKeys = {
   inboxThreads: (staffKey: string) => ['staff', 'inbox-threads', staffKey] as const,
   guestConversation: (staffKey: string, guestId: string) =>
     ['staff', 'guest-conversation', staffKey, guestId] as const,
+  guests: (staffKey: string) => ['staff', 'guests', staffKey] as const,
 };
 
 const ESCALATION_SORT: Record<string, number> = {
@@ -131,6 +132,55 @@ export function useUpdateStaffAction() {
       queryClient.invalidateQueries({
         queryKey: staffQueryKeys.action(key, variables.actionId),
       });
+    },
+  });
+}
+
+export function useStaffGuests(staffKey: string | null) {
+  return useQuery({
+    queryKey: staffQueryKeys.guests(staffKey || ''),
+    queryFn: async () => {
+      const response = await apiClient.listStaffGuests(staffKey!);
+      if (!response.success) throw new Error(response.error || 'Failed to load guests');
+      return response.data ?? [];
+    },
+    enabled: !!staffKey,
+    staleTime: 60_000,
+  });
+}
+
+export function useCreateStaffAction() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      staffKey,
+      summary,
+      guestId,
+      sourceMessage,
+      actionType,
+      status,
+    }: {
+      staffKey: string;
+      summary: string;
+      guestId: string;
+      sourceMessage?: string;
+      actionType?: StaffAction['actionType'];
+      status?: StaffActionStatus;
+    }) => {
+      const response = await apiClient.createStaffAction(staffKey, {
+        summary,
+        guestId,
+        sourceMessage,
+        actionType,
+        status,
+      });
+      if (!response.success) throw new Error(response.error || 'Failed to create task');
+      return response.data!;
+    },
+    onSuccess: (_, variables) => {
+      const key = variables.staffKey || getStoredStaffKey() || '';
+      queryClient.invalidateQueries({ queryKey: staffQueryKeys.actions(key) });
     },
   });
 }

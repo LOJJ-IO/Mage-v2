@@ -42,6 +42,7 @@ interface StaffKanbanColumnProps {
   guestMessageCounts: Record<string, number>;
   onSelect: (id: string) => void;
   onMoveAction: (actionId: string, status: StaffActionStatus) => void;
+  onAddTask?: (columnId: KanbanColumnId) => void;
 }
 
 export function StaffKanbanColumn({
@@ -51,6 +52,7 @@ export function StaffKanbanColumn({
   guestMessageCounts,
   onSelect,
   onMoveAction,
+  onAddTask,
 }: StaffKanbanColumnProps) {
   const meta = COLUMN_META[columnId];
   const isEmpty = actions.length === 0;
@@ -88,6 +90,7 @@ export function StaffKanbanColumn({
         </h2>
         <button
           type="button"
+          onClick={() => onAddTask?.(columnId)}
           className="rounded p-1 text-neutral-400 hover:bg-neutral-200/60 dark:hover:bg-neutral-800"
           aria-label={`Add to ${meta.title}`}
         >
@@ -143,6 +146,7 @@ export function StaffKanbanColumn({
       <div className="px-3 pb-3">
         <button
           type="button"
+          onClick={() => onAddTask?.(columnId)}
           className="flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium text-neutral-500 hover:bg-neutral-200/50 dark:hover:bg-neutral-800 transition-colors"
         >
           <IconPlus className="w-3.5 h-3.5" />

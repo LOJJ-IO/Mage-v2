@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { ActionType, StaffAction, StaffActionStatus } from '@/types';
 import { useMediaQuery } from '@/hooks/useResizableWidth';
 import { IconCheckCircle, IconCheckSquare, IconCircle, IconFilter, IconSort, IconX } from './StaffIcons';
-import { StaffKanbanColumn } from './StaffKanbanColumn';
+import { StaffKanbanColumn, KanbanColumnId } from './StaffKanbanColumn';
 import { StaffKanbanMobileColumn } from './StaffKanbanMobileColumn';
 import { StaffNavIcon } from './StaffNavIcon';
 import { StaffNavShortcut } from './StaffNavShortcut';
@@ -29,6 +29,7 @@ interface StaffKanbanBoardProps {
   onChangeSort: (sort: TaskSortKey) => void;
   onResetView: () => void;
   onMoveAction: (actionId: string, status: StaffActionStatus) => void;
+  onAddTask?: (columnId: KanbanColumnId) => void;
   guestMessageCounts: Record<string, number>;
 }
 
@@ -49,6 +50,7 @@ export function StaffKanbanBoard({
   onChangeSort,
   onResetView,
   onMoveAction,
+  onAddTask,
   guestMessageCounts,
 }: StaffKanbanBoardProps) {
   const isDesktop = useMediaQuery('(min-width: 1024px)');
@@ -252,6 +254,7 @@ export function StaffKanbanBoard({
               guestMessageCounts={guestMessageCounts}
               onSelect={onSelect}
               onMoveAction={onMoveAction}
+              onAddTask={onAddTask}
             />
             <StaffKanbanColumn
               columnId="ongoing"
@@ -260,6 +263,7 @@ export function StaffKanbanBoard({
               guestMessageCounts={guestMessageCounts}
               onSelect={onSelect}
               onMoveAction={onMoveAction}
+              onAddTask={onAddTask}
             />
             <StaffKanbanColumn
               columnId="done"
@@ -268,6 +272,7 @@ export function StaffKanbanBoard({
               guestMessageCounts={guestMessageCounts}
               onSelect={onSelect}
               onMoveAction={onMoveAction}
+              onAddTask={onAddTask}
             />
           </div>
         ) : (

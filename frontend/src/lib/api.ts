@@ -676,6 +676,53 @@ class ApiClient {
     return { success: true, data: result.data.map(mapStaffAction) };
   }
 
+  async listStaffGuests(
+    staffKey: string
+  ): Promise<ApiResponse<Array<{ guestId: string; name: string; roomNumber: string }>>> {
+    const result = await this.request<
+      Array<{ guest_id: string; name: string; room_number: string }>
+    >('/api/staff/guests', {}, staffKey);
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    return {
+      success: true,
+      data: result.data.map((row) => ({
+        guestId: row.guest_id,
+        name: row.name,
+        roomNumber: row.room_number,
+      })),
+    };
+  }
+
+  async createStaffAction(
+    staffKey: string,
+    body: {
+      summary: string;
+      guestId: string;
+      sourceMessage?: string;
+      actionType?: StaffAction['actionType'];
+      status?: StaffActionStatus;
+    }
+  ): Promise<ApiResponse<StaffAction>> {
+    const payload: Record<string, string> = {
+      summary: body.summary,
+      guest_id: body.guestId,
+    };
+    if (body.sourceMessage) payload.source_message = body.sourceMessage;
+    if (body.actionType) payload.action_type = body.actionType;
+    if (body.status) payload.status = body.status;
+    const result = await this.request<Record<string, unknown>>(
+      '/api/staff/actions',
+      { method: 'POST', body: JSON.stringify(payload) },
+      staffKey
+    );
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error };
+    }
+    return { success: true, data: mapStaffAction(result.data) };
+  }
+
   async listGuestReviewSummaries(staffKey: string): Promise<
     ApiResponse<
       Array<{

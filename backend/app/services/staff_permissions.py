@@ -56,6 +56,28 @@ REASSIGNABLE_ACTION_TYPES: FrozenSet[ActionType] = frozenset({
     ActionType.CONTACT_FRONT_DESK,
 })
 
+# Default team when operational staff create a task manually
+ROLE_DEFAULT_ACTION_TYPE: dict[StaffRole, ActionType] = {
+    StaffRole.MAINTENANCE: ActionType.MAINTENANCE,
+    StaffRole.HOUSEKEEPING: ActionType.HOUSEKEEPING,
+    StaffRole.ROOM_SERVICE: ActionType.ROOM_SERVICE,
+}
+
+
+def resolve_manual_task_action_type(
+    role: StaffRole,
+    requested: Optional[ActionType],
+) -> ActionType:
+    """Pick action_type for a manually created task."""
+    if role in REASSIGN_TEAM_ROLES:
+        if requested is None or requested not in REASSIGNABLE_ACTION_TYPES:
+            raise ValueError("manager and front_desk must specify a valid team")
+        return requested
+    default = ROLE_DEFAULT_ACTION_TYPE.get(role)
+    if default is None:
+        raise ValueError("role cannot create manual tasks")
+    return default
+
 
 # ---------------------------------------------------------------------------
 # StaffContext — resolved identity carried through a request

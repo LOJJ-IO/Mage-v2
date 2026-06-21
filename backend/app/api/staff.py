@@ -13,6 +13,7 @@ from app.models.schemas import (
     Message,
     MessageKind,
     MessageRole,
+    CreateStaffActionRequest,
     StaffAction,
     StaffActionConversationResponse,
     StaffActionEscalationType,
@@ -34,6 +35,7 @@ from app.services.staff_permissions import (
     StaffContext,
     get_current_staff,
     require_role,
+    resolve_manual_task_action_type,
 )
 from app.services.metrics_service import record_staff_team_reassignment_event
 
@@ -240,6 +242,23 @@ class GuestReviewSummary(BaseModel):
     check_out: datetime
 
 
+class StaffGuestOption(BaseModel):
+    guest_id: str
+    name: str
+    room_number: str
+
+
+@router.get("/guests", response_model=List[StaffGuestOption])
+async def list_staff_guests(ctx: StaffContext = Depends(get_current_staff)):
+    """Guests available when staff manually create a task."""
+    db = get_database()
+    guests = db.list_guests(property_id=ctx.property_id)
+    return [
+        StaffGuestOption(guest_id=g.id, name=g.name, room_number=g.room_number)
+        for g in guests
+    ]
+
+
 @router.get("/guests/happiness-scores", response_model=List[GuestHappinessScore])
 async def list_guest_happiness_scores(
     _: StaffContext = Depends(require_role(StaffRole.MANAGER, StaffRole.FRONT_DESK)),
@@ -363,6 +382,41 @@ async def list_staff_actions(
     actions = db.list_staff_actions(limit=min(limit, 500), status=status)
     allowed = ROLE_ACTION_TYPES[ctx.role]
     return [a for a in actions if a.action_type in allowed]
+
+
+@router.post("/actions", response_model=StaffAction)
+async def create_staff_action(
+    request: CreateStaffActionRequest,
+    ctx: StaffContext = Depends(get_current_staff),
+):
+    """Manually create a staff inbox task (rare — most tasks come from guest chat)."""
+    try:
+        action_type = resolve_manual_task_action_type(ctx.role, request.action_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if action_type not in ROLE_ACTION_TYPES[ctx.role]:
+        raise HTTPException(status_code=403, detail="Cannot create tasks for this team")
+
+    db = get_database()
+    guest = db.get_guest(request.guest_id)
+    if not guest:
+        raise HTTPException(status_code=404, detail="Guest not found")
+
+    source = (request.source_message or request.summary).strip() or "Manual task created by staff"
+    action = db.log_staff_action(
+        guest_id=request.guest_id,
+        action_type=action_type,
+        summary=request.summary.strip(),
+        source_message=source,
+        escalation_type=StaffActionEscalationType.NORMAL,
+        allow_staff_jump_in=True,
+    )
+    if request.status != StaffActionStatus.PENDING:
+        updated = db.update_staff_action_status(action.id, request.status)
+        if updated:
+            action = updated
+    return action
 
 
 @router.get("/actions/{action_id}", response_model=StaffAction)

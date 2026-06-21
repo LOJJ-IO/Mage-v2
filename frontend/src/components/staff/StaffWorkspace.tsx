@@ -26,8 +26,14 @@ import {
 } from './staffTaskQuery';
 import { ActionType, StaffActionStatus } from '@/types';
 import type { StaffRole } from '@/lib/staffPermissions';
-import { useStaffInboxThreads, useUpdateStaffAction } from '@/hooks/useStaffApi';
+import {
+  canReassignTaskTeam,
+  defaultActionTypeForRole,
+} from '@/lib/staffPermissions';
+import { useCreateStaffAction, useStaffInboxThreads, useUpdateStaffAction } from '@/hooks/useStaffApi';
 import { countDirectGuestChatPending } from './staffNotifications';
+import { StaffAddTaskDialog } from './StaffAddTaskDialog';
+import type { KanbanColumnId } from './StaffKanbanColumn';
 import {
   StaffContentShell,
   StaffEmptyState,
@@ -69,7 +75,7 @@ export function StaffWorkspace({
   actions,
   staffKey,
   isLoading,
-  staffRole: _staffRole,
+  staffRole,
   allowedNav,
   allowedActionTypes,
   onSelect,
@@ -89,6 +95,7 @@ export function StaffWorkspace({
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [filters, setFilters] = useState<TaskFilters>(queryState.filters);
   const [sortKey, setSortKey] = useState<TaskSortKey>(queryState.sortKey);
+  const [addTaskColumn, setAddTaskColumn] = useState<KanbanColumnId | null>(null);
 
   useEffect(() => {
     setFilters(queryState.filters);
@@ -222,10 +229,32 @@ export function StaffWorkspace({
     return counts;
   }, [inboxThreads]);
   const updateMutation = useUpdateStaffAction();
+  const createMutation = useCreateStaffAction();
+  const canPickTeam = canReassignTaskTeam(staffRole);
+  const defaultTeam = defaultActionTypeForRole(staffRole);
 
   const handleMoveAction = async (actionId: string, status: StaffActionStatus) => {
     ensureKanbanNav();
     await updateMutation.mutateAsync({ actionId, status, staffKey });
+  };
+
+  const handleCreateTask = async (values: {
+    summary: string;
+    guestId: string;
+    notes: string;
+    actionType?: ActionType;
+    status: StaffActionStatus;
+  }) => {
+    ensureKanbanNav();
+    await createMutation.mutateAsync({
+      staffKey,
+      summary: values.summary,
+      guestId: values.guestId,
+      sourceMessage: values.notes || values.summary,
+      actionType: values.actionType,
+      status: values.status,
+    });
+    setAddTaskColumn(null);
   };
 
   return (
@@ -274,6 +303,7 @@ export function StaffWorkspace({
             onChangeSort={(nextSort) => persistTaskView(filters, nextSort)}
             onResetView={resetTaskView}
             onMoveAction={(actionId, status) => void handleMoveAction(actionId, status)}
+            onAddTask={setAddTaskColumn}
             guestMessageCounts={guestMessageCounts}
           />
         )}
@@ -319,6 +349,19 @@ export function StaffWorkspace({
         onNavChange={syncNav}
         onOpenMenu={() => setMobileNavOpen(true)}
       />
+
+      {addTaskColumn && (
+        <StaffAddTaskDialog
+          open
+          columnId={addTaskColumn}
+          staffKey={staffKey}
+          canPickTeam={canPickTeam}
+          defaultTeam={defaultTeam}
+          isSubmitting={createMutation.isPending}
+          onClose={() => setAddTaskColumn(null)}
+          onSubmit={(values) => void handleCreateTask(values)}
+        />
+      )}
     </StaffPageShell>
   );
 }

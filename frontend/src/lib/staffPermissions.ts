@@ -62,6 +62,16 @@ export function canReassignTaskTeam(role: StaffRole): boolean {
   return REASSIGN_TEAM_ROLES.has(role);
 }
 
+/** Default team when operational staff manually create a task. */
+export function defaultActionTypeForRole(role: StaffRole): ActionType | null {
+  const map: Partial<Record<StaffRole, ActionType>> = {
+    maintenance: 'MAINTENANCE',
+    housekeeping: 'HOUSEKEEPING',
+    room_service: 'ROOM_SERVICE',
+  };
+  return map[role] ?? null;
+}
+
 export function getAllowedNav(role: StaffRole): StaffNavId[] {
   return Array.from(ROLE_NAV[role]) as StaffNavId[];
 }

@@ -102,6 +102,15 @@ class UpdateStaffActionRequest(BaseModel):
         return self
 
 
+class CreateStaffActionRequest(BaseModel):
+    """Request model for manually creating a staff inbox task."""
+    summary: str = Field(..., min_length=1, max_length=500)
+    guest_id: str = Field(..., min_length=1, max_length=64)
+    source_message: str = Field(default="", max_length=4000)
+    action_type: Optional[ActionType] = None
+    status: StaffActionStatus = StaffActionStatus.PENDING
+
+
 class StaffMessageRequest(BaseModel):
     """Staff reply injected into guest conversation."""
     content: str = Field(..., min_length=1, max_length=4000)
