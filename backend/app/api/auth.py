@@ -4,7 +4,7 @@ from __future__ import annotations
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.core.config import get_settings
 from app.models.schemas import (
@@ -74,7 +74,7 @@ async def verify_magic_link(
     except ValueError as e:
         if redirect:
             return RedirectResponse(
-                url=f"/?{urlencode({'auth_error': str(e)})}",
+                url=f"/auth/verify?{urlencode({'auth_error': str(e)})}",
                 status_code=302,
             )
         raise HTTPException(status_code=400, detail=str(e))
@@ -82,7 +82,12 @@ async def verify_magic_link(
     if redirect:
         resp = RedirectResponse(url="/", status_code=302)
     else:
-        resp = Response(content='{"ok":true}', media_type="application/json")
+        resp = JSONResponse(
+            content={
+                "ok": True,
+                "guest": guest.model_dump(mode="json"),
+            }
+        )
 
     _set_session_cookie(resp, cookie_value)
     return resp

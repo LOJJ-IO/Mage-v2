@@ -211,6 +211,19 @@ async def verify_magic_link(token: str) -> tuple[GuestProfile, str, int]:
     pms = get_pms_provider(property_id)
     reservation = await pms.get_reservation(property_id, booking_id)
     if not reservation:
+        existing_guest = db.get_guest_by_booking(booking_id, property_id=property_id)
+        if existing_guest:
+            now = datetime.utcnow()
+            grace = timedelta(hours=settings.stay_grace_hours)
+            if stay_has_not_started(now, existing_guest.check_in, grace=grace):
+                raise ValueError("Your stay has not started yet")
+            if stay_has_ended(now, existing_guest.check_out, grace=grace):
+                raise ValueError("Your stay has ended")
+            guest = db.upsert_guest(existing_guest)
+            db.mark_auth_token_used(token_hash)
+            session_version = db.register_guest_session(guest.id, property_id)
+            cookie_value = create_session_token(guest.id, property_id, session_version)
+            return guest, cookie_value, session_version
         raise ValueError("Reservation no longer available")
 
     now = datetime.utcnow()
