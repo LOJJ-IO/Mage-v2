@@ -420,10 +420,23 @@ class ApiClient {
     return { success: true, data: mapGuestProfile(res.data) };
   }
 
-  async verifyAuthToken(token: string): Promise<ApiResponse<{ ok: boolean }>> {
-    return this.request<{ ok: boolean }>(
+  async verifyAuthToken(token: string): Promise<
+    ApiResponse<{ ok: boolean; guest?: GuestProfile }>
+  > {
+    const res = await this.request<{ ok: boolean; guest?: Record<string, unknown> }>(
       `/api/auth/verify?t=${encodeURIComponent(token)}&redirect=false`
     );
+    if (!res.success || !res.data) {
+      return { success: false, error: res.error };
+    }
+    const guestRaw = res.data.guest;
+    return {
+      success: true,
+      data: {
+        ok: Boolean(res.data.ok),
+        guest: guestRaw ? mapGuestProfile(guestRaw) : undefined,
+      },
+    };
   }
 
   async getAuthSession(): Promise<

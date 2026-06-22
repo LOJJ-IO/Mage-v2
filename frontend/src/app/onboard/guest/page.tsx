@@ -1,6 +1,7 @@
 'use client';
 
-import { FormEvent, Suspense, useState } from 'react';
+import { FormEvent, Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HydrationGate } from '@/components/HydrationGate';
 import { useAppNavigation } from '@/components/providers/NavigationLoaderProvider';
@@ -239,12 +240,18 @@ function NewGuestForm({ onBack }: { onBack: () => void }) {
 // Returning guest form
 // ---------------------------------------------------------------------------
 
-function ReturningGuestForm({ onBack }: { onBack: () => void }) {
+function ReturningGuestForm({
+  onBack,
+  initialError = null,
+}: {
+  onBack: () => void;
+  initialError?: string | null;
+}) {
   const { navigate } = useAppNavigation();
   const { setGuestProfile, context } = useMageStore();
   const [identifier, setIdentifier] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -346,9 +353,19 @@ function TabSelector({
 // ---------------------------------------------------------------------------
 
 function GuestOnboardInner() {
+  const searchParams = useSearchParams();
   const [view, setView] = useState<ViewState>('tabs');
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   useNavigationReady(true, '/onboard/guest');
+
+  useEffect(() => {
+    const err = searchParams.get('auth_error');
+    if (err) {
+      setLinkError(err);
+      setView('returning-form');
+    }
+  }, [searchParams]);
 
   return (
     <main className="min-h-screen bg-white dark:bg-mage-gray-900 flex flex-col max-w-md mx-auto px-6 py-12 justify-center">
@@ -357,6 +374,10 @@ function GuestOnboardInner() {
         <p className="text-sm text-mage-gray-500 dark:text-mage-gray-400 mb-10">
           Guest access
         </p>
+
+        {linkError && view !== 'returning-form' && (
+          <ErrorBanner message={linkError} />
+        )}
 
         <AnimatePresence mode="wait">
           {view === 'tabs' && (
@@ -369,7 +390,11 @@ function GuestOnboardInner() {
             <NewGuestForm key="new-form" onBack={() => setView('tabs')} />
           )}
           {view === 'returning-form' && (
-            <ReturningGuestForm key="returning-form" onBack={() => setView('tabs')} />
+            <ReturningGuestForm
+              key="returning-form"
+              onBack={() => setView('tabs')}
+              initialError={linkError}
+            />
           )}
         </AnimatePresence>
       </motion.div>

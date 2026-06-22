@@ -28,11 +28,29 @@ export default function Home() {
     didInitRef.current = true;
 
     (async () => {
+      const params = new URLSearchParams(window.location.search);
+      const authError = params.get('auth_error');
+      if (authError) {
+        replace(`/onboard/guest?auth_error=${encodeURIComponent(authError)}`);
+        return;
+      }
+
       let guestId = sessionStorage.getItem('mage-guest-id');
+
+      if (guestId && !guestProfile) {
+        const me = await apiClient.getGuestMe();
+        if (me.success && me.data) {
+          useMageStore.getState().setGuestProfile(me.data);
+        }
+      }
 
       if (!guestId && !guestProfile) {
         const session = await apiClient.getAuthSession();
         if (session.success && session.data?.authenticated) {
+          if (session.data.guestId) {
+            sessionStorage.setItem('mage-guest-id', session.data.guestId);
+            guestId = session.data.guestId;
+          }
           const me = await apiClient.getGuestMe();
           if (me.success && me.data) {
             useMageStore.getState().setGuestProfile(me.data);
