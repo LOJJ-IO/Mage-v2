@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppNavLink } from '@/components/AppNavLink';
 import { IconMageLogo } from '@/components/staff/StaffIcons';
 import { useNavigationReady } from '@/hooks/useNavigationReady';
 import { apiClient, PendingStaffMember } from '@/lib/api';
 import { getNavigationCopy } from '@/lib/navigationLoaderCopy';
+import { getStoredStaffKey, getStoredStaffRole } from '@/lib/stateMachineStaff';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -260,6 +261,12 @@ export default function OnboardAdminPage() {
     }
     setPhase({ name: 'list', members: res.data, managerKey: key });
   }, []);
+
+  // A manager already signed in to the staff portal skips the key gate.
+  useEffect(() => {
+    const key = getStoredStaffKey();
+    if (key && getStoredStaffRole() === 'manager') void loadList(key);
+  }, [loadList]);
 
   async function handleGateSubmit(e: React.FormEvent) {
     e.preventDefault();

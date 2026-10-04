@@ -179,6 +179,8 @@ class Settings(BaseSettings):
     ).lower() in ("1", "true", "yes")
 
     staff_access_key: str = os.getenv("STAFF_ACCESS_KEY", "mage-staff-dev")
+    # Public sales demo at /demo (seeded in-memory hotel, isolated from real data)
+    demo_enabled: bool = os.getenv("DEMO_ENABLED", "true").lower() in ("1", "true", "yes")
 
     # Analytics dashboard
     metrics_tracking_enabled: bool = os.getenv(

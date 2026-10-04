@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from app.core.config import Settings, get_settings
+from app.demo.seed import get_demo_database, is_demo_staff_key
 from app.models.schemas import StaffMember
 from app.services import staff_auth_service
 from app.services.database import get_database
@@ -135,6 +136,10 @@ async def staff_sign_in(
     store the raw key in sessionStorage under 'mage-staff-key' for subsequent
     X-Staff-Key header use; this endpoint does NOT set a cookie.
     """
+    # The key travels in the body here, not X-Staff-Key, so the demo
+    # middleware can't see it; demo keys are looked up in the demo hotel.
+    if is_demo_staff_key(body.access_key):
+        db = get_demo_database()
     member = await staff_auth_service.sign_in_with_key(db, body.access_key)
     approved_role = (
         member.approved_role.value

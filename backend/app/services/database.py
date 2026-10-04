@@ -1851,10 +1851,23 @@ def _resolve_database_type(settings) -> str:
     return settings.database_type.lower()
 
 
-@lru_cache()
 def get_database() -> DatabaseProtocol:
     """
     Get database instance based on configuration.
+    Requests carrying the demo staff key get the in-memory demo hotel instead
+    (see app.demo); everything else gets the configured database.
+    """
+    from app.demo import active_demo_database
+
+    demo = active_demo_database()
+    if demo is not None:
+        return demo
+    return _get_configured_database()
+
+
+@lru_cache()
+def _get_configured_database() -> DatabaseProtocol:
+    """
     Returns MockDatabase or SupabaseDatabase based on database_type setting.
     """
     try:

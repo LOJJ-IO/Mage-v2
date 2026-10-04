@@ -969,6 +969,33 @@ class ApiClient {
     };
   }
 
+  /**
+   * Open the seeded demo hotel. Staff and admin get the demo manager's staff
+   * key (store it like any other); guest gets a session cookie for a new demo
+   * guest. `fresh` asks the backend to reseed the hotel now.
+   */
+  async enterDemo(
+    as: 'staff' | 'admin' | 'guest',
+    fresh = false
+  ): Promise<ApiResponse<{ staffKey?: string; role?: string; guest?: GuestProfile }>> {
+    const res = await this.request<{
+      staff_key?: string;
+      role?: string;
+      guest?: Record<string, unknown>;
+    }>(`/api/demo/enter?as=${as}${fresh ? '&fresh=1' : ''}`, { method: 'POST' });
+    if (!res.success || !res.data) {
+      return { success: false, error: res.error };
+    }
+    return {
+      success: true,
+      data: {
+        staffKey: res.data.staff_key,
+        role: res.data.role,
+        guest: res.data.guest ? mapGuestProfile(res.data.guest) : undefined,
+      },
+    };
+  }
+
   /** List pending staff requests. Requires a manager-role access key. */
   async listPendingStaff(
     managerKey: string

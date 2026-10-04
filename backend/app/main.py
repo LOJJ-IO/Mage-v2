@@ -9,7 +9,8 @@ from datetime import datetime
 from app.core.config import get_settings
 from app.models.schemas import HealthResponse
 from app.services.database import get_database
-from app.api import chat, tickets, guests, agents, transcription, staff, auth, staff_knowledge, webhooks, dashboard, onboarding_staff, task_assist
+from app.api import chat, tickets, guests, agents, transcription, staff, auth, staff_knowledge, webhooks, dashboard, onboarding_staff, task_assist, demo
+from app.demo import DemoScopeMiddleware
 from app.services import transcription_service
 
 settings = get_settings()
@@ -78,6 +79,7 @@ if settings.debug:
         r"https?://192\.168\.\d{1,3}\.\d{1,3}(:\d+)?|"
         r"https?://10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?"
     )
+app.add_middleware(DemoScopeMiddleware)
 app.add_middleware(CORSMiddleware, **_cors)
 
 # Include routers
@@ -93,6 +95,7 @@ app.include_router(webhooks.router, prefix=settings.api_prefix)
 app.include_router(dashboard.router, prefix=settings.api_prefix)
 app.include_router(onboarding_staff.router, prefix=settings.api_prefix)
 app.include_router(task_assist.router, prefix=settings.api_prefix)
+app.include_router(demo.router, prefix=settings.api_prefix)
 
 
 @app.get("/")
