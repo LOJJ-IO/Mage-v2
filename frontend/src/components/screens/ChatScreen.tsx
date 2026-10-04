@@ -10,7 +10,7 @@ import { MessageBubble, TypingIndicator } from '@/components/MessageBubble';
 import { ChatInput } from '@/components/ChatInput';
 import { RecordingToast } from '@/components/Toast';
 import { ConversationContext } from '@/types';
-import { mergeConversationMessages } from '@/lib/mergeMessages';
+import { mergeConversationMessages, messageFingerprint } from '@/lib/mergeMessages';
 
 export function ChatScreen() {
   const {
@@ -94,10 +94,14 @@ export function ChatScreen() {
     preventScroll: true,
   });
 
-  // Scroll to bottom when new messages arrive or when typing indicator appears
+  // Scroll to bottom when new messages arrive or when typing indicator appears.
+  // Keyed on the newest message, not the array: history polling replaces the
+  // array every few seconds, which would otherwise yank the guest back down.
+  const newestMessage = messages[messages.length - 1];
+  const newestMessageKey = `${messages.length}:${newestMessage ? messageFingerprint(newestMessage) : ''}`;
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingMessage, isAiTyping]);
+  }, [newestMessageKey, streamingMessage, isAiTyping]);
 
   // Guard: only start transcription once per blob (avoids double-invoke / Strict Mode)
   const transcriptionStartedForBlobRef = useRef(false);

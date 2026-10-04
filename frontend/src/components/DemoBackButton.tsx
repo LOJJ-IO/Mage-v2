@@ -1,25 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { useMageStore } from '@/store/mageStore';
 
-/** sessionStorage flag set by /demo, so demo-only chrome knows to show. */
-export const DEMO_SESSION_KEY = 'mage-demo';
+/** Demo guests' ids start with this (see backend app.demo). */
+const DEMO_GUEST_PREFIX = 'demo-';
 
 /** Sits beside the guest app's phone-width column (desktop only) and returns
  *  demo visitors to the /demo selection screen. Renders nothing outside the demo. */
 export function DemoBackButton() {
-  const [isDemo, setIsDemo] = useState(false);
+  const guestId = useMageStore((state) => state.guestProfile?.id);
 
-  useEffect(() => {
-    try {
-      setIsDemo(sessionStorage.getItem(DEMO_SESSION_KEY) === '1');
-    } catch {
-      setIsDemo(false);
-    }
-  }, []);
-
-  if (!isDemo) return null;
+  if (!guestId?.startsWith(DEMO_GUEST_PREFIX)) return null;
 
   return (
     <a

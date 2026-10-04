@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { DEMO_SESSION_KEY } from '@/components/DemoBackButton';
 import { IntroSplashLoader } from '@/components/IntroSplashLoader';
 import { apiClient } from '@/lib/api';
 import { setStoredStaffKey, setStoredStaffRole } from '@/lib/stateMachineStaff';
@@ -62,7 +61,6 @@ export default function DemoPage() {
       setStoredStaffKey(res.data.staffKey);
       setStoredStaffRole(res.data.role);
     }
-    sessionStorage.setItem(DEMO_SESSION_KEY, '1');
     window.location.assign(SIDES.find((s) => s.side === side)!.destination);
   }, []);
 
