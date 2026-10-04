@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StateRenderer } from '@/components/StateRenderer';
+import { DemoBackButton } from '@/components/DemoBackButton';
 import { SignInScreen } from '@/components/SignInScreen';
 import { HydrationGate } from '@/components/HydrationGate';
 import { useAppNavigation } from '@/components/providers/NavigationLoaderProvider';
@@ -102,6 +103,7 @@ export default function Home() {
       <HydrationGate>
         <StateRenderer />
       </HydrationGate>
+      <DemoBackButton />
     </main>
   );
 }
