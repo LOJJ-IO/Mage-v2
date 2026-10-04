@@ -62,6 +62,8 @@ def is_demo_staff_key(raw_key: str) -> bool:
 
 
 VISITOR_PREFIX = DEMO_GUEST_PREFIX + "v-"
+# Every visitor's stay adds tasks to the shared staff board; keep the newest few.
+MAX_VISITORS = 5
 
 
 def create_demo_visitor() -> GuestProfile:
@@ -72,27 +74,105 @@ def create_demo_visitor() -> GuestProfile:
 
 
 def ensure_demo_visitor(guest_id: str) -> GuestProfile:
-    """The visitor's guest, created when missing (first entry, after a
-    reseed, or on another server process). The room comes from the id, so a
-    re-created visitor keeps it."""
+    """The visitor's guest, created with a stay already under way when missing
+    (first entry, after a reseed or pruning, or on another server process).
+    The room comes from the id, so a re-created visitor keeps it."""
     db = get_demo_database()
-    guest = db.guests.get(guest_id)
-    if guest is not None:
+    with _lock:
+        guest = db.guests.get(guest_id)
+        if guest is not None:
+            return guest
+        _prune_visitors(db)
+        guest = _seed_visitor(db, guest_id)
+        db.demo_visitors.append(guest_id)
         return guest
+
+
+def _prune_visitors(db) -> None:
+    while len(db.demo_visitors) >= MAX_VISITORS:
+        old = db.demo_visitors.pop(0)
+        db.guests.pop(old, None)
+        db.conversations.pop(old, None)
+        for aid in [a.id for a in db.staff_actions.values() if a.guest_id == old]:
+            del db.staff_actions[aid]
+
+
+def _seed_visitor(db, guest_id: str) -> GuestProfile:
+    from app.services.message_codec import encode_faq_payload
+
     now = datetime.utcnow()
+    ago = lambda minutes: now - timedelta(minutes=minutes)  # noqa: E731
     room = str(500 + int(hashlib.sha256(guest_id.encode()).hexdigest(), 16) % 40)
     guest = GuestProfile(
         id=guest_id,
         name="Alex Morgan",
         room_number=room,
-        check_in=now - timedelta(hours=3),
-        check_out=now.replace(minute=0, second=0, microsecond=0) + timedelta(days=2, hours=3),
+        check_in=now - timedelta(hours=20),
+        check_out=now.replace(minute=0, second=0, microsecond=0) + timedelta(days=1, hours=3),
         booking_id=f"GH-{room}-DEMO",
         email=f"{guest_id}@example.com",
+        membership_tier="Gold",
         property_id=get_settings().property_id or "grand-horizon",
         account_tier=GuestAccountTier.PILOT_TESTER,
     )
     db.guests[guest_id] = guest
+
+    breakfast = encode_faq_payload(
+        intro="Here's what I found about breakfast:",
+        faq_items=[
+            {"id": "breakfast-hours", "title": "Breakfast buffet",
+             "body": "Served in the restaurant from 6:30 AM until 10:30 AM daily."},
+            {"id": "room-service", "title": "Breakfast in your room",
+             "body": "Room service is available 24/7 — just ask here or dial 0."},
+        ],
+        trigger_content="What time is breakfast?",
+        faq_resolved=True,
+    )
+    rows = [
+        (1150, "user", "Hi! Just got in. What's the wifi password?"),
+        (1150, "assistant", f"Welcome to The Grand Horizon, Alex! You're in room {room}. "
+                            "The network is HorizonGuest and the password is StayWithHorizon."),
+        (1148, "user", "What time is breakfast?"),
+        (1148, "assistant", breakfast),
+        (1080, "user", "Could I get a margherita pizza and a Caesar salad sent up?"),
+        (1080, "assistant", f"Of course — a margherita pizza and a Caesar salad are on their way to room {room}."),
+        (1074, "staff", "Hi Alex, Ben from room service here. Your order will be up in about 25 minutes. Enjoy!"),
+        (1046, "user", "Just arrived, it was great. Thanks!"),
+        (35, "user", "Morning! The shower is barely getting warm. Could someone take a look?"),
+        (35, "assistant", f"Sorry about that! I've sent a maintenance request for the shower in room {room}."),
+        (21, "staff", "Hi Alex, this is Luis from maintenance. I'll be up within 15 minutes to check the water heater valve."),
+        (20, "user", "Perfect, thank you!"),
+        (12, "user", "Also, could I get a late checkout tomorrow?"),
+        (12, "assistant", "Late checkout is available until 1:00 PM for a $50 fee. "
+                          "I've asked the front desk to confirm it for you."),
+    ]
+    db.conversations[guest_id] = [
+        {"role": role, "content": content, "created_at": ago(minutes).isoformat()}
+        for minutes, role, content in rows
+    ]
+
+    tasks = [
+        (ActionType.ROOM_SERVICE, "Margherita pizza + Caesar salad to " + room,
+         "Could I get a margherita pizza and a Caesar salad sent up?", StaffActionStatus.RESOLVED, 1080),
+        (ActionType.MAINTENANCE, f"Shower not getting hot in {room} — check water heater valve",
+         "The shower is barely getting warm. Could someone take a look?", StaffActionStatus.ACKNOWLEDGED, 35),
+        (ActionType.CONTACT_FRONT_DESK, "Late checkout until 1 PM tomorrow ($50 fee quoted)",
+         "Also, could I get a late checkout tomorrow?", StaffActionStatus.PENDING, 12),
+    ]
+    for i, (kind, summary, source, status, minutes) in enumerate(tasks):
+        aid = f"ACT-{guest_id[len(VISITOR_PREFIX):].upper()}{i}"
+        db.staff_actions[aid] = StaffAction(
+            id=aid,
+            guest_id=guest_id,
+            action_type=kind,
+            summary=summary,
+            source_message=source,
+            status=status,
+            created_at=ago(minutes),
+            guest_name=guest.name,
+            room_number=room,
+            guest_conversation_thread_id=guest_id,
+        )
     return guest
 
 
@@ -267,6 +347,7 @@ def _build():
     today_checkout = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=3)
 
     db = MockDatabase()
+    db.demo_visitors = []  # visitor guest ids, oldest first
     db.guests = {}
     db.staff_members = {}
     db.properties.setdefault(

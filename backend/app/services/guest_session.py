@@ -59,7 +59,12 @@ def create_session_token(
 def decode_session_token(token: str) -> Optional[GuestSession]:
     try:
         decoded = base64.urlsafe_b64decode(token.encode())
-        raw, sig = decoded.rsplit(b".", 1)
+        # Split by the signature's fixed length: the signature bytes can
+        # themselves contain b".", so splitting on the separator is unsafe.
+        digest_size = hashlib.sha256().digest_size
+        raw, sep, sig = decoded[: -digest_size - 1], decoded[-digest_size - 1 : -digest_size], decoded[-digest_size:]
+        if sep != b".":
+            return None
         expected = hmac.new(_signing_key(), raw, hashlib.sha256).digest()
         if not hmac.compare_digest(sig, expected):
             return None

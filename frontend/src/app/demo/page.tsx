@@ -13,7 +13,7 @@ const SIDES: { side: DemoSide; title: string; description: string; destination: 
   {
     side: 'guest',
     title: 'Guest app',
-    description: 'Chat with the hotel as a guest in room 5xx. Requests land on the staff board.',
+    description: 'Pick up a stay mid-way: last night’s dinner, a shower fix on its way, and a reply from the front desk pending.',
     destination: '/',
   },
   {
@@ -53,6 +53,8 @@ export default function DemoPage() {
       return;
     }
     if (side === 'guest' && res.data.guest) {
+      // Land in the conversation already under way, not the welcome screen.
+      useMageStore.getState().setContext({ hasSeenWelcome: true });
       useMageStore.getState().setGuestProfile(res.data.guest);
       sessionStorage.setItem('mage-guest-id', res.data.guest.id);
     } else if (res.data.staffKey && res.data.role) {
